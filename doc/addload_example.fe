@@ -6,12 +6,6 @@
 // Each separate mound will have its own contact angle, implemented
 // by having a contact angle attribute for each edge.
 
-// The "setup" script below invokes addload multiple times on this same
-// datafile, moviing each instance to its appropriate location.
-// Note that addload does not execute the "read" section of a datafile,
-// so such "setup" scripts are ru only once.
-
-// Programmeer: Ken Brakke, brakke@susqu.edu
 
 define edge attribute angle real   // interior angle between plane and surface, degrees
 

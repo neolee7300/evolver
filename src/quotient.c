@@ -57,35 +57,34 @@ int genpower_var = -1;  /* reset at start of surface */
                + (rotorder/2)) % rotorder) - (rotorder/2) )
 
  /* prototypes */
- void rot_new_order ARGS((void));
- void new_rot_order ARGS((void));
- void rot_wrap ARGS((REAL*,REAL*,long));
- WRAPTYPE rot_compose ARGS((WRAPTYPE,WRAPTYPE));
- WRAPTYPE rot_inverse ARGS((WRAPTYPE));
- void rot_form_pullback ARGS(( REAL *,REAL *,REAL *,WRAPTYPE));
- void frot_form_pullback ARGS(( REAL *,REAL *,REAL *,WRAPTYPE));
- void pgcube_form_pullback ARGS(( REAL *,REAL *,REAL *,WRAPTYPE));
- WRAPTYPE pgcube_compose ARGS((WRAPTYPE,WRAPTYPE)); /* note reverse order */
- WRAPTYPE pg_tr_compose ARGS((WRAPTYPE,WRAPTYPE));
- WRAPTYPE cubel_compose ARGS((WRAPTYPE,WRAPTYPE)); 
- void cubel_form_pullback ARGS(( REAL *,REAL *,REAL *,WRAPTYPE));
- void xyz_wrap ARGS((REAL*,REAL*,long));
- WRAPTYPE xyz_compose ARGS((WRAPTYPE,WRAPTYPE));
- WRAPTYPE xyz_inverse ARGS(( WRAPTYPE ));
- void xyz_form_pullback ARGS(( REAL *, REAL *, REAL *, WRAPTYPE ));
- void central_wrap ARGS(( REAL *, REAL *, WRAPTYPE ));
- WRAPTYPE central_compose ARGS(( WRAPTYPE, WRAPTYPE));
- WRAPTYPE central_inverse ARGS(( WRAPTYPE ));
- void central_form_pullback ARGS(( REAL *, REAL *, REAL *, WRAPTYPE ));
- void screw_wrap ARGS(( REAL *, REAL *, WRAPTYPE ));
- WRAPTYPE screw_compose ARGS((WRAPTYPE,WRAPTYPE));
- WRAPTYPE screw_inverse ARGS(( WRAPTYPE ));
- void screw_form_pullback ARGS(( REAL *, REAL *, REAL *, WRAPTYPE ));
+ void rot_new_order(void);
+ void new_rot_order(void);
+ void rot_wrap(REAL*,REAL*,long);
+ WRAPTYPE rot_compose(WRAPTYPE,WRAPTYPE);
+ WRAPTYPE rot_inverse(WRAPTYPE);
+ void rot_form_pullback( REAL *,REAL *,REAL *,WRAPTYPE);
+ void frot_form_pullback( REAL *,REAL *,REAL *,WRAPTYPE);
+ void pgcube_form_pullback( REAL *,REAL *,REAL *,WRAPTYPE);
+ WRAPTYPE pgcube_compose(WRAPTYPE,WRAPTYPE); /* note reverse order */
+ WRAPTYPE pg_tr_compose(WRAPTYPE,WRAPTYPE);
+ WRAPTYPE cubel_compose(WRAPTYPE,WRAPTYPE); 
+ void cubel_form_pullback( REAL *,REAL *,REAL *,WRAPTYPE);
+ void xyz_wrap(REAL*,REAL*,long);
+ WRAPTYPE xyz_compose(WRAPTYPE,WRAPTYPE);
+ WRAPTYPE xyz_inverse( WRAPTYPE );
+ void xyz_form_pullback( REAL *, REAL *, REAL *, WRAPTYPE );
+ void central_wrap( REAL *, REAL *, WRAPTYPE );
+ WRAPTYPE central_compose( WRAPTYPE, WRAPTYPE);
+ WRAPTYPE central_inverse( WRAPTYPE );
+ void central_form_pullback( REAL *, REAL *, REAL *, WRAPTYPE );
+ void screw_wrap( REAL *, REAL *, WRAPTYPE );
+ WRAPTYPE screw_compose(WRAPTYPE,WRAPTYPE);
+ WRAPTYPE screw_inverse( WRAPTYPE );
+ void screw_form_pullback( REAL *, REAL *, REAL *, WRAPTYPE );
  
  /* this function simply checks to see if the user has changed the order,
      and if so, updates the matrix */
- void
- new_rot_order()
+ void new_rot_order()
  {
    if ((rotorder_var = lookup_global(ROTORDER_NAME)) < 0)
    {
@@ -104,21 +103,21 @@ int genpower_var = -1;  /* reset at start of surface */
 
    rotmat[0][0] = rotmat[1][1] = cos(2*M_PI*genpower/rotorder);
    rotmat[1][0] = -(rotmat[0][1] = sin(2*M_PI*genpower/rotorder));
- }
+ } // end new_rot_order()
 
  /* called by recalc() even if not using symmetry, hence don't set user var */
  void reset_rot_order()
  {
    if (lookup_global(ROTORDER_NAME) >= 0)
    new_rot_order();
- }
+ } // end reset_rot_order()
 
  /* this is called so often if shouldn't do any work unless never used before */
  void rot_new_order()
  {
    if (rotorder_var<0)
    new_rot_order();
- }
+ } // end rot_new_order()
 
  /*******************************************************************
  *
@@ -130,10 +129,11 @@ int genpower_var = -1;  /* reset at start of surface */
  *
  */
 
- void rot_wrap(x,y,wrap)
- REAL *x;   /* original coordinates */
- REAL *y;   /* wrapped coordinates  */
- WRAPTYPE wrap;  /* encoded symmetry group element */
+ void rot_wrap(
+   REAL *x,   /* original coordinates */
+   REAL *y,   /* wrapped coordinates  */
+   WRAPTYPE wrap  /* encoded symmetry group element */
+ )
  {
    int i,j,k;
    REAL t[MAXCOORD];
@@ -161,7 +161,7 @@ int genpower_var = -1;  /* reset at start of surface */
      }
      memcpy((char*)y,(char*)t,SDIM*sizeof(REAL));
    }
- }
+ } // end rot_wrap()
 
  /********************************************************************
  *
@@ -171,12 +171,13 @@ int genpower_var = -1;  /* reset at start of surface */
  *
  */
 
- WRAPTYPE rot_compose(wrap1,wrap2)
- WRAPTYPE wrap1,wrap2;  /* the elements to compose */
+ WRAPTYPE rot_compose(
+   WRAPTYPE wrap1, WRAPTYPE wrap2  /* the elements to compose */
+ )
  {
    rot_new_order();
    return stdwrap(wrap1 + wrap2);
- }
+ } // end rot_compose()
 
 
  /********************************************************************
@@ -187,12 +188,11 @@ int genpower_var = -1;  /* reset at start of surface */
  *
  */
 
- WRAPTYPE rot_inverse(wrap)
- WRAPTYPE wrap;  /* the element to invert */
+ WRAPTYPE rot_inverse(WRAPTYPE wrap  /* the element to invert */)
  {
    rot_new_order();
    return stdwrap(-wrap);
- }
+ } // end rot_inverse()
 
  /*******************************************************************
  *
@@ -204,15 +204,16 @@ int genpower_var = -1;  /* reset at start of surface */
  *
  */
 
- void rot_form_pullback(x,xform,yform,wrap)
- REAL *x;   /* original coordinates */
- REAL *xform;  /* result pullback */
- REAL *yform;   /* original form input  */
- WRAPTYPE wrap;  /* encoded symmetry group element */
+ void rot_form_pullback(
+   REAL *x,   /* original coordinates */
+   REAL *xform, /* result pullback */
+   REAL *yform,   /* original form input  */
+   WRAPTYPE wrap  /* encoded symmetry group element */
+ )
  {
-     rot_new_order();
-     rot_wrap(yform,xform,-wrap);
- }
+   rot_new_order();
+   rot_wrap(yform,xform,-wrap);
+ } // end rot_form_pullback()
 
  /************************************************************************* 
  * frot is a similar group but with a flip
@@ -222,16 +223,17 @@ int genpower_var = -1;  /* reset at start of surface */
  **************************************************************************/
 
  /* prototype */
- void frot_wrap ARGS((REAL *,REAL *,WRAPTYPE));
+ void frot_wrap(REAL *,REAL *,WRAPTYPE);
 
  /*******************************************************************
  *  function: frot_wrap
  */
 
- void frot_wrap(x,y,wrap)
- REAL *x;   /* original coordinates */
- REAL *y;   /* wrapped coordinates  */
- WRAPTYPE wrap;  /* encoded symmetry group element */
+ void frot_wrap(
+   REAL *x,   /* original coordinates */
+   REAL *y,   /* wrapped coordinates  */
+   WRAPTYPE wrap  /* encoded symmetry group element */
+ )
  {
    int i,j,k;
    REAL t[MAXCOORD];
@@ -263,7 +265,8 @@ int genpower_var = -1;  /* reset at start of surface */
      memcpy((char*)y,(char*)t,SDIM*sizeof(REAL));
      if (wrap&1) y[2] = -y[2]; /* the flip */
    }
- }
+ } // end frot_wrap()
+
  /*******************************************************************
  *
  *  function: frot_form_pullback
@@ -274,14 +277,15 @@ int genpower_var = -1;  /* reset at start of surface */
  *
  */
 
- void frot_form_pullback(x,xform,yform,wrap)
- REAL *x;   /* original coordinates */
- REAL *xform;  /* result pullback */
- REAL *yform;   /* original form input  */
- WRAPTYPE wrap;  /* encoded symmetry group element */
+ void frot_form_pullback(
+   REAL *x,   /* original coordinates */
+   REAL *xform,  /* result pullback */
+   REAL *yform,   /* original form input  */
+   WRAPTYPE wrap  /* encoded symmetry group element */
+ )
  {
-     frot_wrap(yform,xform,-wrap);
- }
+   frot_wrap(yform,xform,-wrap);
+ } // end frot_form_pullback()
 
  /************************************************************************* 
  * pgcube is the full point group of a cube
@@ -299,19 +303,20 @@ int genpower_var = -1;  /* reset at start of surface */
 #define pgcube_invperm(perm)  ( (((perm)&4) || (!(perm)))? (perm) : 3-(perm) )
 
  /* prototypes */
- void pgcube_wrap ARGS((REAL *,REAL *,WRAPTYPE));
- int pgcube_compperm ARGS((int,int));  /* compose two elts of S3 */
- WRAPTYPE pgcube_inverse ARGS((WRAPTYPE));
- int pgcube_permutesigns ARGS((int, int));
+ void pgcube_wrap(REAL *,REAL *,WRAPTYPE);
+ int pgcube_compperm(int,int);  /* compose two elts of S3 */
+ WRAPTYPE pgcube_inverse(WRAPTYPE);
+ int pgcube_permutesigns(int, int);
 
  /*******************************************************************
  *  function: pgcube_wrap
  */
 
- void pgcube_wrap(x,y,wrap)
- REAL *x;   /* original coordinates */
- REAL *y;   /* wrapped coordinates  */
- WRAPTYPE wrap;  /* encoded symmetry group element */
+ void pgcube_wrap(
+   REAL *x,   /* original coordinates */
+   REAL *y,   /* wrapped coordinates  */
+   WRAPTYPE wrap  /* encoded symmetry group element */
+ )
  {
    int i,j;
    REAL yy;
@@ -332,7 +337,7 @@ int genpower_var = -1;  /* reset at start of surface */
    {
        yy = y[1]; y[1] = y[0]; y[0] = yy;
    }
- }
+ } // end pgcube_wrap()
 
  /**************************************
  *
@@ -342,15 +347,37 @@ int genpower_var = -1;  /* reset at start of surface */
  *
  */
 
-static  REAL xxx[3] = {1.,1.,1.};
-int pgcube_permutesigns(signs, perm)
-int perm, signs;
+ static  REAL xxx[3] = {1.,1.,1.};
+ int pgcube_permutesigns(
+   int signs, 
+   int perm
+ )
  { int retval;
    REAL  y[3];
    pgcube_wrap(xxx,y,pgcube_wr(signs,perm));
    retval = (y[0]<0.0) + ((y[1]<0.0) << 1) + ((y[2]<0.0) << 2);
    return retval;
- }
+ } // end pgcube_permutesigns()
+
+ /********************************************************************
+ *
+ *  function: pgcube_compperm()
+ *
+ *  purpose:  compose two elts of S3
+ *
+ */
+
+ int pgcube_compperm(  
+   int perm1,
+   int perm2
+ )
+ {
+   int flip1,flip2,rot;
+   flip1=perm1&4; flip2=perm2&4;
+   rot = (perm2&3) + (flip2?-1:1)*(perm1&3);
+   rot = (rot<0)? rot+3 : ( (rot>2)? rot-3:rot );
+   return (flip1^flip2) + rot;
+ } // end pgcube_compperm()
 
  /********************************************************************
  *
@@ -360,18 +387,10 @@ int perm, signs;
  *
  */
 
- int pgcube_compperm(perm1,perm2)  /* compose two elts of S3 */
- int perm1,perm2;
- {
-   int flip1,flip2,rot;
-   flip1=perm1&4; flip2=perm2&4;
-   rot = (perm2&3) + (flip2?-1:1)*(perm1&3);
-   rot = (rot<0)? rot+3 : ( (rot>2)? rot-3:rot );
-   return (flip1^flip2) + rot;
- }
-
- WRAPTYPE pgcube_compose(wrap1,wrap2) 
- WRAPTYPE wrap1,wrap2;  /* the elements to compose */
+ WRAPTYPE pgcube_compose( 
+   WRAPTYPE wrap1,
+   WRAPTYPE wrap2  /* the elements to compose */
+ )
  {
    int sgns1,sgns2,perm1,perm2,comp,inv,xxx,yyy;
    sgns1 = pgcube_sgns(wrap1); perm1 = pgcube_perm(wrap1);
@@ -381,7 +400,7 @@ int perm, signs;
    xxx =  pgcube_permutesigns(sgns2,inv);
    yyy = pgcube_wr(sgns1 ^ xxx,comp);
    return yyy;
- }
+ } // end pgcube_compose()
 
  /********************************************************************
  *
@@ -391,8 +410,7 @@ int perm, signs;
  *
  */
 
- WRAPTYPE pgcube_inverse(wrap)
- WRAPTYPE wrap;  /* the element to invert */
+ WRAPTYPE pgcube_inverse(WRAPTYPE wrap  /* the element to invert */)
  {
    int sgns, perm;
    WRAPTYPE result;
@@ -401,7 +419,7 @@ int perm, signs;
    result = pgcube_wr(pgcube_permutesigns(sgns,perm),
             pgcube_invperm(perm));
    return result;
- }
+ } // end pgcube_inverse()
 
 
  /*******************************************************************
@@ -414,14 +432,15 @@ int perm, signs;
  *
  */
 
- void pgcube_form_pullback(x,xform,yform,wrap)
- REAL *x;   /* original coordinates */
- REAL *xform;  /* result pullback */
- REAL *yform;   /* original form input  */
- WRAPTYPE wrap;  /* encoded symmetry group element */
+ void pgcube_form_pullback(
+   REAL *x,   /* original coordinates */
+   REAL *xform,  /* result pullback */
+   REAL *yform,   /* original form input  */
+   WRAPTYPE wrap  /* encoded symmetry group element */
+ )
  {
-     pgcube_wrap(yform,xform,pgcube_inverse(wrap));
- }
+   pgcube_wrap(yform,xform,pgcube_inverse(wrap));
+ } // end pgcube_form_pullback()
 
  /************************************************************************* 
  * cubel is the full symmetry group of the unit cubic lattice
@@ -444,16 +463,17 @@ int perm, signs;
 #define WRAPNUM(x) ( (x)>(1<<(TWRAPBITS-2)) ? (x)-(1<<(TWRAPBITS-1)) : (x))
 
  /* prototypes */
- void cubel_wrap ARGS((REAL *,REAL *,WRAPTYPE));
- WRAPTYPE cubel_inverse ARGS((WRAPTYPE));
+ void cubel_wrap(REAL *,REAL *,WRAPTYPE);
+ WRAPTYPE cubel_inverse(WRAPTYPE);
 
  /*******************************************************************
  *  function: cubel_wrap
  */
- void cubel_wrap(x,y,wrap)
- REAL *x;   /* original coordinates */
- REAL *y;   /* wrapped coordinates  */
- WRAPTYPE wrap;  /* encoded symmetry group element */
+ void cubel_wrap(
+   REAL *x,   /* original coordinates */
+   REAL *y,   /* wrapped coordinates  */
+   WRAPTYPE wrap  /* encoded symmetry group element */
+ )
  {
    int i,j;
 
@@ -467,21 +487,21 @@ int perm, signs;
      else
        y[i] += w;
    }
- }
+ } // end cubel_wrap()
 
  /********************************************************************
  *
- *  function: cubel_compose()
+ *  function: pg_tr_compose()
  *
- *  purpose:  do composition of two group elements
+ *  purpose:  apply a cube pointgroup element to the translation 
+ *  part of another wrap
  *
  */
 
- /* pg_tr_compose:
-     apply a cube pointgroup element to the translation part of another
- wrap */
- WRAPTYPE pg_tr_compose(pg,tr)
- WRAPTYPE pg,tr;
+ WRAPTYPE pg_tr_compose(
+   WRAPTYPE pg,
+   WRAPTYPE tr
+ )
  {
    WRAPTYPE wrap=0;
    int i;
@@ -494,25 +514,42 @@ int perm, signs;
      wrap = (wrap<<TWRAPBITS)+(WRAPMASK&(int)y[i]);
    }
    return wrap;
- }
+ } // end pg_tr_compose()
 
- WRAPTYPE cubel_compose(wrap1,wrap2) 
- WRAPTYPE wrap1,wrap2;  /* the elements to compose */
+ /********************************************************************
+ *
+ *  function: cubel_compose()
+ *
+ *  purpose:  do composition of two group elements
+ *
+ */
+
+ WRAPTYPE cubel_compose( 
+   WRAPTYPE wrap1,
+   WRAPTYPE wrap2  /* the elements to compose */
+ )
  {
    int pg1, pg2, tr1, tr2;
    pg1 = cubel_pg(wrap1); tr1 = cubel_tr(wrap1);
    pg2 = cubel_pg(wrap2); tr2 = cubel_tr(wrap2);
    return cubel_wr( pg_tr_compose(pg1,tr2)+tr1,
            pgcube_compose(pg1,pg2) ) ;
- }
+ } // end cubel_compose()
 
- WRAPTYPE cubel_inverse(wrap)
- WRAPTYPE wrap;
+ /********************************************************************
+ *
+ *  function: cubel_inverse()
+ *
+ *  purpose:  do inverse of group element
+ *
+ */
+
+ WRAPTYPE cubel_inverse(WRAPTYPE wrap)
  {
    WRAPTYPE pg = pgcube_inverse(cubel_pg(wrap));
    WRAPTYPE tr = cubel_tr(wrap);
    return cubel_wr( torus_inverse(pg_tr_compose(pg,tr)), pg );
- }
+ } // end cubel_inverse()
 
  /*******************************************************************
  *
@@ -522,14 +559,15 @@ int perm, signs;
  *        wrapped under the group.  Only pointgroup part matters.
  */
 
- void cubel_form_pullback(x,xform,yform,wrap)
- REAL *x;   /* original coordinates */
- REAL *xform;  /* result pullback */
- REAL *yform;   /* original form input  */
- WRAPTYPE wrap;  /* encoded symmetry group element */
+ void cubel_form_pullback(
+   REAL *x,   /* original coordinates */
+   REAL *xform,  /* result pullback */
+   REAL *yform,   /* original form input  */
+   WRAPTYPE wrap  /* encoded symmetry group element */
+ )
  {
-     pgcube_wrap(yform,xform,pgcube_inverse(cubel_pg(wrap)));
- }
+   pgcube_wrap(yform,xform,pgcube_inverse(cubel_pg(wrap)));
+ } // end cubel_form_pullback()
 
  /************************************************************
  *  xyz rotation-----really is a subgp of pgcube
@@ -540,26 +578,26 @@ int perm, signs;
      ( (( ((w)<0? -2*(w):(w)) + 1) % 3) - 1 )
 
 
- void xyz_wrap(x,y,wrap)
- REAL *x; REAL *y; WRAPTYPE wrap;
+ void xyz_wrap(
+   REAL *x, REAL *y, WRAPTYPE wrap
+ )
  {
    memcpy((char*)y,(char*)x,SDIM*sizeof(REAL));
    if ( 0 == (wrap = xstdwrap(wrap))) return;
 
    if (wrap==-1) y[0]=x[1], y[1]=x[2], y[2]=x[0];
    else /*wrap 1*/ y[0]=x[2], y[1]=x[0], y[2]=x[1];
- }
+ } // end xyz_wrap()
 
- WRAPTYPE xyz_compose(wrap1,wrap2)
- WRAPTYPE wrap1,wrap2;
+ WRAPTYPE xyz_compose(WRAPTYPE wrap1,WRAPTYPE wrap2)
  { return xstdwrap(wrap1 + wrap2); }
 
- WRAPTYPE xyz_inverse(wrap)
- WRAPTYPE wrap;
+ WRAPTYPE xyz_inverse(WRAPTYPE wrap)
  { return xstdwrap(-wrap); }
 
- void xyz_form_pullback(x,xform,yform,wrap)
- REAL *x; REAL *xform; REAL *yform; WRAPTYPE wrap;
+ void xyz_form_pullback(
+   REAL *x, REAL *xform, REAL *yform, WRAPTYPE wrap
+ )
  { xyz_wrap(yform,xform,-wrap); }
 
  /****************************************************************
@@ -568,28 +606,28 @@ int perm, signs;
  * Encoding: 0 is identity, 1 is inversion
  */
 
- void central_wrap(x,y,wrap)
- REAL *x;   /* original coordinates */
- REAL *y;   /* wrapped coordinates  */
- WRAPTYPE wrap;  /* encoded symmetry group element */
+ void central_wrap(
+   REAL *x,   /* original coordinates */
+   REAL *y,   /* wrapped coordinates  */
+   WRAPTYPE wrap  /* encoded symmetry group element */
+ )
  { int n;
    for ( n = 0 ; n < SDIM ; n++ ) y[n] = wrap ? -x[n] : x[n];
- }
+ } // end central_wrap()
 
- WRAPTYPE central_compose(wrap1,wrap2)
- WRAPTYPE wrap1,wrap2;
+ WRAPTYPE central_compose(WRAPTYPE wrap1, WRAPTYPE wrap2)
  { return wrap1 ^ wrap2; }
 
- WRAPTYPE central_inverse(wrap)
- WRAPTYPE wrap;
+ WRAPTYPE central_inverse(WRAPTYPE wrap)
  { return wrap; }
 
- void central_form_pullback(x,xform,yform,wrap)
- REAL *x; REAL *xform; REAL *yform; WRAPTYPE wrap;
+ void central_form_pullback(
+   REAL *x, REAL *xform, REAL *yform, WRAPTYPE wrap
+ )
  { int n;
    for ( n = 0 ; n < SDIM ; n++ ) xform[n] = wrap ? -yform[n] : yform[n];
 
- }
+ } // end central_form_pullback()
 
  /****************************************************************
  *
@@ -605,10 +643,11 @@ static int twist_var = -1;
 #define TWISTNAME "screw_angle"
  static long screw_stamp  = -1; /* when global variables checked */
 
- void screw_wrap(x,y,wrap)
- REAL *x;   /* original coordinates */
- REAL *y;   /* wrapped coordinates  */
- WRAPTYPE wrap;  /* encoded symmetry group element */
+ void screw_wrap(
+   REAL *x,   /* original coordinates */
+   REAL *y,   /* wrapped coordinates  */
+   WRAPTYPE wrap  /* encoded symmetry group element */
+ )
  { REAL angle,lift;
    if ( screw_stamp < reset_timestamp )
    { if ((lift_var = lookup_global(LIFTNAME)) < 0)
@@ -628,24 +667,23 @@ static int twist_var = -1;
    y[0] = x[0]*cos(wrap*angle) - x[1]*sin(wrap*angle);
    y[1] = x[0]*sin(wrap*angle) + x[1]*cos(wrap*angle);
    y[2] = x[2] + wrap*lift;
- }
+ } // end screw_wrap()
 
- WRAPTYPE screw_compose(wrap1,wrap2)
- WRAPTYPE wrap1,wrap2;
+ WRAPTYPE screw_compose(WRAPTYPE wrap1, WRAPTYPE wrap2)
  { return wrap1 + wrap2; }
 
- WRAPTYPE screw_inverse(wrap)
- WRAPTYPE wrap;
+ WRAPTYPE screw_inverse(WRAPTYPE wrap)
  { return -wrap; }
 
- void screw_form_pullback(x,xform,yform,wrap)
- REAL *x; REAL *xform; REAL *yform; WRAPTYPE wrap;
+ void screw_form_pullback(
+   REAL *x, REAL *xform, REAL *yform, WRAPTYPE wrap
+ )
  { REAL angle;
    angle = globals(twist_var)->value.real * M_PI/180;
    xform[0] = yform[0]*cos(wrap*angle) + yform[1]*sin(wrap*angle);
    xform[1] = -yform[0]*sin(wrap*angle) + yform[1]*cos(wrap*angle);
    xform[2] = yform[2];
- }
+ } // end screw_form_pullback()
 
 
 /**************************************************************************
@@ -663,10 +701,11 @@ static int twist_var = -1;
 #define QUARTERTURNNAME "quarter_turn_period"
 int quarter_turn_var;
 
-void quarter_turn_wrap(x,y,wrap)
- REAL *x;   /* original coordinates */
- REAL *y;   /* wrapped coordinates  */
- WRAPTYPE wrap;  /* encoded symmetry group element */
+void quarter_turn_wrap(
+   REAL *x,   /* original coordinates */
+   REAL *y,   /* wrapped coordinates  */
+   WRAPTYPE wrap  /* encoded symmetry group element */
+ )
  { REAL zper;
    int xwrap,ywrap,zwrap;
    if ( quarter_turn_var < 0 )
@@ -703,10 +742,9 @@ void quarter_turn_wrap(x,y,wrap)
      }
    }
    else y[2] = x[2];
-}
+} // end quarter_turn_wrap()
 
-WRAPTYPE quarter_turn_compose(wrap1,wrap2)
-WRAPTYPE wrap1,wrap2;
+WRAPTYPE quarter_turn_compose(WRAPTYPE wrap1, WRAPTYPE wrap2)
 { 
   int xwrap1,ywrap1,zwrap1;
   int xwrap2,ywrap2,zwrap2;
@@ -751,10 +789,9 @@ WRAPTYPE wrap1,wrap2;
         + (((ywrap1 + ywrap2) & WRAPMASK) << TWRAPBITS)
         + ((xwrap1 + xwrap2) & WRAPMASK); 
 
- }
+ } // end quarter_turn_compose()
 
-WRAPTYPE quarter_turn_inverse(wrap)
-WRAPTYPE wrap;
+WRAPTYPE quarter_turn_inverse(WRAPTYPE wrap)
 { int temp;
   int xwrap,ywrap,zwrap;
   xwrap = wrap & WRAPMASK;
@@ -787,11 +824,11 @@ WRAPTYPE wrap;
         + ((ywrap & WRAPMASK) << TWRAPBITS)
         + (xwrap  & WRAPMASK); 
 
+ } // end quarter_turn_inverse()
 
- }
-
- void quarter_turn_form_pullback(x,xform,yform,wrap)
- REAL *x; REAL *xform; REAL *yform; WRAPTYPE wrap;
+ void quarter_turn_form_pullback(
+   REAL *x, REAL *xform, REAL *yform, WRAPTYPE wrap
+ )
  { int zwrap;
    zwrap = (wrap >> 2*TWRAPBITS) & WRAPMASK;
    yform[2] = xform[2];
@@ -814,5 +851,5 @@ WRAPTYPE wrap;
         break;
         break;
    }
- }
+ } // end quarter_turn_form_pullback()
 

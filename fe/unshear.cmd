@@ -12,7 +12,9 @@
 // Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
 
 if not is_defined("shear21") then
-  errprintf "unshear.cmd assumes torus_periods[2][1] defined as shear21.\n" ;
+{ errprintf "ERROR: unshear.cmd assumes torus_periods[2][1] defined as shear21.\n" ;
+  abort;
+}
 
 // 2D version
 unshear2 := {
@@ -24,7 +26,7 @@ unshear2 := {
   shear21 -= shifts*torus_periods[1][1];
   // move vertices over
   foreach vertex vv do
-  { vshifts := -floor(vv.x*inverse_periods[1][1]+vv.y*inverse_periods[1][2]);   
+  { vshifts := -floor(vv.x*inverse_periods[1][1]+vv.y*inverse_periods[2][1]);   
     if vshifts != 0 then
         wrap_vertex(vv.id,(vshifts imod 32));
   };
@@ -52,7 +54,7 @@ unshear2 := {
   shear12 -= shifts*torus_periods[2][2]; 
   // move vertices over
   foreach vertex vv do
-  { vshifts := -floor(vv.x*inverse_periods[2][1]+vv.y*inverse_periods[2][2]);   
+  { vshifts := -floor(vv.x*inverse_periods[1][2]+vv.y*inverse_periods[2][2]);   
     if vshifts != 0 then
         wrap_vertex(vv.id,(vshifts imod 32)*64);
   };
@@ -91,4 +93,7 @@ unshear := {
    else errprintf "Unshear not implemented for space dimension %d\n",
            space_dimension;
 }
+
+
+
 

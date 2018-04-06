@@ -11,6 +11,42 @@ define vertex attribute order_num integer
 edge_flag := 0 // 1 for all edges, 0 for special edges only
 vrml := {
    local counter;
+
+if torus then
+  { errprintf "Cannot run 'vrml' command in torus mode. Do 'detorus' first.\n";
+    abort;
+  };
+
+  if symmetry_group then
+  { errprintf "Cannot run 'vrml' command in symmetry group mode. Do 'detorus' first.\n";
+    abort;
+  };
+
+  if space_dimension != 3 then
+  { errprintf "The 'vrml' command must be run in three-dimensional space.\n";
+    abort;
+  };
+
+  if surface_dimension == 1 then
+  { errprintf "The 'vrml' command is not meant for the string model.\n";
+    abort;
+  };
+
+  if simplex_representation then
+  { errprintf "The 'vrml' command is not meant for the simplex model.\n";
+    abort;
+  };
+
+  if lagrange_order >= 2 then
+  { errprintf "The 'vrml' command is meant for the linear model, not quadratic or Lagrange.\n";
+    abort;
+  };
+
+  if rgb_colors then
+  { errprintf "The 'vrml' command does not do RGB colors; do rgb_colors off.\n";
+    abort;
+  };
+
    counter := 0;
    printf "#VRML V1.0 ascii\n\n";
    printf "Separator {\n";
@@ -35,23 +71,25 @@ vrml := {
             set jvv order_num counter; counter := counter + 1; };
    printf "        ]\n         }\n";
    printf "    IndexedFaceSet { coordIndex [\n";
-   foreach facet jff do printf "        %g,%g,%g,-1,\n",
+   foreach facet jff where show and color >= 0 do printf "        %g,%g,%g,-1,\n",
       jff.vertex[1].order_num,jff.vertex[2].order_num,jff.vertex[3].order_num;
    printf "           ] \n";
    printf "    materialIndex [\n";
-   foreach facet jff do printf "   %g,\n",jff.color;
+   foreach facet jff where show and color >= 0 do printf "   %g,\n",jff.color;
    printf "    ]\n";
    printf "     }\n";
    printf "  Material { ambientColor 0 0 0 diffuseColor 0 0 0 }\n";
    printf "    IndexedLineSet { coordIndex [\n";
-   if edge_flag then
-     foreach edge jee do printf "       %g,%g,-1,\n",
-      jee.vertex[1].order_num,jee.vertex[2].order_num
-   else  foreach edge jee where valence != 2 do printf "       %g,%g,-1,\n",
+   foreach edge jee where show do printf "       %g,%g,-1,\n",
       jee.vertex[1].order_num,jee.vertex[2].order_num;
    printf "          ] } \n";
    printf "   }\n";
    printf "}\n";
 
 } // end vrml
+
+
+// End vrml.cmd
+
+// Usage:  vrml >>> "filename.wrl"
 

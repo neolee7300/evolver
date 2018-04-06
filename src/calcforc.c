@@ -32,7 +32,7 @@ void thread_calc_facet_energy()
   THREAD_FOR_ALL_NEW(FACET, {(*calc_facet_energy)(*idptr,ALL_ENERGIES);});
 #endif
   
-}
+}  // end thread_calc_facet_energy()
 
 /******************************************************************
 *
@@ -53,17 +53,17 @@ void thread_calc_facet_forces()
 #else
   THREAD_FOR_ALL_NEW(FACET,(*calc_facet_forces)(*idptr))
 #endif
-}
+
+} // end thread_calc_facet_forces()
+
 #endif
- /* THREADS */
+ /* endif THREADS */
 
 /*******************************************************************
 *
 *  Function: calc_energy()
 *
-*  Purpose:  Wrapper for total energy calculation.
-*    
-* 
+*  Purpose:  Wrapper for total energy calculation.    
 */
 
 void calc_energy() 
@@ -73,7 +73,7 @@ void calc_energy()
 #else
   local_calc_energy();
 #endif
-}
+} // end calc_energy()
 
 /*******************************************************************
 *
@@ -89,6 +89,9 @@ void local_calc_energy()
   int i;
   body_id    b_id;
   edge_id e_id;
+
+  if ( web.torus_flag ) calc_periods(ADJUST_VOLUMES);
+  else if ( web.torus_period ) calc_periods(NO_ADJUST_VOLUMES);
 
   web.total_energy = 0.0;
   web.total_area    = 0.0;
@@ -133,9 +136,9 @@ void local_calc_energy()
   if ( web.representation == SIMPLEX )
   { facet_id f_id;
     FOR_ALL_FACETS(f_id)
-      calc_simplex_energy(f_id);
+      calc_simplex_energy(f_id,ALL_ENERGIES);
     FOR_ALL_EDGES(e_id)
-      calc_simplex_edge_energy(e_id);
+      calc_simplex_edge_energy(e_id,ALL_ENERGIES);
   }
   else if ( web.representation == STRING )
   { vertex_id v_id;
@@ -201,11 +204,13 @@ void local_calc_energy()
   if ( (web.modeltype == LINEAR) && (web.convex_flag) )
   {  
     if ( web.bdrymax > 0 )
-     FOR_ALL_EDGES(e_id)
-      bdry_spring_energy(e_id);
+    { FOR_ALL_EDGES(e_id)
+        bdry_spring_energy(e_id);
+    }
     if ( web.maxcon > 0 )
-     FOR_ALL_EDGES(e_id)
-      constr_spring_energy(e_id);
+    { FOR_ALL_EDGES(e_id)
+        constr_spring_energy(e_id);
+    }
   }
 
 quantities_only:
@@ -240,7 +245,7 @@ quantities_only:
 
   extrap_val[reflevel] = web.total_energy;
 
-} /* end calc_energy() */
+} /* end local_calc_energy() */
 
 
 /****************************************************************
@@ -258,7 +263,7 @@ void calc_force()
   #else
   local_calc_force();
   #endif
-}
+} // end calc_force()
 
 /****************************************************************
 *
@@ -279,8 +284,7 @@ void local_calc_force()
   /* zero out vertex cumulative quantities */
   MFOR_ALL_VERTICES(v_id)
   { REAL *f = get_force(v_id);
-    for ( i = 0 ; i < SDIM ; i ++ ) f[i] = 0.0;
-    set_vertex_star(v_id,0.0);             
+    for ( i = 0 ; i < SDIM ; i ++ ) f[i] = 0.0;           
     set_vertex_valence(v_id,0);
   }
 
@@ -403,36 +407,46 @@ grad_quantities_only:
 
   /* derivatives with respect to optimizing parameters */
   if ( optparamcount > 0 )
-  { struct oldcoord csaved;
+  {  struct oldcoord csaved;
      csaved.coord = NULL;
      save_coords(&csaved,SAVE_SEPARATE);
      for ( i = 0 ; i < optparamcount ; i++ )
-     { REAL dp;
+     {  REAL dp;
         REAL emid = web.total_energy;
         REAL eleft,eright;
+        struct global *g = globals(optparam[i].pnum);
 
-        dp = globals(optparam[i].pnum)->attr.varstuff.delta;
+        dp = g->attr.varstuff.delta;
 
         /* right difference */
-        globals(optparam[i].pnum)->value.real += dp;
+        g->value.real += dp;
+        if ( g->attr.varstuff.on_assign_call )
+        { struct  global *gg = globals(g->attr.varstuff.on_assign_call);
+          eval(&gg->value.proc,NULL,NULLID,NULL);
+        }
+ 
         project_all(0, TEST_MOVE);
         if ( fixed_constraint_flag || web.pressure_flag || web.pressflag )
-          { calc_content(Q_FIXED);
-             /*volume_restore();*/
-             /*calc_pressure();*/
-          }
+        { calc_content(Q_FIXED);
+           /*volume_restore();*/
+           /*calc_pressure();*/
+        }
         calc_energy();  /* energy after motion */
         eright = web.total_energy;
         restore_coords(&csaved,SAVE_SEPARATE);  /* also restores opt params */
 
         /* left difference */
-        globals(optparam[i].pnum)->value.real -= dp;
+        g->value.real -= dp;
+        if ( g->attr.varstuff.on_assign_call )
+        { struct  global *gg = globals(g->attr.varstuff.on_assign_call);
+          eval(&gg->value.proc,NULL,NULLID,NULL);
+        }
         project_all(0, TEST_MOVE);
         if ( fixed_constraint_flag || web.pressure_flag || web.pressflag )
-          { calc_content(Q_FIXED);
-             /*volume_restore(); */
-             /*calc_pressure(); */
-          }
+        { calc_content(Q_FIXED);
+           /*volume_restore(); */
+           /*calc_pressure(); */
+        }
         calc_energy();  /* energy after motion */
         eleft = web.total_energy;
 
@@ -444,7 +458,7 @@ grad_quantities_only:
      unsave_coords(&csaved,SAVE_SEPARATE);
   }
 
-} /* end calc_force() */
+} /* end local_calc_force() */
 
 /*********************************************************************
 *  
@@ -463,10 +477,11 @@ void force_normalization()
   MAT2D(a,MAXPARAM,MAXCOORD); 
 
   if ( web.metric_flag && metric_convert_flag )
-    FOR_ALL_VERTICES(v_id)
+  { FOR_ALL_VERTICES(v_id)
     { if ( !(get_attr(v_id) & FIXED) )
       metric_form_to_vector(get_coord(v_id),get_force(v_id));
     }
+  }
 
   /* do area normalization */
   if ( web.area_norm_flag && !approx_curve_flag) 
@@ -494,7 +509,7 @@ void force_normalization()
         { if ( !(get_vattr(v_id) & (FIXED|CONSTRAINT|BOUNDARY) ) )
           { edge_id e_id = get_vertex_edge(v_id);
             vertex_id other_v = get_edge_headv(e_id);
-            eliminate_edge(e_id);
+            delete_edge(e_id);
             free_element(e_id);
             add_vertex_valence(other_v,-1);
             continue;
@@ -528,7 +543,6 @@ void force_normalization()
             area = -0.5*(f[0]*force[0]+f[1]*force[1])/ (f[0]*f[0]+f[1]*f[1]);
           } 
           else area = f[0] = f[1] = 0.0;
-          set_vertex_star(v_id,star_fraction*area);
           for ( i = 0 ; i < 2 ; i++ )
             force[i] = -2*f[i];
           continue;
@@ -548,7 +562,6 @@ void force_normalization()
           }
           while ( !equal_id(e_id,start_e) );
         }
-        set_vertex_star(v_id,star_fraction*area);
       }
       else if ( effective_area_flag && (web.representation == SOAPFILM) )
       { /* crude correction for triple edges and tetra points */
@@ -585,7 +598,7 @@ void force_normalization()
   }
 
   return;
-} /* end force_normalization */
+} /* end force_normalization() */
 
 /*************************************************************
 *
@@ -596,8 +609,9 @@ void force_normalization()
 *
 *  Return value: total difference from fixed value constraints
 */
-REAL calc_content ARGS1((mode),
-int mode)
+REAL calc_content (
+   int mode  // Q_FIXED, Q_ENERGY, Q_INFO, etc.
+)
 { body_id b_id,bi_id;
   int k;
   REAL diff = 0.0;
@@ -606,7 +620,7 @@ int mode)
 
   /* starting body volumes */
   FOR_ALL_BODIES(b_id)
-  { int attr = get_battr(b_id);
+  { ATTR attr = get_battr(b_id);
     if ( !everything_quantities_flag || ((attr & FIXEDVOL) && (mode & Q_FIXED))
        || ((attr & PRESSURE) && (mode & (Q_ENERGY|Q_INFO)) )
        || (!(attr & (FIXEDVOL|PRESSURE)) && (mode & Q_INFO)) )
@@ -698,7 +712,7 @@ int mode)
 
   /* get total deviation from constraints */
   if ( !everything_quantities_flag && !web.pressure_flag ) 
-    FOR_ALL_BODIES(bi_id)
+  { FOR_ALL_BODIES(bi_id)
     { REAL absvol = get_body_abstotal(b_id);
       REAL target = get_body_fixvol(bi_id);
       REAL actual = get_body_volume(bi_id);
@@ -707,9 +721,11 @@ int mode)
       diff += fabs(target - actual)/
                         (web.target_tolerance*(absvol?absvol:1.0));
     }
+  }
  
   for ( k = 0 ; k < gen_quant_count ; k++ )
   { gq = GEN_QUANT(k);
+    if ( gq->flags & Q_DELETED ) continue;
     if ( !(gq->flags & Q_FIXED) ) continue;
     if ( gq->tolerance > 0.0 )
       diff += fabs(gq->target - gq->value)/(gq->tolerance*gq->abstotal);
@@ -723,7 +739,7 @@ int mode)
     info_volume_timestamp = global_timestamp;
   return diff;
 
-}
+} // end calc_content()
 
 /*************************************************************
 *
@@ -733,8 +749,9 @@ int mode)
 *
 */
 
-void  local_calc_content ARGS1((mode),
-int mode) /* Q_FIXED | Q_INFO | Q_RENORMALIZE */
+void  local_calc_content (
+  int mode /* Q_FIXED | Q_INFO | Q_RENORMALIZE */
+)
 {
   facet_id  f_id;
   facetedge_id fe_id;
@@ -779,9 +796,15 @@ int mode) /* Q_FIXED | Q_INFO | Q_RENORMALIZE */
     else
     { edge_id e_id;
 
+      if ( threadflag )
+        thread_launch(TH_CALC_FACET_VOLUME,FACET);
+      else
       FOR_ALL_FACETS(f_id)
         (*calc_facet_volume)(f_id);
 
+      if ( threadflag )
+        thread_launch(TH_CALC_EDGE_CON_VOLUME,EDGE);
+      else
       FOR_ALL_EDGES(e_id)
       { ATTR attr = get_eattr(e_id);
         if ( !(attr & BDRY_CONTENT) ) continue;
@@ -802,6 +825,59 @@ int mode) /* Q_FIXED | Q_INFO | Q_RENORMALIZE */
   }
 
 } /* end local_calc_content() */
+
+/******************************************************************
+*
+* function: thread_calc_facet_volume()
+*
+* purpose: thread-friendly calculation of classic facet volume.
+*/
+
+void thread_calc_facet_volume()
+{
+
+#ifdef OLDTHNEXT
+  facet_id f_id;
+  THREAD_FOR_ALL_FACETS(f_id)
+  {
+     (*calc_facet_volume)(*idptr);
+  }
+#else
+  THREAD_FOR_ALL_NEW(FACET,(*calc_facet_volume)(*idptr))
+#endif
+} // end thread_calc_facet_volume()
+
+
+/**********************************************************************
+*
+* function: thread_calc_edge_con_volume()
+*
+* purpose: thread-friendly calculation of classic edge volume integral.
+*/
+
+void thread_calc_edge_con_volume()
+{
+
+#ifdef OLDTHNEXT
+  edge_id e_id;
+  THREAD_FOR_ALL_EDGES(e_id)
+  {
+      { ATTR attr = get_eattr(e_id);
+        if ( !(attr & BDRY_CONTENT) ) continue;
+        if ( attr & CONSTRAINT )
+          calc_constr_content_e(e_id);
+      }
+  }
+#else
+  THREAD_FOR_ALL_NEW(EDGE,
+      { ATTR attr = get_eattr(*idptr);
+        if ( !(attr & BDRY_CONTENT) ) continue;
+        if ( attr & CONSTRAINT )
+          calc_constr_content_e(*idptr);
+      }
+  )
+#endif
+} // end thread_calc_edge_con_volume()
 
 /*************************************************************
 *

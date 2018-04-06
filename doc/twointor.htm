@@ -1,51 +1,58 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
-<HEAD><title>Surface Evolver Documentation - Torus Example</title></head>
+<!DOCTYPE HTML>
+<HEAD><title>Surface Evolver Documentation - Torus Example</title>
+<link rel="stylesheet" type="text/css" href="evdoc-style.css" />
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+</head>
 <body>
-<center>
-<h1><a href="http://www.susqu.edu/facstaff/b/brakke/evolver/evolver.htm">
-Surface Evolver</a> Documentation</h1>
-</center>
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
-<a href="index.htm">Index.</a>
 
-<a name="Kelvin foam example"></a>
-<a name="twointor"></a> <h1>Example: Torus partitioned into two cells (Kelvin's foam)
+<h1 class="center">
+<a href="http://www.susqu.edu/brakke/evolver/evolver.htm" class="comic">
+Surface Evolver</a> Documentation</h1>
+
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<a href="index.htm">Index.</a><br>
+<a href="ringblob.htm">Next: Spinning ring example.</a><br>
+<a href="tutorial.htm#tutorial">Back to top of tutorial.</a>
+
+<a   id="Kelvin-foam-example"></a>
+<a   id="twointor"></a> <h1>Example: Torus partitioned into two cells (Kelvin's foam)
 </h1>
 
 This example has a flat 3-torus (i.e. periodic boundary conditions)
 divided into two bodies.  The unit cell is 
 a unit cube, and the surface has the topology of Kelvin's partitioning of 
-space into tetrakaidecahedra <a href="biblio.htm#ref[TW]">[TW]</a>, which 
+space into tetrakaidecahedra <a href="biblio.htm#refTW">[TW]</a>, which 
 was the least area partitioning of space into equal volumes known until 
-recently <a href="biblio.htm#ref[WP]">[WP]</a>.  
+recently <a href="biblio.htm#refWP">[WP]</a>.  
 <p>
 The datafile handles the 
 wrapping of edges around the torus by specifying for each direction whether
 an edge wraps positively (+), negatively (-), or not at all (*).
 <p>
-Note the use of the keyword <tt>TORUS_FILLED</tt> in the datafile.
+Note the use of the keyword <code>TORUS_FILLED</code> in the datafile.
 This informs Evolver that one of the volume constraints is redundant,
 preventing a singular matrix when the time comes to enforce volume
-constraints.  One could use just <tt>TORUS</tt> and only put on one
+constraints.  One could use just <code>TORUS</code> and only put on one
 volume constraint.
 <p>
 The display of a surface in a torus can be done several ways.
-The <a href="toggle.htm#connected"><tt>connected</tt></a>
+The <a href="toggle.htm#connected"><code>connected</code></a>
 command (my favorite) makes each body show as a single unit.
-The  <a href="toggle.htm#clipped"><tt>clipped</tt></a>
+The  <a href="toggle.htm#clipped"><code>clipped</code></a>
 command shows the surface clipped to the fundamental
-parallelpiped.  The <a href="toggle.htm#raw_cells"><tt>raw_cells</tt></a>
+parallelpiped.  The <a href="toggle.htm#raw_cells"><code>raw_cells</code></a>
 command shows the unedited surface.
 <p>
 The Weaire-Phelan structure 
-<a href="biblio.htm#ref[WP]">[WP]</a>.  
-is in the datafile <tt>phelanc.fe</tt>.
+<a href="biblio.htm#refWP">[WP]</a>.  
+is in the datafile <code>phelanc.fe</code>.
 It has area 0.3% less than Kelvin's.
 
 
 <table>
 <tr><td>
-<img src="twointor.gif" align="middle" alt="twointor"></td>
+<img src="twointor.gif"  alt="twointor"></td>
 <td>  The initial two-cell Kelvin shape.  Note that due to
 periodidity, a single vertex or edge may appear
 multiple times in the image.</td>
@@ -128,10 +135,11 @@ bodies
 Doing some refining and iterating will show that the optimal shape
 is curved a bit.
 <hr>
-<a href="ringblob.htm">Spinning ring example.</a>
+<a href="ringblob.htm">Next: Spinning ring example.</a><br>
 <a href="tutorial.htm#tutorial">Back to top of tutorial.</a>
 <br>
-<a href="evolver.htm#doc top">Back to top of Evolver documentation.</a>
+<a href="evolver.htm#doc-top">Back to top of Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 </body>
 </html>

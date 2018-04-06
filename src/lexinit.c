@@ -33,14 +33,15 @@ void reset_web()
 
   
   unload_libraries(); /* unload dynamic libraries */
-  clear_symtable();
-  clear_globals();  /* need this to reset global name hash table */
   dymemsize = 0;
   dymem = NULL; 
   token_count = 0;
   display_text_count = 0;
   memset(text_chunks,0,sizeof(text_chunks));
  
+  if ( torus_display_mode )
+    former_torus_display_mode = torus_display_mode;
+
   i = 1;
   if ( ((char*)&i)[0] ) little_endian_flag = 1;
   else big_endian_flag = 1;
@@ -48,7 +49,7 @@ void reset_web()
   /* cut down overgrown eval stacks */
   for ( i = 0 ; i < nprocs ; i++ )
   { struct thread_data *td = thread_data_ptrs[i];
-    int stack_used = td->stack_top - td->eval_stack;
+    int stack_used = (int)(td->stack_top - td->eval_stack);
     if ( td->eval_stack_size > stack_used + 1000 )
     { td->eval_stack_size = stack_used + 1000;
       td->eval_stack = 
@@ -56,14 +57,28 @@ void reset_web()
       td->stack_top = td->eval_stack + stack_used;
       td->eval_stack[td->eval_stack_size-1] = STACKMAGIC;
     }
-    td->stack_top = td->eval_stack;
+//    td->stack_top = td->eval_stack;  // don't chop, in case of permload
   }   
 
-
-
   /* reset nonzero flags and stuff */
+
+  BK_flag = 0;
+  box_flag = 0;
+  bounding_box_color = BLUE;
+  break_on_warning = 0;
+  facet_alpha = 1;
+  facet_alpha_flag = 0;
+  opacity_attr = 0;
+  v_partition_stage_attr = -1;
+  e_partition_stage_attr = -1;
+  f_partition_stage_attr = -1;
+  v_partition_proc_attr = -1;
+  e_partition_proc_attr = -1;
+  f_partition_proc_attr = -1;
+  detorus_sticky = 1;
+  suppress_erroutstring = 0;
   raw_velocity_attr = -1;
-  lmc_mc_attr = -1;
+  lmc_mc_attr = -1; 
   lmc_mobility_attr = -1;
   quarter_turn_var = -1;
   edge_diffusion_attr = -1;
@@ -77,6 +92,7 @@ void reset_web()
     torus_display_mode = TORUS_DEFAULT_MODE; 
   slice_view_flag = 0;
   clip_view_flag = 0;
+  some_no_transforms_flag = 0;
   quantity_function_sparse_flag = 1;
   one_sided_present = 0;
   one_sided_lagrange_attr = -1;
@@ -84,20 +100,29 @@ void reset_web()
   memset(slice_coeff,0,sizeof(slice_coeff));
   memset(clip_coeff,0,sizeof(clip_coeff));
   clip_coeff[0][0] = 1.0;
+  slice_coeff_set_flag = 0;
+  clip_coeff_set_flag = 0;
 
+  free_all_q_info();
   list_free_all(PERM_BLOCK);  /* get rid of everything */
+
+  clear_symtable();
+  clear_globals();  /* need this to reset global name hash table */
+  initialize_perm_globals(); /* put some internal variable names in permanent symbol table */
+
   reset_skeleton();  /* cleans out web and resets to 0 */
+
 #ifdef MPI_EVOLVER
   mpi_reset();
 #endif
 
 #ifdef MPI_EVOLVER
- random_seed = this_task;  
+ random_seed = default_random_seed+this_task;  
 #else
- random_seed = 1;  
+ random_seed = default_random_seed;  
 #endif
   srand(random_seed); srand48(random_seed);
- 
+
   file_no = 0;
   file_no_max = 12;
   file_names = (char**)mycalloc(file_no_max,sizeof(char**));
@@ -105,6 +130,7 @@ void reset_web()
   file_no_used = 1;
 
   addload_flag = 0;
+  replace_load_flag = 0;
   verbose_flag = 0;
   estimate_flag = 0;
   warning_messages = NULL;
@@ -125,15 +151,15 @@ void reset_web()
   thread_stages = NULL;
   mpi_show_corona_flag = 0;
   edgeshow_flag = 1;
-  
+
   /* Following PostScript line width variables relative to page size */
   ps_labelsize = 3.0;
-  ps_stringwidth = 0.004;  /* default edge width */
-  ps_fixededgewidth = 0.004;
-  ps_tripleedgewidth = 0.003;
-  ps_conedgewidth = 0.004;
-  ps_bareedgewidth = 0.005;
-  ps_gridedgewidth = 0.002;
+  ps_stringwidth = 0.002;  /* default edge width */
+  ps_fixededgewidth = 0.002;
+  ps_tripleedgewidth = 0.0015;
+  ps_conedgewidth = 0.002;
+  ps_bareedgewidth = 0.0025;
+  ps_gridedgewidth = 0.001;
 
   for ( i = 0 ; i < MAXLAGRANGE ; i++ )
   { bezier1invert[i] = NULL;
@@ -165,14 +191,20 @@ void reset_web()
   uminus_flag = 0;
   inputsave_flag = 0;
   check_count = 0;
+  bad_next_prev_count = 0;
+  inconsistent_bodies_count = 0;
+  edge_loop_count = 0;
+  edges_same_vertices_count = 0;
+  facets_same_vertices_count = 0;
+  bad_errors_count = 0; 
   hessian_slant_cutoff = 0.0;
   hessian_epsilon = hessian_epsilon_default;
   #ifdef MPI_EVOLVER
   sparse_constraints_flag = 0;
-  augmented_hessian_flag = 0;
+  augmented_hessian_flag = 1;
   #else
   sparse_constraints_flag = 1;
-  augmented_hessian_flag = 1;
+  augmented_hessian_flag = -1;
   #endif
   blas_flag = 0;
   last_error = 0;
@@ -187,8 +219,11 @@ void reset_web()
   sqcurve_ignore_constr = 0;
   ackerman_flag = 0;
   ps_colorflag = -1;
+  ps_cmykflag = 0;
   boundary_expr_flag = 0;
   gridflag = -1;
+  force_edgeswap_flag = 0;
+  septum_flag = -1;
   crossingflag = -1;
   labelflag = -1;
   web.target_tolerance = DEFAULT_TARGET_TOLERANCE;
@@ -249,8 +284,14 @@ void reset_web()
   read_command_flag = 0;
   ribiere_flag = 1;
   assume_oriented_flag = 0;
+  K_altitude_flag = 0;
   conj_grad_flag = 0;
   mobility_flag = mobility_tensor_flag = 0;
+  memset((void*)mobility_tensor,0,sizeof(mobility_tensor));
+  memset((void*)&mobility_formula,0,sizeof(mobility_formula));
+  memset((void*)elements_predicted,0,sizeof(elements_predicted));
+  quantities_predicted = 0;
+  method_instances_predicted = 0;
   old_area_flag = 0;
   area_fixed_flag = 0;
   sqgauss_flag = 0;
@@ -291,11 +332,11 @@ void reset_web()
   web.modeltype = LINEAR;
   web.lagrange_order = 1;
   bezier_flag = 0;
-  web.hide_flag = 1;
   web.torus_clip_flag = cflag;
   web.torus_body_flag = bflag;
   web.torus_flag = 0;
   web.full_flag = 0;
+  dt_eps = DT_EPS_DEFAULT;
   web.meritfactor = 0.0;
   web.grav_const = 1.0;
   web.symmetric_content = 0;
@@ -333,12 +374,15 @@ void reset_web()
   globals(inverse_periods_global)->attr.arrayptr->sizes[0] = 0;
   memset(torus_period_expr,0,sizeof(torus_period_expr));
   memset(torus_display_period_expr,0,sizeof(torus_display_period_expr));
+  memset(view_transforms_unique_point,0,sizeof(REAL)*MAXCOORD);
+  view_transforms_unique_point_flag = 0;
   zoom_number = 1;
   web.zoom_v = NULLVERTEX;
   web.zoom_radius = 99999.0;
   transform_count = 0;
   view_transforms = NULL;
   set_view_transforms_global();
+  set_view_transform_generators_global();
   transforms_flag = 1;
   transform_expr[0] = '\0';
   view_transform_det = NULL; 
@@ -362,6 +406,8 @@ void reset_web()
   }
   memset((char*)show_expr_table,0,sizeof(show_expr_table));
   memset((char*)single_redefine,0,128*sizeof(struct expnode));
+  gauss1Dwt = NULL;
+  gauss1Dpt = NULL;
   gauss1poly = NULL; 
   gauss1polyd = NULL; 
   gpoly = NULL; 
@@ -381,7 +427,7 @@ void reset_web()
 
   warnings_suppressed_count = 0;
   reset_counts();
-}
+} // end reset_web()
 
 /******************************************************************
 *
@@ -430,6 +476,7 @@ void initialize()  /* initialize from data file */
   elist = NULL;
   flist = NULL;
   blist = NULL;
+
   if ( !addload_flag )
     quantity_init(); 
 
@@ -441,8 +488,97 @@ void initialize()  /* initialize from data file */
   while ( (tok != 0) && topflag )
   { switch ( tok )
      { 
-        case SUPPRESS_WARNING_:
-             if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+        case VERTICES_PREDICTED_TOK:
+             if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
+             { kb_error(7531,"Missing vertices_predicted number.\n",WARNING);
+               break;
+             }
+             if ( yylval.i < 0 )
+               kb_error(7364,"Vertices_predicted must be nonnegative.\n",WARNING);               
+             else
+               elements_predicted[VERTEX] = yylval.i;                
+             tok = yylex();  /* eat the number */
+             break;
+
+        case EDGES_PREDICTED_TOK:
+             if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
+             { kb_error(7532,"Missing edges_predicted number.\n",WARNING);
+               break;
+             }
+             if ( yylval.i < 0 )
+               kb_error(7365,"Edges_predicted must be nonnegative.\n",WARNING);               
+             else
+               elements_predicted[EDGE] = yylval.i;                
+             tok = yylex();  /* eat the number */
+             break;
+                     
+        case FACETS_PREDICTED_TOK:
+             if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
+             { kb_error(7533,"Missing facets_predicted number.\n",WARNING);
+               break;
+             }
+             if ( yylval.i < 0 )
+               kb_error(7366,"Faces_predicted must be nonnegative.\n",WARNING);               
+             else
+               elements_predicted[FACET] = yylval.i;                
+             tok = yylex();  /* eat the number */
+             break;
+
+        case BODIES_PREDICTED_TOK:
+             if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
+             { kb_error(7534,"Missing bodies_predicted number.\n",WARNING);
+               break;
+             }
+             if ( yylval.i < 0 )
+               kb_error(7367,"Bodies_predicted must be nonnegative.\n",WARNING);               
+             else
+               elements_predicted[BODY] = yylval.i;                
+             tok = yylex();  /* eat the number */
+             break;
+
+        case FACETEDGES_PREDICTED_TOK:
+             if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
+             { kb_error(7535,"Missing facetedges_predicted number.\n",WARNING);
+               break;
+             }
+             if ( yylval.i < 0 )
+               kb_error(2667,"Facetedges_predicted must be nonnegative.\n",WARNING);               
+             else
+               elements_predicted[FACETEDGE] = yylval.i;                
+             tok = yylex();  /* eat the number */
+             break;
+
+        case QUANTITIES_PREDICTED_TOK:
+             if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
+             { kb_error(7536,"Missing quantities_predicted number.\n",WARNING);
+               break;
+             }
+             if ( yylval.i < 0 )
+               kb_error(7368,"Quantities_predicted must be nonnegative.\n",WARNING);               
+             else
+               quantities_predicted = yylval.i;                
+             tok = yylex();  /* eat the number */
+             break;
+
+        case METHOD_INSTANCES_PREDICTED_TOK:
+             if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
+             { kb_error(7537,"Missing method_instances_predicted number.\n",WARNING);
+               break;
+             }
+             if ( yylval.i < 0 )
+               kb_error(7369,"Method_instances_predicted must be nonnegative.\n",WARNING);               
+             else
+               method_instances_predicted = yylval.i;                
+             tok = yylex();  /* eat the number */
+             break;
+
+        case MPI_LOCAL_BODIES_NODE: 
+             mpi_local_bodies_flag = 1;
+             tok = yylex();  /* eat it */
+             break;
+
+        case SUPPRESS_WARNING_TOK:
+             if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
              { kb_error(4531,"Missing suppressed warning number.\n",WARNING);
                break;
              }
@@ -454,8 +590,8 @@ void initialize()  /* initialize from data file */
              tok = yylex();  /* eat the number */
              break;
       
-       case UNSUPPRESS_WARNING_:
-             if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+       case UNSUPPRESS_WARNING_TOK:
+             if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
              { kb_error(4533,"Missing unsuppressed warning number.\n",WARNING);
                break;
              }
@@ -468,7 +604,7 @@ void initialize()  /* initialize from data file */
              break;
 
 
-        case HESSIAN_SPECIAL_NORMAL_VECTOR_:
+        case HESSIAN_SPECIAL_NORMAL_VECTOR_TOK:
              tok = yylex();
              for ( i = 0 ; i < SDIM ; i++ )
              { 
@@ -488,9 +624,9 @@ void initialize()  /* initialize from data file */
              }
              break;
 
-        case LENGTH_METHOD_NAME_:   
+        case LENGTH_METHOD_NAME_TOK:   
              tok = yylex();
-             if ( tok == QUOTATION_ )
+             if ( tok == QUOTATION_TOK )
              { strncpy(length_method_name,yytext,sizeof(length_method_name)-1);
                if ( strcmp(yytext,"circular_arc_length")==0 )
                  circular_arc_flag = 1;
@@ -504,9 +640,9 @@ void initialize()  /* initialize from data file */
                       DATAFILE_ERROR);  
              break;
 
-        case AREA_METHOD_NAME_:   
+        case AREA_METHOD_NAME_TOK:   
              tok = yylex();
-             if ( tok == QUOTATION_ )
+             if ( tok == QUOTATION_TOK )
              { strncpy(area_method_name,yytext,sizeof(area_method_name)-1);
                tok = yylex();   
                if ( !option_q) option_q = 2;  /* convert_to_quantities */
@@ -516,9 +652,9 @@ void initialize()  /* initialize from data file */
                       DATAFILE_ERROR);  
              break;
 
-        case VOLUME_METHOD_NAME_:   
+        case VOLUME_METHOD_NAME_TOK:   
              tok = yylex();
-             if ( tok == QUOTATION_ )
+             if ( tok == QUOTATION_TOK )
              { if ( SDIM == 2 ) 
                 strncpy(area_method_name,yytext,sizeof(area_method_name)-1);
                else
@@ -531,8 +667,8 @@ void initialize()  /* initialize from data file */
                       DATAFILE_ERROR);  
              break;
 
-        case KEEP_MACROS_ : keep_macros_flag = 1; tok = yylex();  break;
-        case VERSION_:
+        case KEEP_MACROS_TOK : keep_macros_flag = 1; tok = yylex();  break;
+        case VERSION_TOK:
              tok = yylex();
              strcpy(needed_version,yytext);
              tok = yylex();
@@ -541,9 +677,9 @@ void initialize()  /* initialize from data file */
                kb_error(2097,errmsg,RECOVERABLE);
              }
              break;
-        case LOAD_LIBRARY_: 
+        case LOAD_LIBRARY_TOK: 
              tok = yylex();
-             if ( tok == QUOTATION_ )
+             if ( tok == QUOTATION_TOK )
              {  load_library(yytext);
                 tok = yylex();
              }
@@ -552,20 +688,21 @@ void initialize()  /* initialize from data file */
              recovery_flag = 0;
              break;
 
-        case INTERP_BDRY_PARAM_:
+        case INTERP_BDRY_PARAM_TOK:
              interp_bdry_param = 1; tok = yylex(); break;
 
-        case EVERYTHING_QUANTITIES_:
+        case V_EVERYTHING_QUANTITIES:
              /*everything_quantities_flag = quantities_only_flag = 1;*/
              if ( !option_q) option_q = 2;
              tok = yylex();
              /* should warn if anything else done yet */
              break;
 
-        case KEEP_ORIGINALS_: match_id_flag = 1; tok = yylex(); break;
+        case KEEP_ORIGINALS_TOK: match_id_flag = 1; sparse_ibase_flag = 1;
+             tok = yylex(); break;
 
-        case SPACE_DIMENSION_:
-             if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+        case SPACE_DIMENSION_TOK:
+             if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
              { kb_error(1060,"Dimension of space missing.\n",DATAFILE_ERROR);
                break;
              }
@@ -585,8 +722,8 @@ void initialize()  /* initialize from data file */
              tok = yylex();
              break;
 
-        case SURFACE_DIMENSION_:
-             if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+        case SURFACE_DIMENSION_TOK:
+             if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
              { kb_error(1063,"Dimension of surface missing.\n",DATAFILE_ERROR);
                break;
              }
@@ -605,42 +742,45 @@ void initialize()  /* initialize from data file */
              tok = yylex();
              break;
 
-        case SIMPLEX_REP_:
+        case SIMPLEX_REP_TOK:
              web.representation = SIMPLEX;
              web.skel[EDGE].ctrlpts = web.dimension;
              web.skel[EDGE].dimension = web.dimension - 1;
              web.skel[FACET].ctrlpts = web.dimension+1;
              web.skel[FACET].dimension = web.dimension;
+             calc_facet_volume = calc_simplex_volume;            
+             calc_facet_energy = calc_simplex_energy;
+             calc_facet_forces = calc_simplex_forces;
              tok = yylex();
              break;
 
-        case DEFINE_:  /* extra attribute definition */
+        case DEFINE_TOK:  /* extra attribute definition */
            { int dim,e_type=0,attr_type=0,anum;
              int sizes[MAXARRAYDIMS];
              char name[ATTR_NAME_SIZE+1];
              tok = yylex();
              switch ( tok )
-             { case NEWIDENT_ : define_array(); goto define_exit;
-               case ARRAYIDENT_ : define_array(); goto define_exit;
-               case VERTICES_: e_type = VERTEX; break;
-               case EDGES_:     e_type = EDGE; break;
-               case FACES_:     e_type = FACET; break;
-               case BODIES_:    e_type = BODY;  break;
-               case FACETEDGES_: e_type = FACETEDGE; break;
+             { case NEWIDENT_TOK : define_array(); goto define_exit;
+               case ARRAYIDENT_TOK : define_array(); goto define_exit;
+               case VERTICES_TOK: e_type = VERTEX; break;
+               case EDGES_TOK:     e_type = EDGE; break;
+               case FACES_TOK:     e_type = FACET; break;
+               case BODIES_TOK:    e_type = BODY;  break;
+               case FACETEDGES_TOK: e_type = FACETEDGE; break;
                default: kb_error(1065,"Bad element type in 'define'.\n",
                   DATAFILE_ERROR);
              };
              tok = yylex();
-             if ( tok != ATTRIBUTE_ )
+             if ( tok != ATTRIBUTE_TOK )
                 kb_error(1066,"Need ATTRIBUTE keyword.\n",DATAFILE_ERROR);
 
              tok = yylex();
-             if ( (tok != NEWIDENT_) && !addload_flag )
+             if ( (tok != NEWIDENT_TOK) && !addload_flag )
                 kb_error(1067,"Need new identifier. \n",DATAFILE_ERROR);
 
              strncpy(name,yytext,ATTR_NAME_SIZE);
              tok = yylex();
-             if ( tok == DATATYPE_ )
+             if ( tok == DATATYPE_TOK )
              { attr_type = yylval.datatype;
              }
              else
@@ -650,25 +790,30 @@ void initialize()  /* initialize from data file */
              tok = yylex();
              dim = 0; sizes[0] = 1;
              while ( tok == '[' )
-             {  dim += 1;
+             {  REAL val=0.0;
+                dim += 1;
                 if ( dim > MAXARRAYDIMS )
                 { sprintf(errmsg,
                 "Extra attribute %s has more dimensions than the allowed %d.\n",
                     name,MAXARRAYDIMS);
                   kb_error(2566,errmsg,RECOVERABLE);
                 } 
-                tok = yylex();
-                if ( tok != INTEGER_ )
+              
+                if ( read_const(&val) <= 0 )
+                {
                   kb_error(1069,"Need dimension number.\n",DATAFILE_ERROR);
-                sizes[dim-1] = yylval.i;
+                  sizes[dim-1] = 1;
+                }
+                else 
+                  sizes[dim-1] = (int)val;
                 if ( sizes[dim-1] < 0 )
                   kb_error(1070,"Attribute dimension must be at least 0.\n",
                      DATAFILE_ERROR);
                 tok = yylex();  
                 tok = yylex(); /* eat ] */
              }
-             anum = add_attribute(e_type,name,attr_type,dim,sizes,DUMP_ATTR,NULL);
-             if ( (tok == FUNCTION_) && (dim == 0) )
+             anum = add_attribute(e_type,name,attr_type,dim,sizes,DUMP_ATTR,NULL,MPI_NO_PROPAGATE);
+             if ( (tok == FUNCTION_TOK) && (dim == 0) )
              { /* have calculable attribute */
                struct extra *ext = EXTRAS(e_type) + anum;
                esize = exparse(SDIM,&(ext->code),USERCOPY);
@@ -686,7 +831,7 @@ void initialize()  /* initialize from data file */
 define_exit:
             break;
           
-        case CONFORMAL_:  /* have background metric on domain */
+        case CONFORMAL_TOK:  /* have background metric on domain */
              web.metric_flag = 1;
              web.conformal_flag = 1;
              recovery_flag = 0;
@@ -702,13 +847,13 @@ define_exit:
              tok = yylex();
              break;
              
-        case KLEIN_METRIC_:
+        case KLEIN_METRIC_TOK:
              klein_metric_flag = 1;
              web.metric_flag = 1;
              tok = yylex();
              break;
           
-        case METRIC_:  /* have background metric on domain */
+        case METRIC_TOK:  /* have background metric on domain */
              web.metric_flag = 1;
              recovery_flag = 0;
              lists_flag = LISTS_SOME;
@@ -732,10 +877,10 @@ define_exit:
              tok = yylex();
              break;
              
-        case SYMMETRY_GROUP_:
+        case SYMMETRY_GROUP_TOK:
              web.symmetry_flag = 1;
              tok = yylex();
-             if ( tok == QUOTATION_ )
+             if ( tok == QUOTATION_TOK )
              { struct sym_registry *reg;
                for ( reg = sym_register ; reg->name != NULL ; reg++ )
                if ( stricmp(yytext,reg->name) == 0 )
@@ -761,7 +906,7 @@ define_exit:
              break;
 
 
-        case TORUS_:
+        case TORUS_TOK:
              web.torus_flag = 1;
              web.symmetry_flag = 1;
              sym_wrap = torus_wrap;
@@ -774,7 +919,7 @@ define_exit:
              recovery_flag = 0;
              break;
 
-        case TORUS_FILLED_:
+        case TORUS_FILLED_TOK:
              web.torus_flag = 1;
              web.symmetry_flag = 1;
              sym_wrap = torus_wrap;
@@ -788,7 +933,7 @@ define_exit:
              recovery_flag = 0;
              break;
 
-        case STRING_:
+        case STRING_TOK:
              web.dimension = 1;
              web.representation = STRING;
              web.skel[EDGE].dimension = 1;
@@ -799,7 +944,7 @@ define_exit:
              recovery_flag = 0;
              break;
 
-        case SOAPFILM_:
+        case SOAPFILM_TOK:
              web.dimension = 2;
              web.representation = SOAPFILM;
              star_fraction = web.dimension + 1.0;
@@ -807,7 +952,7 @@ define_exit:
              recovery_flag = 0;
              break;
 
-        case LINEAR_:
+        case LINEAR_TOK:
              if ( addload_flag )
              { if ( web.modeltype != LINEAR )
                  kb_error(5342,"addload datafile not in linear mode.\n",
@@ -818,7 +963,7 @@ define_exit:
              recovery_flag = 0;
              break;
               
-        case QUADRATIC_:
+        case QUADRATIC_TOK:
              if ( addload_flag )
              { if ( web.modeltype != QUADRATIC )
                  kb_error(5343,"addload datafile not in quadratic mode.\n",
@@ -830,7 +975,7 @@ define_exit:
              recovery_flag = 0;
              break;
 
-        case LAGRANGE_:
+        case LAGRANGE_TOK:
              switch ( web.modeltype )
              { case LINEAR: linear_to_lagrange(1); break;
                case QUADRATIC: quad_to_lagrange(1); break;
@@ -840,8 +985,8 @@ define_exit:
              recovery_flag = 0;
              break;
 
-        case LAGRANGE_ORDER_:
-             if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+        case LAGRANGE_ORDER_TOK:
+             if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
              { kb_error(2100,"Lagrange order missing.\n",DATAFILE_ERROR);
                break;
              }
@@ -865,40 +1010,40 @@ define_exit:
              recovery_flag = 0;
              break;
               
-        case SYMMETRIC_CONTENT_:
+        case SYMMETRIC_CONTENT_TOK:
              web.symmetric_content = 1;
              tok = yylex();
              recovery_flag = 0;
              break;
               
-        case MEAN_CURV_:
+        case MEAN_CURV_TOK:
              web.area_norm_flag = 1;
              tok = yylex();
              recovery_flag = 0;
              break;
   
-        case BOUNDARY_CURVATURE_:
+        case BOUNDARY_CURVATURE_TOK:
              boundary_curvature_flag = 1;
              tok = yylex();
              recovery_flag = 0;
              break;
 
-        case EFFECTIVE_AREA_:
+        case EFFECTIVE_AREA_TOK:
              effective_area_flag = 1;
              tok = yylex();
              recovery_flag = 0;
              break;
               
-        case JIGGLE_:
+        case JIGGLE_TOK:
              web.jiggle_flag = 1;
              tok = yylex();
              recovery_flag = 0;
              break;
               
 
-        case WULFF_: 
+        case WULFF_TOK: 
              tok = yylex();
-             if ( tok == QUOTATION_ )
+             if ( tok == QUOTATION_TOK )
              { wulff_initialize(yytext);
                tok = yylex();
              }
@@ -907,9 +1052,9 @@ define_exit:
              recovery_flag = 0;
              break;
 
-        case PHASEFILE_: 
+        case PHASEFILE_TOK: 
              tok = yylex();
-             if ( tok == QUOTATION_ )
+             if ( tok == QUOTATION_TOK )
              { phase_initialize(yytext);
                tok = yylex();
              }
@@ -919,8 +1064,8 @@ define_exit:
              recovery_flag = 0;
              break;
 
-        case TORUS_PERIODS_:
-        case PERIODS_:  recovery_flag = 0; 
+        case TORUS_PERIODS_TOK:
+        case PERIODS_TOK:  recovery_flag = 0; 
                 lists_flag = LISTS_SOME;
                 uminus_flag = 1;
                 read_periods();
@@ -928,7 +1073,7 @@ define_exit:
                 tok = yylex(); /* lookahead */ 
                 break;
 
-        case DISPLAY_PERIODS_:  recovery_flag = 0; 
+        case DISPLAY_PERIODS_TOK:  recovery_flag = 0; 
                 lists_flag = LISTS_SOME;
                 uminus_flag = 1;
                 read_display_periods();
@@ -936,7 +1081,7 @@ define_exit:
                 tok = yylex(); /* lookahead */ 
                 break;
 
-        case DISPLAY_ORIGIN_: 
+        case DISPLAY_ORIGIN_TOK: 
           {  int n;
              struct global *g ;
              struct array *a;
@@ -971,8 +1116,8 @@ define_exit:
           }
              break;
 
-        case VIEW_MATRIX_: recovery_flag = 0; 
-             lists_flag = LISTS_SOME;
+        case VIEW_MATRIX_TOK: recovery_flag = 0; 
+            lists_flag = LISTS_SOME;
              uminus_flag = 1;
              for ( i = 0 ; i <= SDIM ; i++ )
              { for ( j = 0 ; j <= SDIM ; j++ ) 
@@ -986,39 +1131,41 @@ define_exit:
              datafile_view_flag = 1;
              lists_flag = LISTS_OFF;
              if ( i > SDIM ) tok = yylex();  /* lookahead */
-             break;
+          break;
 
-        case VIEW_TRANSFORMS_: recovery_flag = 0; uminus_flag = 1; 
+        case VIEW_TRANSFORMS_TOK: recovery_flag = 0; uminus_flag = 1; 
              read_transforms(0); break;
 
-        case VIEW_TRANSFORM_GENS_: recovery_flag = 0; 
+        case VIEW_TRANSFORM_GENS_TOK: recovery_flag = 0; 
              uminus_flag = 1;
              read_transform_generators(0); break;
 
-        case CLIP_COEFF:
+        case CLIP_COEFF_TOK:
              tok = yylex();  /* eat clip_coeff */
-             if ( tok != '=' && tok != ASSIGN_ )
+             if ( tok != '=' && tok != ASSIGN_TOK )
                kb_error(3441,"clip_coeff initializer missing '='.\n",
                   DATAFILE_ERROR);
              read_array_initializer(perm_globals(clip_coeff_global)->attr.arrayptr); 
+             clip_coeff_set_flag = 1;
              break;
 
-        case SLICE_COEFF:
+        case SLICE_COEFF_TOK:
              tok = yylex();  /* eat clip_coeff */
-             if ( tok != '=' && tok != ASSIGN_ )
-               kb_error(3441,"clip_coeff initializer missing '='.\n",
+             if ( tok != '=' && tok != ASSIGN_TOK )
+               kb_error(1910,"clip_coeff initializer missing '='.\n",
                   DATAFILE_ERROR);
              read_array_initializer(perm_globals(slice_coeff_global)->attr.arrayptr); 
+             slice_coeff_set_flag = 1;
              break;
 
 
-        case PARAMETERS_:  recovery_flag = 0; uminus_flag = 0; 
+        case PARAMETERS_TOK:  recovery_flag = 0; uminus_flag = 0; 
              read_parameter(); break;
 
-        case OPTIMIZING_PARAMETER_:  recovery_flag = 0; uminus_flag = 0; 
+        case OPTIMIZING_PARAMETER_TOK:  recovery_flag = 0; uminus_flag = 0; 
              read_parameter(); break;
 
-        case FUNCTION_:
+        case FUNCTION_TOK:
              datafile_flag = 0; 
              function_kludge_flag = 1;
              command("function _anti_line_no_",NO_HISTORY);
@@ -1028,7 +1175,7 @@ define_exit:
              tok = yylex();
              break;
 
-        case PROCEDURE_WORD_: 
+        case PROCEDURE_WORD_TOK: 
              datafile_flag = 0; 
              function_kludge_flag = 1;
              command("procedure _anti_line_no_",NO_HISTORY);
@@ -1038,22 +1185,22 @@ define_exit:
              tok = yylex();
              break;
 
-        case BOUNDARY_:  recovery_flag = 0; uminus_flag = 0; 
+        case BOUNDARY_TOK:  recovery_flag = 0; uminus_flag = 0; 
              read_boundary(); break;
 
-        case CONSTRAINT_:  recovery_flag = 0; uminus_flag = 0; 
+        case CONSTRAINT_TOK:  recovery_flag = 0; uminus_flag = 0; 
              read_constraint(); break;
 
-        case SURFACE_ENERGY_: recovery_flag = 0; uminus_flag = 0; 
+        case SURFACE_ENERGY_TOK: recovery_flag = 0; uminus_flag = 0; 
              read_surface_energy(); break;
 
-        case QUANTITY_: recovery_flag = 0; uminus_flag = 0; 
+        case QUANTITY_TOK: recovery_flag = 0; uminus_flag = 0; 
              read_quantity(); break;
 
-        case METHOD_INSTANCE_: recovery_flag = 0; uminus_flag = 0; 
+        case METHOD_INSTANCE_TOK: recovery_flag = 0; uminus_flag = 0; 
              read_method_instance(); break;
 
-        case AREA_FIXED_:
+        case AREA_FIXED_TOK:
              kb_error(2101,
                 "Area_fixed is obsolete.  Replace with named quantity.\n",
                  DATAFILE_ERROR);
@@ -1061,25 +1208,25 @@ define_exit:
              uminus_flag = 0;
              if ( read_const(&area_fixed_target) <= 0 )
              { kb_error(1078,"Missing fixed area value.\n",DATAFILE_ERROR);
-                if ( tok == AREA_FIXED_ ) tok = yylex(); /* ensure progress */
+                if ( tok == AREA_FIXED_TOK ) tok = yylex(); /* ensure progress */
              }
              else tok = yylex();
              recovery_flag = 0;
              break;
 
-        case DIFFUSION_:
+        case DIFFUSION_TOK:
              web.diffusion_flag = 1;
              web.diffusion_const = 0.0;
              uminus_flag = 0;
              if ( read_const(&web.diffusion_const) <= 0 )
              { kb_error(1079,"Missing DIFFUSION value.\n",WARNING);
-               if ( tok == DIFFUSION_ ) tok = yylex(); /* ensure progress */
+               if ( tok == DIFFUSION_TOK ) tok = yylex(); /* ensure progress */
              }
              else tok = yylex();
              recovery_flag = 0;
              break;
 
-        case HOMOTHETY_:
+        case HOMOTHETY_TOK:
              web.homothety = 1;
              uminus_flag = 0;
              if ( read_const(&homothety_target) <= 0 )
@@ -1087,45 +1234,45 @@ define_exit:
              else tok = yylex();
              break;
 
-        case AUTOPOP_:
+        case AUTOPOP_TOK:
              autopop_flag = 1;
              tok = yylex();
              recovery_flag = 0;
              break;
               
-        case IMMEDIATE_AUTOPOP_:
+        case IMMEDIATE_AUTOPOP_TOK:
              immediate_autopop_flag = 1;
              tok = yylex();
              recovery_flag = 0;
              break;
               
-        case AUTOPOP_QUARTIC_:
+        case AUTOPOP_QUARTIC_TOK:
              autopop_quartic_flag = 1;
              tok = yylex();
              recovery_flag = 0;
              break;
               
-        case AUTOCHOP_:
+        case AUTOCHOP_TOK:
              autochop_flag = 1;
              autochop_length = 1.0;
              uminus_flag = 0;
              if ( read_const(&autochop_length) <= 0 )
              { kb_error(1080,"Missing AUTOCHOP length.\n",WARNING);
-               if ( tok == AUTOCHOP_ ) tok = yylex(); /* ensure progress */
+               if ( tok == AUTOCHOP_TOK ) tok = yylex(); /* ensure progress */
              }
              else tok = yylex();
              recovery_flag = 0;
              break;
              
-        case APPROX_CURV_:
+        case APPROX_CURV_TOK:
              approx_curve_flag = 1;
              tok = yylex();
              recovery_flag = 0;
              break;
 
-        case CONDUCTING_KNOT_ENERGY_:
+        case CONDUCTING_KNOT_ENERGY_TOK:
              { tok = yylex();
-               if ( tok != MODULUS_ ) 
+               if ( tok != MODULUS_TOK ) 
                  unput_tok();
                uminus_flag = 0;
                if (read_const(&modulus) <= 0) modulus = 1.0;
@@ -1135,9 +1282,9 @@ define_exit:
                break;
              }
              
-        case INSULATING_KNOT_ENERGY_:
+        case INSULATING_KNOT_ENERGY_TOK:
               { tok = yylex();
-                if ( tok != MODULUS_ ) 
+                if ( tok != MODULUS_TOK ) 
                   unput_tok();
                 uminus_flag = 0;
                 if (read_const(&modulus) <= 0) modulus = 1.0;
@@ -1147,7 +1294,7 @@ define_exit:
                 break;
               }
              
-        case MEAN_CURV_INT_:
+        case MEAN_CURV_INT_TOK:
              mean_curv_int_flag = 1;
              mean_curvature_param = lookup_global("mean_curvature_modulus");
              if ( mean_curvature_param < 0 )
@@ -1157,7 +1304,7 @@ define_exit:
              uminus_flag = 0;
              if ( read_const(&globals(mean_curvature_param)->value.real) <= 0 )
              { kb_error(1081,"Missing integral mean curvature modulus value.\nSyntax: mean_curvature_integral: modulus",WARNING);
-                if ( tok == MEAN_CURV_INT_ ) tok = yylex(); /* ensure progress */
+                if ( tok == MEAN_CURV_INT_TOK ) tok = yylex(); /* ensure progress */
              }
              else tok = yylex();
              if ( web.representation != SOAPFILM )
@@ -1166,9 +1313,9 @@ define_exit:
              recovery_flag = 0;
              break;
 
-        case GAUSS_CURVATURE_:
+        case GAUSS_CURVATURE_TOK:
               { tok = yylex();
-                if ( tok != MODULUS_ ) 
+                if ( tok != MODULUS_TOK ) 
                   unput_tok();
                 uminus_flag = 0;
                 if (read_const(&modulus) <= 0) modulus = 1.0;
@@ -1181,7 +1328,7 @@ define_exit:
                 break;
               }
              
-        case SQGAUSS_:
+        case SQGAUSS_TOK:
              sqgauss_flag = 1;
              sqgauss_param = lookup_global("square_gauss_modulus");
              if (sqgauss_param < 0 )
@@ -1190,7 +1337,7 @@ define_exit:
              uminus_flag = 0;
              if ( read_const(&globals(sqgauss_param)->value.real) <= 0 )
              { kb_error(1084,"Missing square gaussian modulus value.\n",WARNING);
-               if ( tok == SQGAUSS_ ) tok = yylex(); /* ensure progress */
+               if ( tok == SQGAUSS_TOK ) tok = yylex(); /* ensure progress */
              }
              else tok = yylex();
              if ( web.representation != SOAPFILM )
@@ -1200,7 +1347,7 @@ define_exit:
              recovery_flag = 0;
              break;
 
-        case SQUARE_CURVATURE_:
+        case SQUARE_CURVATURE_TOK:
              square_curvature_flag = 1;
              square_curvature_param = lookup_global("sq_curvature_modulus");
              if ( square_curvature_param < 0 )
@@ -1210,18 +1357,18 @@ define_exit:
              uminus_flag = 0;
              if ( read_const(&globals(square_curvature_param)->value.real) <= 0 )
              { kb_error(1086,"Missing square curvature modulus value.\n",WARNING);
-               if ( tok == SQUARE_CURVATURE_ ) tok = yylex(); /* ensure progress */
+               if ( tok == SQUARE_CURVATURE_TOK ) tok = yylex(); /* ensure progress */
              }
              else tok = yylex();
              recovery_flag = 0;
              break;
 
-        case NORMAL_CURVATURE_:
+        case NORMAL_CURVATURE_TOK:
              normal_curvature_flag = 1;
              tok = yylex();
              break;
 
-        case MOBILITY_:
+        case MOBILITY_TOK:
              recovery_flag = 0;
              uminus_flag = 0;
              esize = exparse(SDIM,&mobility_formula,USERCOPY);
@@ -1232,7 +1379,7 @@ define_exit:
              else mobility_flag = 1; 
              break;
              
-        case MOBILITY_TENSOR_:
+        case MOBILITY_TENSOR_TOK:
              mobility_flag = 1;
              mobility_tensor_flag = 1;
              recovery_flag = 0;
@@ -1253,41 +1400,41 @@ define_exit:
              tok = yylex();
              break;
              
-        case RUNGE_KUTTA_: runge_kutta_flag = 1; tok = yylex(); break;
+        case RUNGE_KUTTA_TOK: runge_kutta_flag = 1; tok = yylex(); break;
 
-        case SCALE_LIMIT_:
+        case SCALE_LIMIT_TOK:
              uminus_flag = 0;
              if ( read_const(&web.maxscale) <= 0 )
              { kb_error(1089,"Missing SCALE_LIMIT value.\n",WARNING);
-               if ( tok == SCALE_LIMIT_ ) tok = yylex(); /* ensure progress */
+               if ( tok == SCALE_LIMIT_TOK ) tok = yylex(); /* ensure progress */
              }
              else tok = yylex();
              recovery_flag = 0;
              break;
 
-        case TOTAL_TIME_:
+        case TOTAL_TIME_TOK:
              uminus_flag = 0;
              if ( read_const(&total_time) <= 0 )
              { kb_error(1090,"Missing TOTAL_TIME value.\n",WARNING);
-                if ( tok == TOTAL_TIME_ ) tok = yylex(); /* ensure progress */
+                if ( tok == TOTAL_TIME_TOK ) tok = yylex(); /* ensure progress */
              }
              else tok = yylex();
              recovery_flag = 0;
              break;
 
-        case ZOOM_RADIUS_:
+        case ZOOM_RADIUS_TOK:
              uminus_flag = 0;
              if ( read_const(&web.zoom_radius) <= 0 )
              { kb_error(1091,"Missing ZOOM RADIUS value.\n",WARNING);
-               if ( tok == ZOOM_RADIUS_ ) tok = yylex(); /* ensure progress */
+               if ( tok == ZOOM_RADIUS_TOK ) tok = yylex(); /* ensure progress */
              }
              else tok = yylex();
              recovery_flag = 0;
              break;
 
-        case ZOOM_VERTEX_:
+        case ZOOM_VERTEX_TOK:
              tok = yylex();
-             if ( tok != INTEGER_ )
+             if ( tok != INTEGER_TOK )
                 kb_error(1092,"Missing ZOOM VERTEX number.\n",WARNING);
              else { zoom_number = yylval.i; tok = yylex(); }
              recovery_flag = 0;
@@ -1295,7 +1442,7 @@ define_exit:
 
         case V_INTEGRAL_ORDER:
              tok = yylex();
-             if ( tok != INTEGER_ )
+             if ( tok != INTEGER_TOK )
                 { kb_error(1093,"Missing INTEGRAL_ORDER value.\n",WARNING);
                   break;
                 }
@@ -1315,7 +1462,7 @@ define_exit:
 
         case V_INTEGRAL_ORDER_1D:
              tok = yylex();
-             if ( tok != INTEGER_ )
+             if ( tok != INTEGER_TOK )
                 { kb_error(1095,"Missing INTEGRAL_ORDER_1D value.\n",WARNING);
                   break;
                 }
@@ -1332,7 +1479,7 @@ define_exit:
 
         case V_INTEGRAL_ORDER_2D:
              tok = yylex();
-             if ( tok != INTEGER_ )
+             if ( tok != INTEGER_TOK )
                 { kb_error(1097,"Missing INTEGRAL_ORDER_2D value.\n",WARNING);
                   break;
                 }
@@ -1347,11 +1494,11 @@ define_exit:
              recovery_flag = 0;
              break;
 
-        case CONSTRAINT_TOLERANCE_:
+        case CONSTRAINT_TOLERANCE_TOK:
              uminus_flag = 0;
              if ( read_const(&web.tolerance) <= 0 )
              { kb_error(1099,"Missing CONSTRAINT_TOLERANCE value.\n",WARNING);
-               if ( tok == CONSTRAINT_TOLERANCE_ ) tok = yylex(); /* ensure progress */
+               if ( tok == CONSTRAINT_TOLERANCE_TOK ) tok = yylex(); /* ensure progress */
              }
              else tok = yylex();
              if ( web.tolerance <= 0.0 )
@@ -1361,7 +1508,7 @@ define_exit:
              recovery_flag = 0;
              break;
 
-        case MERITFACTOR_:
+        case MERITFACTOR_TOK:
              uminus_flag = 0;
              if ( read_const(&web.meritfactor) <= 0 )
                 kb_error(1100,"Missing MERIT FACTOR value.\n",WARNING);
@@ -1369,11 +1516,11 @@ define_exit:
              recovery_flag = 0;
              break;
 
-        case GRAV_CONST_:
+        case GRAV_CONST_TOK:
              uminus_flag = 0;
              if ( read_const(&web.grav_const) <= 0 )
              { kb_error(1101,"Missing GRAVITY_CONSTANT value.\n",WARNING);
-               if ( tok == GRAV_CONST_ ) tok = yylex(); /* ensure progress */
+               if ( tok == GRAV_CONST_TOK ) tok = yylex(); /* ensure progress */
              }
              else 
              { if ( web.grav_const != 0.0 )  web.gravflag = 1;
@@ -1382,53 +1529,53 @@ define_exit:
              recovery_flag = 0;
              break;
 
-        case SPRING_CONSTANT_:
-        case GAP_CONSTANT_:
+        case SPRING_CONSTANT_TOK:
+        case GAP_CONSTANT_TOK:
              uminus_flag = 0;
              if ( read_const(&web.spring_constant) <= 0 )
              { kb_error(1102,"Missing GAP_CONSTANT value.\n",WARNING);
-               if ( tok == SPRING_CONSTANT_ ) tok = yylex(); /* ensure progress */
+               if ( tok == SPRING_CONSTANT_TOK ) tok = yylex(); /* ensure progress */
              }
              else tok = yylex();
              recovery_flag = 0;
              break;
 
-        case SCALE_:
+        case SCALE_TOK:
              uminus_flag = 0;
              if ( read_const(&web.scale) <= 0 )
              { kb_error(1103,"Missing SCALE value.\n",WARNING);
-               if ( tok == SCALE_ ) tok = yylex(); /* ensure progress */
+               if ( tok == SCALE_TOK ) tok = yylex(); /* ensure progress */
              }
              else tok = yylex();
-             if ( tok == FIXED_ )
+             if ( tok == FIXED_TOK )
              { web.motion_flag = 1;
                tok = yylex();
              }
              recovery_flag = 0;
              break;
 
-        case TEMPERATURE_:
+        case TEMPERATURE_TOK:
              uminus_flag = 0;
              if ( read_const(&web.temperature) <= 0 )
              { kb_error(1104,"Missing TEMPERATURE value.\n",WARNING);
-               if ( tok == TEMPERATURE_ ) tok = yylex(); /* ensure progress */
+               if ( tok == TEMPERATURE_TOK ) tok = yylex(); /* ensure progress */
              }
              else tok = yylex();
              recovery_flag = 0;
              break;
 
-        case PRESSURE_:
+        case PRESSURE_TOK:
              uminus_flag = 0;
              if ( read_const(&web.pressure) <= 0 )
              { kb_error(1105,"Missing PRESSURE value.\n",WARNING);
-               if ( tok == PRESSURE_ ) tok = yylex(); /* ensure progress */
+               if ( tok == PRESSURE_TOK ) tok = yylex(); /* ensure progress */
              }
              else 
              { tok = yylex(); web.pressure_flag = 1; }
              recovery_flag = 0;
              break;
 
-        case VERTICES_: lists_flag = LISTS_FULL; topflag = 0; break;  
+        case VERTICES_TOK: lists_flag = LISTS_FULL; topflag = 0; break;  
             /* done with top stuff */
 
         default: 
@@ -1446,21 +1593,42 @@ define_exit:
   
   /* set up gaussian quadrature */
   gauss_setup();
-   
+  setup_q_info();
+  
   if ( web.torus_flag )
      calc_periods(ADJUST_VOLUMES);  /* adjust torus volume constants */
+   
+  if ( !web.torus_flag )
+    torus_display_mode = TORUS_DEFAULT_MODE; 
 
   reset_view();   /* can do this now, since know ambient dimension */
-   #ifdef HASH_ID
+  globals(view_transforms_unique_point_global)->attr.arrayptr->sizes[0] = SDIM;
+
+  #ifdef HASH_ID
   elhash_bigger();
   #endif
 
+  // Dimension calculated attributes
+  { struct extra *ex;
+    ex = EXTRAS(VERTEX) + V_NORMAL_ATTR;
+    ex->array_spec.datacount = SDIM;
+    ex->array_spec.sizes[0] = SDIM;
+    ex = EXTRAS(VERTEX) + V_CONSTRAINT_NORMAL_ATTR;
+    ex->array_spec.datacount = SDIM;
+    ex->array_spec.sizes[0] = SDIM;
+    ex = EXTRAS(EDGE) + E_VECTOR_ATTR;
+    ex->array_spec.datacount = SDIM;
+    ex->array_spec.sizes[0] = SDIM;
+    ex = EXTRAS(FACET) + F_NORMAL_ATTR;
+    ex->array_spec.datacount = SDIM;
+    ex->array_spec.sizes[0] = SDIM;
+  }
   dataflag = 1;
   uminus_flag = 1;
   while ( (tok != 0) && dataflag )
     switch ( tok )
      { 
-        case VERTICES_: 
+        case VERTICES_TOK: 
              if ( (web.dimension > 2) && (web.representation != SIMPLEX) )
                 kb_error(1107,
              "Must have simplex representation for surface dimension over 2.\n",
@@ -1472,7 +1640,7 @@ define_exit:
              read_vertices();
              break;
 
-        case EDGES_: 
+        case EDGES_TOK: 
              if (  flist || blist )
                kb_error(2410,"Edges list must be second element list.\n",
                           RECOVERABLE);
@@ -1480,7 +1648,7 @@ define_exit:
              read_edges();
              break;
 
-        case FACES_: 
+        case FACES_TOK: 
              if (  blist )
                kb_error(2411,"Faces list must precede body list.\n",
                           RECOVERABLE);
@@ -1488,12 +1656,12 @@ define_exit:
              read_faces();
              break;
 
-        case BODIES_: 
+        case BODIES_TOK: 
              recovery_flag = 0; 
              read_bodies();
              break;
 
-        case READ_: 
+        case READ_TOK: 
              if ( addload_flag )
              { pop_commandfd();
                lists_flag = LISTS_OFF;     
@@ -1518,9 +1686,9 @@ define_exit:
      }
              
   if ( parse_errors ) return;
-  
+
   datafile_flag = 1;  /* got zeroed by pop_commandfd; need to read x1 */
-  if ( option_q )
+  if ( option_q || everything_quantities_flag )
      convert_to_quantities();
   if ( optparamcount && !everything_quantities_flag )
      convert_to_quantities();
@@ -1529,6 +1697,9 @@ define_exit:
     option_q = 1;  /* so convert_to_quantities doesn't try to calc */
     convert_to_quantities();
     option_q = 0;
+  }
+  else if ( everything_quantities_flag && replace_load_flag )
+  {  convert_bodies_to_quantities();
   }
   for ( i = 0 ; i < web.bdrymax ; i++ )
     if ( (web.boundaries[i].attr & (CON_ENERGY|CON_CONTENT)) 
@@ -1540,7 +1711,7 @@ define_exit:
       break;
     }
   datafile_flag = 0;
-  
+
   if ( web.dimension == 1 ) areaname = "length";
   else areaname = "area";
 
@@ -1596,8 +1767,10 @@ define_exit:
 
   /* run preliminary checks */
   if ( web.representation != SIMPLEX  )
-     if ( facetedge_check(PRELIMCHECK) || facet_body_check() )
+  { facet_body_check();
+    if ( facetedge_check(PRELIMCHECK)  )
         kb_error(1109,"Bad data file.\n",DATAFILE_ERROR);
+  }
   if ( vlist == NULL )
      kb_error(1110,"No vertices found in datafile.\n",WARNING);
   if ( (elist == NULL) && (web.representation != SIMPLEX) )
@@ -1664,9 +1837,10 @@ define_exit:
 * return: 1 for success, 0 for failure
 */
 
-int read_single_value(type,dest)
-int type;
-char *dest;
+int read_single_value(
+  int type,
+  char *dest
+)
 { REAL val;
 
         switch (type )
@@ -1708,127 +1882,132 @@ char *dest;
                 break;
           
           case STRING_TYPE:
-                if ( tok == QUOTATION_ )
+                if ( tok == '{' || tok == ',') tok = yylex();
+                if ( tok == QUOTATION_TOK )
                 { *(char**)dest = mycalloc(strlen(yytext)+1,sizeof(char));
                   strcpy(*(char**)dest,yytext);
+                  tok = yylex();
+                  if ( tok != ',' ) 
+                    unput_tok();  // kludgy, I know
                 }
                 else return 0;
+                break;
 
           case ELEMENTID_TYPE:
                   return 0;
           case VERTEX_TYPE:
-               if ( tok != VERTICES_ ) return 0;
+               if ( tok != VERTICES_TOK ) return 0;
                tok = yylex();
                if ( tok != '[' ) return 0;
                tok = yylex();
-               if ( (tok != INTEGER_) && (tok != INTEGER_AT_) ) return 0;
+               if ( (tok != INTEGER_TOK) && (tok != INTEGER_AT_TOK) ) return 0;
                *(element_id*)dest = get_ordinal_id(VERTEX,yylval.i);
                tok = yylex();
                if ( tok != ']' ) return 0;
                break;
                 
           case EDGE_TYPE:
-               if ( tok != EDGES_ ) return 0;
+               if ( tok != EDGES_TOK ) return 0;
                tok = yylex();
                if ( tok != '[' ) return 0;
                tok = yylex();
-               if ( (tok != INTEGER_) && (tok != INTEGER_AT_) ) return 0;
+               if ( (tok != INTEGER_TOK) && (tok != INTEGER_AT_TOK) ) return 0;
                *(element_id*)dest = get_ordinal_id(EDGE,yylval.i);
                tok = yylex();
                if ( tok != ']' ) return 0;
                break;
                 
           case FACET_TYPE:
-               if ( tok != FACETS_ ) return 0;
+               if ( tok != FACETS_TOK ) return 0;
                tok = yylex();
                if ( tok != '[' ) return 0;
                tok = yylex();
-               if ( (tok != INTEGER_) && (tok != INTEGER_AT_) ) return 0;
+               if ( (tok != INTEGER_TOK) && (tok != INTEGER_AT_TOK) ) return 0;
                *(element_id*)dest = get_ordinal_id(FACET,yylval.i);
                tok = yylex();
                if ( tok != ']' ) return 0;
                break;
                 
           case BODY_TYPE:
-               if ( tok != BODIES_ ) return 0;
+               if ( tok != BODIES_TOK ) return 0;
                tok = yylex();
                if ( tok != '[' ) return 0;
                tok = yylex();
-               if ( (tok != INTEGER_) && (tok != INTEGER_AT_) ) return 0;
+               if ( (tok != INTEGER_TOK) && (tok != INTEGER_AT_TOK) ) return 0;
                *(element_id*)dest = get_ordinal_id(BODY,yylval.i);
                tok = yylex();
                if ( tok != ']' ) return 0;
                break;
                 
           case FACETEDGE_TYPE:
-               if ( tok != FACETEDGES_ ) return 0;
+               if ( tok != FACETEDGES_TOK ) return 0;
                tok = yylex();
                if ( tok != '[' ) return 0;
                tok = yylex();
-               if ( (tok != INTEGER_) && (tok != INTEGER_AT_) ) return 0;
+               if ( (tok != INTEGER_TOK) && (tok != INTEGER_AT_TOK) ) return 0;
                *(element_id*)dest = get_ordinal_id(FACETEDGE,yylval.i);
                tok = yylex();
                if ( tok != ']' ) return 0;
                break;
                 
           case CONSTRAINT_TYPE:
-               if ( tok == CONSTRAINT_ )
+               if ( tok == CONSTRAINT_TOK )
                { tok = yylex();
-                 if ( tok == INTEGER_ )
+                 if ( tok == INTEGER_TOK )
                    *(int *)dest = yylval.i;
-                 else if ( tok == CONSTRAINT_NAME_ ) 
+                 else if ( tok == CONSTRAINT_NAME_TOK ) 
                    *(int *)dest = yylval.i;
                  else return 0;
                }
                else
-               { if ( tok == CONSTRAINT_NAME_ ) 
+               { if ( tok == CONSTRAINT_NAME_TOK ) 
                    *(int *)dest = yylval.i;
                  else return 0;
                }
                break;
           case BOUNDARY_TYPE: 
-               if ( tok == BOUNDARY_ )
+               if ( tok == BOUNDARY_TOK )
                { tok = yylex();
-                 if ( tok == INTEGER_ )
+                 if ( tok == INTEGER_TOK )
                    *(int *)dest = yylval.i;
-                 else if ( tok == BOUNDARY_NAME_ ) 
+                 else if ( tok == BOUNDARY_NAME_TOK ) 
                    *(int *)dest = yylval.i;
                  else return 0;
                }
                else
-               { if ( tok == BOUNDARY_NAME_ ) 
+               { if ( tok == BOUNDARY_NAME_TOK ) 
                    *(int *)dest = yylval.i;
                  else return 0;
                }
                break;
 
           case QUANTITY_TYPE:
-               if ( tok == QUANTITY_ )
+               if ( tok == QUANTITY_TOK )
                  tok = yylex();
-               if ( tok == QUANTITY_NAME_ ) 
+               if ( tok == QUANTITY_NAME_TOK ) 
                  *(int *)dest = yylval.i;
                else return 0;
                break;
 
           case INSTANCE_TYPE:
-               if ( tok == METHOD_INSTANCE_ )
+               if ( tok == METHOD_INSTANCE_TOK )
                  tok = yylex();
-               if ( tok == METHOD_NAME_ ) 
+               if ( tok == METHOD_NAME_TOK ) 
                  *(int *)dest = yylval.i;
                else return 0;
                break;
 
           case PROCEDURE_TYPE:
-               if ( tok == PROCEDURE_WORD_ )
+               if ( tok == PROCEDURE_WORD_TOK )
                  tok = yylex();
-               if ( tok == PROCEDURE_IDENT_ ) 
+               if ( tok == PROCEDURE_IDENT_TOK ) 
                  *(int *)dest = yylval.i;
                else return 0;
                break;
 
         } 
   return 1;
-}
+} // end read_single_value()
 
 /************************************************************************
 *
@@ -1837,9 +2016,10 @@ char *dest;
 *  Purpose: read list of values for one attribute in element definition.
 */
 
-void read_attribute_value(ex,datastart)
-struct extra *ex;  /* attribute definition */
-void *datastart;   /* destination for data */
+void read_attribute_value(
+  struct extra *ex,  /* attribute definition */
+  void *datastart   /* destination for data */
+)
 {
     char *spot;
     int depth;
@@ -1869,7 +2049,7 @@ void *datastart;   /* destination for data */
       { int k;
         for ( k = 0 ; ; k++ )
         { /* kludge with LEAD_INTEGER_ here */
-          if ( tok != LEAD_INTEGER_ )
+          if ( tok != LEAD_INTEGER_TOK )
           { 
             if ( read_single_value(ex->type,spot) )
             { if ( k < ex->array_spec.sizes[depth-1] ) 
@@ -1928,7 +2108,7 @@ void *datastart;   /* destination for data */
         kb_error(2134,errmsg, DATAFILE_ERROR);
       }
     }
-}
+} // end read_attribute_value()
 
 /************************************************************************
 *
@@ -1936,21 +2116,23 @@ void *datastart;   /* destination for data */
 *
 *  purpose: read extra attribute of element, attribute name still in yytext.
 */
-void read_extra(el_id,exnum)
-element_id el_id;
-int exnum;
+void read_extra(
+  element_id el_id,
+  int exnum
+)
 { char *spot;
   int type = id_type(el_id);
   struct extra *ex = EXTRAS(type) + exnum;
 
   spot = get_extra(el_id,exnum);
   read_attribute_value(ex,spot);
+} // end read_extra()
 
-}
 /************************************************************************
 *
 *  Function: read_vertices()
 *
+*  Purpose: read vertex section of datafile
 */
 
 void read_vertices()
@@ -1964,6 +2146,8 @@ void read_vertices()
   int sdim = SDIM;
 
   /* allocate space in structures */
+  EXTRAS(VERTEX)[V_NORMAL_ATTR].array_spec.sizes[0] = SDIM;
+  EXTRAS(VERTEX)[V_CONSTRAINT_NORMAL_ATTR].array_spec.sizes[0] = SDIM;
   expand_attribute(VERTEX,V_COORD_ATTR,&sdim);
   expand_attribute(VERTEX,V_OLDCOORD_ATTR,&sdim);
   expand_attribute(VERTEX,V_FORCE_ATTR,&sdim);
@@ -1975,17 +2159,17 @@ void read_vertices()
   /* read in vertex coordinates */
   vmaxlist = MAXLIST;
   vlist = (vertex_id *)mycalloc(sizeof(vertex_id),vmaxlist);
-  if ( tok != VERTICES_  ) 
+  if ( tok != VERTICES_TOK  ) 
      kb_error(1115,"Cannot find VERTICES section of the datafile.\n",
           UNRECOVERABLE);
 
   tok = yylex();
-  while ( (tok == LEAD_INTEGER_) || (tok == LEAD_INTEGER_AT_) )
+  while ( (tok == LEAD_INTEGER_TOK) || (tok == LEAD_INTEGER_AT_TOK) )
   { 
     #ifdef MPI_EVOLVER
     /* test task number, for MPI */
     int task;
-    if ( tok == LEAD_INTEGER_ )
+    if ( tok == LEAD_INTEGER_TOK )
        task = 1;  /* default to task 1 */
     else task = yylval.qnum;
     if ( task >= mpi_nprocs || task < 1 )
@@ -1999,12 +2183,12 @@ void read_vertices()
       while ( !flag ) 
       { tok = yylex();
         switch (tok)
-        { case LEAD_INTEGER_: 
-          case LEAD_INTEGER_AT_:
-          case EDGES_:
-          case FACES_:
-          case BODIES_:
-          case READ_:
+        { case LEAD_INTEGER_TOK: 
+          case LEAD_INTEGER_AT_TOK:
+          case EDGES_TOK:
+          case FACES_TOK:
+          case BODIES_TOK:
+          case READ_TOK:
           case 0:
             flag = 1;
             break;
@@ -2019,17 +2203,18 @@ void read_vertices()
        kb_error(2103,"Vertex number must be positive.\n",DATAFILE_ERROR);
     for ( pcount = 0 ; pcount < SDIM ; pcount++ )
     { if ( read_const(&c[pcount]) <= 0 ) break;
-      if ( (tok == LEAD_INTEGER_) || (tok == LEAD_INTEGER_AT_) ) 
+      if ( (tok == LEAD_INTEGER_TOK) || (tok == LEAD_INTEGER_AT_TOK) ) 
       { pcount++; break; }
     }
     tok = yylex(); /* get lookahead */
 
 
-    while ( k >= vmaxlist )
+    if ( k >= vmaxlist )
     { int spot = vmaxlist; 
+      while ( k >= vmaxlist )
+        vmaxlist *= 2;
       vlist = (vertex_id *)kb_realloc((char *)vlist,
-               (k+MAXLIST)*sizeof(vertex_id));
-      vmaxlist = k + MAXLIST;
+               vmaxlist*sizeof(vertex_id));
       for ( ; spot < vmaxlist ; spot ++ ) vlist[spot] = NULLID;
     }
     if ( valid_id(vlist[k]) )
@@ -2047,23 +2232,34 @@ void read_vertices()
     for ( more_attr = 1 ; more_attr ; )
       switch ( tok )
         {
-           case EXTRA_ATTRIBUTE_:
-           case ARRAY_ATTRIBUTE_:
-              read_extra(vlist[k],yylval.qnum);
+           case EXTRA_ATTRIBUTE_TOK:
+           case ARRAY_ATTRIBUTE_TOK:
+                if ( yylval.etype != VERTEX )
+                { sprintf(errmsg,"'%s' is a %s attribute, not a vertex attribute.\n",
+                        yytext,typenames[yylval.etype]);
+                  kb_error(2506,errmsg,DATAFILE_ERROR);
+                }
+                read_extra(vlist[k],yylval.qnum);
               break;
 
-           case BARE_:
+           case BARE_TOK:
               set_attr(vlist[k],BARE_NAKED);
               tok = yylex();
               break;
 
-           case AXIAL_POINT_:
+           case NO_HESSIAN_NORMAL_TOK:
+              set_attr(vlist[k],NO_HESSIAN_NORMAL_ATTR);
+              tok = yylex();
+              break;
+
+
+           case AXIAL_POINT_TOK:
               set_attr(vlist[k],AXIAL_POINT);
               tok = yylex();
               break;
 
-           case ORIGINAL_:
-              if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+           case ORIGINAL_TOK:
+              if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
               { kb_error(2104,"ORIGINAL number missing.\n",DATAFILE_ERROR);
                 break;
               }
@@ -2071,42 +2267,55 @@ void read_vertices()
               tok = yylex();
               break;
 
-           case FIXED_:
+           case FIXED_TOK:
               set_attr(vlist[k],FIXED);
               tok = yylex();
               break;
 
-           case HIT_PARTNER_:
+           case HIT_PARTNER_TOK:
               set_attr(vlist[k],HIT_PARTNER);
               tok = yylex();
               break;
 
-           case METHOD_:  /* apply method instance to edge */
+           case METHOD_TOK:  /* apply method instance to edge */
               tok = yylex();  /* get name */
+              if ( tok != METHOD_NAME_TOK )
+              { kb_error(1949,"Missing method instance name.\n",DATAFILE_ERROR);
+                break;
+              }
+              // else fall through to METHOD_NAME_TOK
 
-           case METHOD_NAME_:
+           case METHOD_NAME_TOK:
               qnum = yylval.i;
               tok = yylex();           
-              if ( tok == '-' || tok == UMINUS_ )
+              if ( tok == '-' || tok == UMINUS_TOK )
               { apply_method_num(inverse_id(vlist[k]),qnum);
                 tok = yylex();
               }
               else
                 apply_method_num(vlist[k],qnum);
               break;
+ 
+           case QUANTITY_TOK:
+              tok = yylex();
+               if ( tok != QUANTITY_NAME_TOK )
+               { kb_error(1121,"Need quantity name.\n",DATAFILE_ERROR);
+                 break;
+               }
+               // else fall through
 
-           case QUANTITY_NAME_: /* name of quantity */
+           case QUANTITY_NAME_TOK: /* name of quantity */
               qnum = yylval.i;
               tok = yylex();
-              if ( tok == '-' || tok == UMINUS_ )
+              if ( tok == '-' || tok == UMINUS_TOK )
               { apply_quantity(inverse_id(vlist[k]),qnum);
                 tok = yylex();
               }
               else 
-              apply_quantity(vlist[k],qnum);
+                apply_quantity(vlist[k],qnum);
               break;
 
-           case IDENT_:  /* maybe method or quantity */
+           case IDENT_TOK:  /* maybe method or quantity */
               { sprintf(errmsg,"Illegal use of identifier '%s'.\n",yytext);
                 kb_error(1118,errmsg,DATAFILE_ERROR);
               }
@@ -2114,45 +2323,20 @@ void read_vertices()
               break;
 
 
-           case QUANTITY_:
-              tok = yylex();
-               if ( tok == IDENT_ )
-                  { /* have named quantity pair */
-                    char qname[32];
-                    strncpy(qname,yytext,sizeof(qname));
-                    if ( globals(yylval.i)->flags & QUANTITY_NAME )
-                       apply_quantity(vlist[k],yylval.i);
-                    else
-                    { sprintf(errmsg,"Undefined quantity: %s.\n",yytext);
-                      kb_error(1119,errmsg,DATAFILE_ERROR);
-                    }
-                    tok = yylex();
-                    if ( stricmp(yytext,"method")==0 )
-                       { tok = yylex();
-                          kb_error(1120,"Obsolete quantity syntax.\n  Methods must be listed in quantity definition.",DATAFILE_ERROR);
-
-                          tok = yylex();
-                       }
-                    continue;
-                  }
-               else 
-               kb_error(1121,"Need quantity name and method.\n",DATAFILE_ERROR);
-               break;
-
-           case BOUNDARY_:
-           case BOUNDARY_NAME_:
+           case BOUNDARY_TOK:
+           case BOUNDARY_NAME_TOK:
               {
                 REAL *x,*param;
                 int n;
 
-                if ( tok == BOUNDARY_ )
-                  tok = gettok(INTEGER_);
-                if ( (tok != INTEGER_) && ( tok != BOUNDARY_NAME_ ) )  
+                if ( tok == BOUNDARY_TOK )
+                  tok = gettok(INTEGER_TOK);
+                if ( (tok != INTEGER_TOK) && ( tok != BOUNDARY_NAME_TOK ) )  
                 { kb_error(1122,"Need boundary number or name.\n",
                      DATAFILE_ERROR);
                   break;
                 }
-                if ( tok == INTEGER_ )
+                if ( tok == INTEGER_TOK )
                 { bnum = abs(yylval.i);
                   if ( (bnum >= web.bdrymax) 
                     ||  !(web.boundaries[bnum].attr & IN_USE) )
@@ -2188,13 +2372,13 @@ void read_vertices()
                     }
                 break;
 
-      case CONSTRAINT_:
-      case CONSTRAINT_NAME_:
-            if ( tok == CONSTRAINT_ )
-              tok = gettok(INTEGER_);
-            while ( (tok == INTEGER_) || (tok==CONSTRAINT_NAME_) )
+      case CONSTRAINT_TOK:
+      case CONSTRAINT_NAME_TOK:
+            if ( tok == CONSTRAINT_TOK )
+              tok = gettok(INTEGER_TOK);
+            while ( (tok == INTEGER_TOK) || (tok==CONSTRAINT_NAME_TOK) )
               {
-                 if ( tok == INTEGER_ )
+                 if ( tok == INTEGER_TOK )
                    cnum = abs(yylval.i);
                  else
                    cnum = globals(yylval.i)->value.cnum;
@@ -2218,15 +2402,15 @@ void read_vertices()
                  if ( constr->attr & CON_CONTENT )
                     set_attr(vlist[k], BDRY_CONTENT);
             
-                 tok = gettok(INTEGER_);
+                 tok = gettok(INTEGER_TOK);
               }
             /* projection later, after all vertex info read in */
             break;
 
-            case EDGES_: case FACES_: case BODIES_: case READ_: 
-            case LEAD_INTEGER_: case LEAD_INTEGER_AT_: case NO_TOKEN:
+            case EDGES_TOK: case FACES_TOK: case BODIES_TOK: case READ_TOK: 
+            case LEAD_INTEGER_TOK: case LEAD_INTEGER_AT_TOK: case NO_TOKEN:
                 more_attr = 0 ; break;  /* error recovery */
-            case UNPUTTED_: 
+            case UNPUTTED_TOK: 
                 kb_error(3701,
                    "Internal error: forgot to get lookahead token.\n",
                        WARNING);
@@ -2234,7 +2418,7 @@ void read_vertices()
                 break;
             default: 
                 sprintf(errmsg,"Unexpected token: %s\n",yytext);
-                kb_error(2105,errmsg,WARNING);
+                kb_error(2105,errmsg,DATAFILE_ERROR);
                 tok = yylex();
                 break; 
 
@@ -2267,6 +2451,7 @@ void read_vertices()
 *
 *  Function: read_edges()
 *
+*  Purpose: read edges section of datafile
 */
 
 void read_edges()
@@ -2286,11 +2471,12 @@ void read_edges()
   struct element *vdummy = (struct element *)mycalloc(web.sizes[VERTEX],1);
 #endif
 
-  if ( web.representation == SIMPLEX )
+  if ( web.representation == SIMPLEX ) 
      compcount = binom_coeff(SDIM,edim);
   else compcount = SDIM; 
 
-  /* optional attributes */
+  /* adjust attributes for space dimension*/
+  EXTRAS(EDGE)[E_VECTOR_ATTR].array_spec.sizes[0] = SDIM;
   expand_attribute(EDGE,E_VERTICES_ATTR,&web.skel[EDGE].ctrlpts);
   if ( web.symmetry_flag )
      expand_attribute(EDGE,E_WRAP_ATTR,&one);
@@ -2309,18 +2495,18 @@ void read_edges()
   /* read in edges */
   emaxlist = MAXLIST;
   elist = (edge_id *)mycalloc(sizeof(edge_id),emaxlist);
-  while ( (tok != EDGES_) && (tok != 0 ) ) 
+  while ( (tok != EDGES_TOK) && (tok != 0 ) ) 
      tok = yylex();
-  if ( tok != EDGES_ ) return;
+  if ( tok != EDGES_TOK) return;
   tok = yylex();
-  while ( (tok == LEAD_INTEGER_) || (tok == LEAD_INTEGER_AT_) )
+  while ( (tok == LEAD_INTEGER_TOK) || (tok == LEAD_INTEGER_AT_TOK) )
   { int have_mid = 0;
     WRAPTYPE wrap = 0;
 
     #ifdef MPI_EVOLVER
     /* test task number, for MPI */
     int task;
-    if ( tok == LEAD_INTEGER_ )
+    if ( tok == LEAD_INTEGER_TOK )
        task = 1;  /* default to task 1 */
     else task = yylval.qnum;
     if ( task >= mpi_nprocs || task < 1 )
@@ -2334,11 +2520,11 @@ void read_edges()
       while ( !flag ) 
       { tok = yylex();
         switch (tok)
-        { case LEAD_INTEGER_: 
-          case LEAD_INTEGER_AT_:
-          case FACES_:
-          case BODIES_:
-          case READ_:
+        { case LEAD_INTEGER_TOK: 
+          case LEAD_INTEGER_AT_TOK:
+          case FACES_TOK:
+          case BODIES_TOK:
+          case READ_TOK:
           case 0:
             flag = 1;
             break;
@@ -2352,10 +2538,11 @@ void read_edges()
     k = yylval.i;
     if ( k < 1 ) 
         kb_error(2106,"Edge number must be positive.\n",DATAFILE_ERROR);
-    while ( k >= emaxlist )
+    if ( k >= emaxlist )
     { int spot = emaxlist; 
-      elist = (edge_id *)kb_realloc((char *)elist,(k+MAXLIST)*sizeof(edge_id));
-      emaxlist= k + MAXLIST;
+      while ( k >= emaxlist )
+        emaxlist *= 2;
+      elist = (edge_id *)kb_realloc((char *)elist,emaxlist*sizeof(edge_id));
       for ( ; spot < emaxlist ; spot ++ ) elist[spot] = NULLID;
     }
     if ( valid_id(elist[k]) )
@@ -2371,8 +2558,8 @@ void read_edges()
        elist[k] = new_edge(NULLID,NULLID,NULLID);
        vv = v = get_edge_vertices(elist[k]);
        for ( vercount = 0 ; vercount < numv ; vercount++ )
-       { tok = gettok(INTEGER_);
-         if ( tok != INTEGER_ )
+       { tok = gettok(INTEGER_TOK);
+         if ( tok != INTEGER_TOK )
           { free_element(elist[k]);   
 		    elist[k] = NULLID;
 			if ( addload_flag && (vercount == 2) )
@@ -2413,7 +2600,7 @@ void read_edges()
 #endif
           if ( (yylval.i >= vmaxlist) || !valid_id(vlist[yylval.i]) )
           { sprintf(errmsg,"Edge %d: vertex %d is not defined.\n",k,yylval.i);
-            kb_error(1132,errmsg,DATAFILE_ERROR);
+            kb_error(1132,errmsg, RECOVERABLE /*DATAFILE_ERROR*/ );
             return;
           }
           else *(v++) = vlist[yylval.i];
@@ -2438,7 +2625,7 @@ void read_edges()
     { read_wrap_flag = 1;
       for ( i = 0 ; i < SDIM  ; i++ )
       switch ( tok )
-      { case WRAP_: 
+      { case WRAP_TOK: 
             if ( read_const(&value) < 0 ) 
                 kb_error(4135,"Missing wrap value.\n",DATAFILE_ERROR);
             else tok = yylex();
@@ -2457,13 +2644,13 @@ void read_edges()
            break;
 
         case '-':
-        case UMINUS_:
+        case UMINUS_TOK:
             wrap += NEGWRAP << (i*TWRAPBITS);
             tok = ' '; /* so won't expect more input */
             tok = yylex();
             break;
 
-        case POW: /* ** */
+        case POW_TOK: /* ** */
              i++;            
              tok = ' '; /* so won't expect more input */
              tok = yylex(); break;
@@ -2486,14 +2673,19 @@ void read_edges()
     for ( more_attr = 1; more_attr ; )
        switch ( tok )
           {
-               case EXTRA_ATTRIBUTE_:
-               case ARRAY_ATTRIBUTE_:
+               case EXTRA_ATTRIBUTE_TOK:
+               case ARRAY_ATTRIBUTE_TOK:
+                  if ( yylval.etype != EDGE )
+                  { sprintf(errmsg,"'%s' is a %s attribute, not an edge attribute.\n",
+                        yytext,typenames[yylval.etype]);
+                    kb_error(4320,errmsg,DATAFILE_ERROR);
+                  }
                   read_extra(elist[k],yylval.qnum);
                   break;
 
-               case ORIENTATION_:
-                  tok = gettok(INTEGER_);
-                  if ( tok != INTEGER_ )
+               case ORIENTATION_TOK:
+                  tok = gettok(INTEGER_TOK);
+                  if ( tok != INTEGER_TOK )
                   { kb_error(2107,"ORIENTATION value missing.\n",DATAFILE_ERROR);
                     break;
                   }
@@ -2501,23 +2693,28 @@ void read_edges()
                   tok = yylex();
                   break;
 
-               case NONCONTENT_:
+               case NONCONTENT_TOK:
                   set_attr(elist[k],NONCONTENT);
                   tok = yylex();
                   break;
 
-               case NO_REFINE_:
+               case NO_REFINE_TOK:
                   set_attr(elist[k],NO_REFINE);
                   tok = yylex();
                   break;
 
-               case BARE_:
+               case NO_TRANSFORM_TOK:
+                  set_attr(elist[k],NO_TRANSFORM);
+                  tok = yylex();
+                  break;
+
+               case BARE_TOK:
                   set_attr(elist[k],BARE_NAKED);
                   tok = yylex();
                   break;
 
-               case ORIGINAL_:
-                  if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+               case ORIGINAL_TOK:
+                  if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
                   { kb_error(2108,"ORIGINAL number missing.\n",DATAFILE_ERROR);
                     break;
                   }
@@ -2525,7 +2722,7 @@ void read_edges()
                   tok = yylex();
                   break;
 
-            case WRAP_:
+            case WRAP_TOK:
                    if ( read_const(&value) < 0 ) 
                       kb_error(1135,"Missing wrap value.\n",DATAFILE_ERROR);
                    else tok = yylex();
@@ -2536,35 +2733,35 @@ void read_edges()
                    else set_edge_wrap(elist[k],wrap);
                    break;
 
-            case FIXED_:
+            case FIXED_TOK:
                    set_attr(elist[k],FIXED);  
                    tok = yylex();
                    break;
 
-            case EFIXED_: /* edge only, not vertices */ 
+            case EFIXED_TOK: /* edge only, not vertices */ 
                    set_attr(elist[k],FIXED);  
                    tok = yylex();
                    break;
 
-            case COLOR_:
-                   if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+            case COLOR_TOK:
+                   if ( read_const(&value) <= 0 )
                    { kb_error(1136,"Color missing.\n",DATAFILE_ERROR);
                      break;
                    }
-                   set_edge_color(elist[k],(short)yylval.i);
+                   set_edge_color(elist[k],(short)value);
                    tok = yylex();
                    break;
 
-            case BOUNDARY_:
-            case BOUNDARY_NAME_:
-                   if ( tok == BOUNDARY_ )
-                     tok = gettok(INTEGER_);
-                   if ( (tok != INTEGER_) && ( tok != BOUNDARY_NAME_ ) )  
+            case BOUNDARY_TOK:
+            case BOUNDARY_NAME_TOK:
+                   if ( tok == BOUNDARY_TOK )
+                     tok = gettok(INTEGER_TOK);
+                   if ( (tok != INTEGER_TOK) && ( tok != BOUNDARY_NAME_TOK ) )  
                        { kb_error(2109,"Need boundary number or name.\n",
                            DATAFILE_ERROR);
                           break;
                        }
-                   if ( tok == INTEGER_ )
+                   if ( tok == INTEGER_TOK )
                     { bnum = abs(yylval.i);
                       if ( (bnum >= web.bdrymax) 
                               || !(web.boundaries[bnum].attr & IN_USE) )
@@ -2590,13 +2787,13 @@ void read_edges()
                    tok = yylex();
                    break;
 
-          case CONSTRAINT_:
-          case CONSTRAINT_NAME_:
-             if ( tok == CONSTRAINT_ )
-               tok = gettok(INTEGER_);
-             while ( (tok == INTEGER_) || (tok==CONSTRAINT_NAME_) )
+          case CONSTRAINT_TOK:
+          case CONSTRAINT_NAME_TOK:
+             if ( tok == CONSTRAINT_TOK )
+               tok = gettok(INTEGER_TOK);
+             while ( (tok == INTEGER_TOK) || (tok==CONSTRAINT_NAME_TOK) )
              { struct constraint *con;
-               if ( tok == INTEGER_ )
+               if ( tok == INTEGER_TOK )
                  cnum = abs(yylval.i);
                else
                  cnum = globals(yylval.i)->value.cnum;
@@ -2630,11 +2827,11 @@ void read_edges()
                   set_attr(elist[k], BDRY_ENERGY);
                if ( constr->attr & CON_CONTENT )
                   set_attr(elist[k], BDRY_CONTENT);
-               tok = gettok(INTEGER_);
+               tok = gettok(INTEGER_TOK);
             }
           break;
 
-          case DENSITY_:
+          case DENSITY_TOK:
                if ( read_const(&value) <= 0 )
                   kb_error(1140,"Missing DENSITY value.\n",WARNING);
                else tok = yylex();
@@ -2642,10 +2839,10 @@ void read_edges()
                set_edge_density(elist[k],value);
                break;
 
-        case QUANTITY_NAME_: /* name of quantity */ 
+        case QUANTITY_NAME_TOK: /* name of quantity */ 
          { int qnum = yylval.i;
            tok = yylex();
-           if ( tok == '-' || tok == UMINUS_ )
+           if ( tok == '-' || tok == UMINUS_TOK )
            { apply_quantity(inverse_id(elist[k]),qnum);
              tok = yylex();
            }
@@ -2654,7 +2851,7 @@ void read_edges()
            break;
          }
           
-        case IDENT_:  /* maybe method or quantity */
+        case IDENT_TOK:  /* maybe method or quantity */
            if ( globals(yylval.i)->flags & METHOD_NAME )
               apply_method(elist[k],yytext);
            else if ( globals(yylval.i)->flags & QUANTITY_NAME )
@@ -2666,12 +2863,18 @@ void read_edges()
            tok = yylex();
            break;
 
-        case METHOD_:  /* apply method instance to edge */
+        case METHOD_TOK:  /* apply method instance to edge */
            tok = yylex();
-        case METHOD_NAME_:
+           if ( tok != METHOD_NAME_TOK )
+           { kb_error(1950,"Missing method instance name.\n",DATAFILE_ERROR);
+             break;
+           }
+           // else fall through to METHOD_NAME_TOK
+
+        case METHOD_NAME_TOK:
         { int qnum = yylval.i;      
            tok = yylex();
-           if ( tok == UMINUS_  || tok == '-' )
+           if ( tok == UMINUS_TOK  || tok == '-' )
            { apply_method_num(inverse_id(elist[k]),qnum);
              tok = yylex();
            }
@@ -2679,22 +2882,22 @@ void read_edges()
            break;
         }
 
-        case QUANTITY_:
+        case QUANTITY_TOK:
         /* see if quantity */
         tok = yylex();
-        if ( tok == QUANTITY_NAME_ )
+        if ( tok == QUANTITY_NAME_TOK )
         { /* have named quantity/method pair */
           char qname[32];
-          strncpy(qname,yytext,sizeof(qname));
-          apply_quantity(elist[k],yylval.i);
+          int qnum = yylval.i;
           
+          strncpy(qname,yytext,sizeof(qname));
           tok = yylex();
-          if ( stricmp(yytext,"method")==0 )
-          { tok = yylex();
-            kb_error(1143,"Obsolete quantity syntax.\n  Methods must be listed in quantity definition.",DATAFILE_ERROR);
+          if ( tok == '-' || tok == UMINUS_TOK )
+          { apply_quantity(inverse_id(elist[k]),qnum);
             tok = yylex();
           }
-          continue;
+          else 
+            apply_quantity(elist[k],qnum);
         }
         else 
         { sprintf(errmsg,"Undefined quantity: %s\n",yytext);
@@ -2702,17 +2905,17 @@ void read_edges()
         }
         break;
 
-        case ENERGY_:
+        case ENERGY_TOK:
         /* obsolete surface energy */
            kb_error(1147,
   "'Energy' obsolete. Implement edge integral energy with named quantity.\n",
             DATAFILE_ERROR);
            break;
 
-          case FACES_: case BODIES_: case READ_: case LEAD_INTEGER_: 
-          case LEAD_INTEGER_AT_:
+          case FACES_TOK: case BODIES_TOK: case READ_TOK: case LEAD_INTEGER_TOK: 
+          case LEAD_INTEGER_AT_TOK:
           case NO_TOKEN:    more_attr = 0 ; break;  /* error recovery */
-          case UNPUTTED_: 
+          case UNPUTTED_TOK: 
                 kb_error(3702,
                    "Internal error: forgot to get lookahead token.\n",
                        WARNING);
@@ -2777,6 +2980,7 @@ void read_faces()
 #endif
 
   /* optional attributes */
+  EXTRAS(EDGE)[F_NORMAL_ATTR].array_spec.sizes[0] = SDIM;
   expand_attribute(FACET,F_VERTICES_ATTR,&web.skel[FACET].ctrlpts);
 
   if ( web.representation == SIMPLEX )
@@ -2795,14 +2999,14 @@ void read_faces()
   flist = (facet_id *)mycalloc(sizeof(facet_id),fmaxlist);
 
   tok = yylex();
-  while ( (tok == LEAD_INTEGER_) || (tok == LEAD_INTEGER_AT_) )
+  while ( (tok == LEAD_INTEGER_TOK) || (tok == LEAD_INTEGER_AT_TOK) )
   { int more_attr;
     int edge_count = 0;
 
 
     #ifdef MPI_EVOLVER
     /* test task number, for MPI */
-    if ( tok == LEAD_INTEGER_ )
+    if ( tok == LEAD_INTEGER_TOK )
        facet_task = 1;  /* default to task 1 */
     else facet_task = yylval.qnum;
     if ( facet_task >= mpi_nprocs || facet_task < 1 )
@@ -2816,10 +3020,10 @@ void read_faces()
       while ( !flag ) 
       { tok = yylex();
         switch (tok)
-        { case LEAD_INTEGER_: 
-          case LEAD_INTEGER_AT_:
-          case BODIES_:
-          case READ_:
+        { case LEAD_INTEGER_TOK: 
+          case LEAD_INTEGER_AT_TOK:
+          case BODIES_TOK:
+          case READ_TOK:
           case 0:
             flag = 1;
             break;
@@ -2835,11 +3039,12 @@ void read_faces()
     old_fe = NULLFACETEDGE;
 
     {
-      while ( k >= fmaxlist )
+      if ( k >= fmaxlist )
       { int spot = fmaxlist;
+        while ( k >= fmaxlist )
+          fmaxlist *= 2;
         flist = (facet_id *)kb_realloc((char *)flist,
-                              (k+MAXLIST)*sizeof(facet_id));
-        fmaxlist = k + MAXLIST;
+                              fmaxlist*sizeof(facet_id));
         for ( ; spot < fmaxlist ; spot++ ) flist[spot] = NULLID;
       }
       if ( valid_id(flist[k]) )
@@ -2858,7 +3063,7 @@ void read_faces()
     { /* read vertex list */
       int vercount = 0;
       vertex_id *v = get_facet_vertices(this_facet_id);
-      while ( (tok = gettok(INTEGER_)) == INTEGER_ )
+      while ( (tok = gettok(INTEGER_TOK)) == INTEGER_TOK )
       { if ( vercount++ > numv )
           kb_error(1153,"Too many vertices for facet.\n",DATAFILE_ERROR);
 #ifdef MPI_EVOLVER
@@ -2882,7 +3087,7 @@ void read_faces()
 #endif
         if ( (yylval.i >= vmaxlist) || !valid_id(vlist[yylval.i]) )
         { sprintf(errmsg,"Facet %d: vertex %d is not defined.\n",k,yylval.i);
-          kb_error(1154,errmsg,DATAFILE_ERROR);
+          kb_error(1154,errmsg,RECOVERABLE /*DATAFILE_ERROR*/);
         }
         else 
           *(v++) = vlist[yylval.i];
@@ -2894,7 +3099,7 @@ void read_faces()
     { facetedge_id fe = NULLID;
       facetedge_id first_fe = NULLID;
 
-      while ( (tok = gettok(INTEGER_)) == INTEGER_ )
+      while ( (tok = gettok(INTEGER_TOK)) == INTEGER_TOK )
       { edge_id e_id;
         facetedge_id edge_fe;
             
@@ -2932,7 +3137,7 @@ void read_faces()
         { if ( abs(e) >= emaxlist )
           { sprintf(errmsg,"Facet %d: edge %d is not defined.\n",k,abs(e));
             e = 0;
-            kb_error(1156,errmsg,DATAFILE_ERROR);
+            kb_error(1156,errmsg,RECOVERABLE /*DATAFILE_ERROR*/ );
             continue;
           }
           e_id =  e > 0 ? elist[e] : edge_inverse(elist[-e]);
@@ -2940,7 +3145,7 @@ void read_faces()
 
         if ( !valid_id(e_id) )
         { sprintf(errmsg,"Facet %d: edge %d is not defined.\n",k,e);
-          kb_error(1157,errmsg,DATAFILE_ERROR);
+          kb_error(1157,errmsg,RECOVERABLE /*DATAFILE_ERROR*/);
           continue;
         }
 
@@ -3013,20 +3218,20 @@ void read_faces()
       }
 	  }
       #endif
-      
+       
       if ( (web.modeltype == LAGRANGE) && (web.representation == SOAPFILM) )
       { /* read vertex list */
         int vercount = 0;
         vertex_id *v;
-        if ( tok != VERTICES_ )
+        if ( tok != VERTICES_TOK )
           kb_error(1160,"Need facet vertices in Lagrange model.\n",RECOVERABLE);
         v = get_facet_vertices(this_facet_id);
-        while ( (tok = gettok(INTEGER_)) == INTEGER_ )
+        while ( (tok = gettok(INTEGER_TOK)) == INTEGER_TOK )
         { if ( vercount++ >= numv )
              kb_error(1161,"Too many vertices for facet.\n",DATAFILE_ERROR);
           else if ( !valid_id(vlist[yylval.i]) )
           { sprintf(errmsg,"Facet %d: vertex %d is not defined.\n",k,yylval.i);
-            kb_error(1162,errmsg,DATAFILE_ERROR);
+            kb_error(1162,errmsg,RECOVERABLE /*DATAFILE_ERROR*/);
           }
           else *(v++) = vlist[yylval.i];
         }
@@ -3034,22 +3239,22 @@ void read_faces()
            kb_error(1163,"Too few vertices for facet.\n",DATAFILE_ERROR);
       }
     } 
-    if ( (web.modeltype == LAGRANGE) && (web.modeltype == SOAPFILM) )
-        { vertex_id *v = get_facet_vertices(this_facet_id);
-          for ( i = 0 ; i < numv ; i++ ) 
-             if ( !(get_vattr(v[i]) & Q_MIDEDGE ) )
-             { set_attr(v[i],Q_MIDFACET);
-               set_vertex_facet(v[i],this_facet_id);
-             }
-          for ( i = 0 ; i <= web.dimension ; i++ )
-             unset_attr(v[web.skel[FACET].extreme[i]],Q_MIDFACET);
+    if ( (web.modeltype == LAGRANGE) && (web.representation == SOAPFILM) )
+    { vertex_id *v = get_facet_vertices(this_facet_id);
+      for ( i = 0 ; i < numv ; i++ ) 
+        if ( !(get_vattr(v[i]) & Q_MIDEDGE ) )
+        { set_attr(v[i],Q_MIDFACET);
+          set_vertex_facet(v[i],this_facet_id);
         }
+       for ( i = 0 ; i <= web.dimension ; i++ )
+         unset_attr(v[web.skel[FACET].extreme[i]],Q_MIDFACET);
+     }
 
 #ifdef MPI_EVOLVER
 	  if ( (web.representation == STRING) && (facet_task != this_task)) 
 	  { /* skip rest of line */
-        while ( (tok != LEAD_INTEGER_) && (tok != LEAD_INTEGER_AT_) &&
-               (tok != READ_) && (tok != BODIES_) && (tok != 0) )
+        while ( (tok != LEAD_INTEGER_TOK) && (tok != LEAD_INTEGER_AT_TOK) &&
+               (tok != READ_TOK) && (tok != BODIES_TOK) && (tok != 0) )
 		{ tok = yylex();
         }
 		continue;
@@ -3061,13 +3266,18 @@ void read_faces()
       for ( more_attr = 1 ; more_attr ; )
         switch ( tok )
          { 
-            case EXTRA_ATTRIBUTE_:
-            case ARRAY_ATTRIBUTE_:
+            case EXTRA_ATTRIBUTE_TOK:
+            case ARRAY_ATTRIBUTE_TOK:
+                    if ( yylval.etype != FACET )
+                    { sprintf(errmsg,"'%s' is a %s attribute, not a facet attribute.\n",
+                        yytext,typenames[yylval.etype]);
+                      kb_error(2507,errmsg,DATAFILE_ERROR);
+                    }
                     read_extra(this_facet_id,yylval.qnum);
                     break;
 
-            case ORIENTATION_:
-                    if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+            case ORIENTATION_TOK:
+                    if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
                     { kb_error(2113,"ORIENTATION value missing.\n",DATAFILE_ERROR);
                       break;
                     }
@@ -3076,8 +3286,8 @@ void read_faces()
                     break;
 
 
-            case ORIGINAL_:
-                    if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+            case ORIGINAL_TOK:
+                    if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
                     { kb_error(2114,"ORIGINAL value missing.\n",DATAFILE_ERROR);
                       break;
                     }
@@ -3087,7 +3297,7 @@ void read_faces()
                     }
                     break;
 
-            case DENSITY_:
+            case DENSITY_TOK:
                  if ( read_const(&value) <= 0 )
                     kb_error(1164,"Missing DENSITY or TENSION value.\n",WARNING);
                  else tok = yylex();
@@ -3095,36 +3305,41 @@ void read_faces()
                  set_facet_density(this_facet_id,value);
                  break;
 
-            case NODISPLAY_:
+            case NODISPLAY_TOK:
           /* see if want not to be displayed */
                  set_attr(this_facet_id,NODISPLAY);
                  tok = yylex();
                  break;
 
-             case NONCONTENT_:
+             case NONCONTENT_TOK:
                     set_attr(this_facet_id,NONCONTENT);
                     tok = yylex();
                     break;
 
-             case NO_REFINE_:
+             case NO_REFINE_TOK:
                     set_attr(this_facet_id,NO_REFINE);
                     tok = yylex();
                     break;
 
-          case FIXED_:
+             case NO_TRANSFORM_TOK:
+                  set_attr(this_facet_id,NO_TRANSFORM);
+                  tok = yylex();
+                  break;
+
+          case FIXED_TOK:
           /* see if fixed in place */
                  set_attr(this_facet_id,FIXED);
                  tok = yylex();
                  break;
 
-          case PHASE_: 
+          case PHASE_TOK: 
                 if ( !phase_flag )
                   kb_error(1165,"Phases not in effect.\n",DATAFILE_ERROR);
 
                 if ( web.representation != STRING )
                   kb_error(1166,"Phases on facets only in STRING model.\n",DATAFILE_ERROR);
 
-                if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+                if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
                 { kb_error(1167,"Phase missing.\n",DATAFILE_ERROR);
                   break;
                 }
@@ -3135,58 +3350,61 @@ void read_faces()
                 tok = yylex();
                 break;
 
-          case COLOR_:
-                if ( (tok = gettok(INTEGER_)) != INTEGER_ )
-                { kb_error(1169,"Color missing.\n",DATAFILE_ERROR);
+          case COLOR_TOK:
+                if ( read_const(&value) <= 0 )
+                { kb_error(1169,"Missing color value.\n",DATAFILE_ERROR);
                   break;
                 }
-                set_facet_color(this_facet_id,(short)yylval.i);
+                set_facet_color(this_facet_id,(short)(value));
                 tok = yylex();
                 break;
 
-          case FRONTCOLOR_:
-                if ( (tok = gettok(INTEGER_)) != INTEGER_ )
-                { kb_error(1170,"Frontcolor missing.\n",DATAFILE_ERROR);
+          case FRONTCOLOR_TOK:
+                if ( read_const(&value) <= 0 )
+                { kb_error(1170,"Frontcolor value missing.\n",DATAFILE_ERROR);
                   break;
                 }
-                set_facet_frontcolor(this_facet_id,(short)yylval.i);
+                set_facet_frontcolor(this_facet_id,(short)value);
                 tok = yylex();
                 break;
 
-          case BACKCOLOR_:
-                if ( (tok = gettok(INTEGER_)) != INTEGER_ )
-                { kb_error(1171,"Backcolor missing.\n",DATAFILE_ERROR);
+          case BACKCOLOR_TOK:
+                if ( read_const(&value) <= 0 )
+                { kb_error(1171,"Backcolor value missing.\n",DATAFILE_ERROR);
                   break;
                 }
-                set_facet_backcolor(this_facet_id,(short)yylval.i);
+                set_facet_backcolor(this_facet_id,(short)value);
+                tok = yylex();
+                break;
+                
+          case OPACITY_TOK:
+                if ( !opacity_attr )
+                { int one = 1;
+                  facet_id f_id;
+                  opacity_attr = add_attribute(FACET,"opacity",REAL_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
+
+                  FOR_ALL_FACETS(f_id)
+                   *(REAL*)(get_extra(f_id,opacity_attr)) = 1.0;
+                }
+                if ( read_const(&value) <= 0 )
+                { kb_error(2502,"Opacity value missing.\n",DATAFILE_ERROR);
+                  break;
+                }
+                *(REAL*)(get_extra(this_facet_id,opacity_attr)) = value;
                 tok = yylex();
                 break;
 
-          case TAG_:
-          /* optional inheritable tag */
-              { int one = 1;
-                F_TAG_ATTR = add_attribute(FACET,"tag",INTEGER_TYPE,0,&one,0,
-                     NULL);
-                if ( (tok = gettok(INTEGER_)) != INTEGER_ )
-                { kb_error(1172,"Tag missing.\n",DATAFILE_ERROR);
-                  break;
-                }
-                set_tag(this_facet_id,(tagtype)yylval.i);
-                tok = yylex();
-              }
-              break;
-
-          case BOUNDARY_:
-          case BOUNDARY_NAME_:
+          case BOUNDARY_TOK:
+          case BOUNDARY_NAME_TOK:
           /* see if boundary facet */
-                   if ( tok == BOUNDARY_ )
-                     tok = gettok(INTEGER_);
-                   if ( (tok != INTEGER_) && ( tok != BOUNDARY_NAME_ ) )  
+                   if ( tok == BOUNDARY_TOK )
+                     tok = gettok(INTEGER_TOK);
+                   if ( (tok != INTEGER_TOK) && ( tok != BOUNDARY_NAME_TOK ) )  
                    { kb_error(1173,"Need boundary number or name.\n",
                             DATAFILE_ERROR);
                      break;
                    }
-                   if ( tok == INTEGER_ )
+                   if ( tok == INTEGER_TOK )
                    { bnum = abs(yylval.i);
                      if ( (bnum >= web.bdrymax) 
                                 || !(web.boundaries[bnum].attr & IN_USE) )
@@ -3206,13 +3424,13 @@ void read_faces()
                 tok = yylex();
                 break;
 
-          case CONSTRAINT_:
-          case CONSTRAINT_NAME_:
-              if ( tok == CONSTRAINT_ )
-                tok = gettok(INTEGER_);
-              while ( (tok == INTEGER_) || (tok==CONSTRAINT_NAME_) )
+          case CONSTRAINT_TOK:
+          case CONSTRAINT_NAME_TOK:
+              if ( tok == CONSTRAINT_TOK )
+                tok = gettok(INTEGER_TOK);
+              while ( (tok == INTEGER_TOK) || (tok==CONSTRAINT_NAME_TOK) )
               {
-                 if ( tok == INTEGER_ )
+                 if ( tok == INTEGER_TOK )
                      cnum = abs(yylval.i);
                  else
                      cnum = globals(yylval.i)->value.cnum;
@@ -3230,21 +3448,21 @@ void read_faces()
                  if ( constr->attr & CON_ENERGY )
                  set_attr(this_facet_id, BDRY_ENERGY);
 
-                 tok = gettok(INTEGER_);
+                 tok = gettok(INTEGER_TOK);
                }
                 break;
 
-          case ENERGY_:
+          case ENERGY_TOK:
           /* see if surface energy */
                 tok = yylex();
                 kb_error(1177,"Surface energies obsolete.\n",DATAFILE_ERROR);
-                if ( tok == INTEGER_ ) tok = yylex();
+                if ( tok == INTEGER_TOK ) tok = yylex();
                 break;
 
-          case QUANTITY_NAME_: /* name of quantity */
+          case QUANTITY_NAME_TOK: /* name of quantity */
            { int qnum = yylval.i;
              tok = yylex();
-             if ( tok == '-' || tok == UMINUS_ )
+             if ( tok == '-' || tok == UMINUS_TOK )
              { apply_quantity(inverse_id(this_facet_id),qnum);
                tok = yylex();
              }
@@ -3253,7 +3471,7 @@ void read_faces()
              break;
            }
 
-          case IDENT_:  /* maybe method or quantity */
+          case IDENT_TOK:  /* maybe method or quantity */
              if ( globals(yylval.i)->flags & METHOD_NAME )
                 apply_method(this_facet_id,yytext);
              else if ( globals(yylval.i)->flags & QUANTITY_NAME )
@@ -3265,13 +3483,19 @@ void read_faces()
              tok = yylex();
              break;
 
-          case METHOD_:  /* apply method instance to edge */
+          case METHOD_TOK:  /* apply method instance to edge */
              tok = yylex(); /* fall through */
-          case METHOD_NAME_:
+             if ( tok != METHOD_NAME_TOK )
+             { kb_error(1951,"Missing method instance name.\n",DATAFILE_ERROR);
+               break;
+             }
+             // else fall through to METHOD_NAME_TOK
+
+          case METHOD_NAME_TOK:
           { char name[100];
              strcpy(name,yytext);
              tok = yylex();
-             if ( (tok == UMINUS_) || (tok == '-') )
+             if ( (tok == UMINUS_TOK) || (tok == '-') )
              { apply_method(inverse_id(this_facet_id),name);
                tok = yylex();
              }
@@ -3279,37 +3503,31 @@ void read_faces()
              break;
           }
 
-          case QUANTITY_:            
+          case QUANTITY_TOK:            
                 tok = yylex();
-                if ( tok == IDENT_ )
+                if ( tok == QUANTITY_NAME_TOK )
                 { /* have named quantity/method pair */
                   char qname[32];
+                  int qnum;
+
                   strncpy(qname,yytext,sizeof(qname));
+                  qnum = yylval.i;
                   tok = yylex();
-                  if ( globals(yylval.i)->flags & QUANTITY_NAME )
-                  { if ( tok == '-' || tok == UMINUS_ )
-                    { apply_quantity(inverse_id(this_facet_id),yylval.i);
-                      tok = yylex();
-                    }
-                    else
-                      apply_quantity(this_facet_id,yylval.i);
-                  }
-                  else 
-                  { sprintf(errmsg,"Undefined quantity '%s'.\n",yytext);
-                    kb_error(1179,errmsg,DATAFILE_ERROR);
-                  }
-                
-                  if ( stricmp(yytext,"method")==0 )
-                  { tok = yylex();
-                    kb_error(1180,"Obsolete quantity syntax.\n  Methods must be listed in quantity definition.",DATAFILE_ERROR);
+                  if ( tok == '-' || tok == UMINUS_TOK )
+                  { apply_quantity(inverse_id(this_facet_id),qnum);
                     tok = yylex();
                   }
-                  continue;
+                  else
+                    apply_quantity(this_facet_id,qnum);
+                }
+                else 
+                { kb_error(5467,"Missing quantity name.\n",DATAFILE_ERROR);
+                  break;
                 }
                 break;
 
-            case BODIES_: case READ_: case LEAD_INTEGER_: case NO_TOKEN:
-            case LEAD_INTEGER_AT_:
+            case BODIES_TOK: case READ_TOK: case LEAD_INTEGER_TOK: case NO_TOKEN:
+            case LEAD_INTEGER_AT_TOK:
                 more_attr = 0 ; break;  /* error recovery */
                 
             default: 
@@ -3338,6 +3556,7 @@ void read_faces()
 *
 *  Function: read_bodies()
 *
+*  Purpose: read bodies section of datafile
 */
 
 void read_bodies()
@@ -3355,7 +3574,7 @@ void read_bodies()
   blist = (body_id *)mycalloc(sizeof(body_id),bmaxlist);
 
   tok = yylex();
-  while ( (tok == LEAD_INTEGER_) || (tok == LEAD_INTEGER_AT_) )  /* body loop */
+  while ( (tok == LEAD_INTEGER_TOK) || (tok == LEAD_INTEGER_AT_TOK) )  /* body loop */
   { 
     REAL den,vol;
     int face_count = 0;
@@ -3367,7 +3586,7 @@ void read_bodies()
     body_task = yylval.qnum;
   
     /* test task number, for MPI */
-    if ( tok == LEAD_INTEGER_ )
+    if ( tok == LEAD_INTEGER_TOK )
        body_task = 1;  /* default to task 1 */
     else body_task = yylval.qnum;
     if ( body_task >= mpi_nprocs || body_task < 1 )
@@ -3377,16 +3596,15 @@ void read_bodies()
     }
 
     #endif 
-
-
-    
+  
     k = yylval.i;
     if ( k < 1 ) 
        kb_error(2116,"Body number must be positive.\n",DATAFILE_ERROR);
-    while ( k >= bmaxlist )
-    { int spot = bmaxlist; 
-      blist = (body_id *)kb_realloc((char *)blist,(k+MAXLIST)*sizeof(body_id));
-      bmaxlist = k + MAXLIST;
+    if ( k >= bmaxlist )
+    { int spot = bmaxlist;
+      while ( k >= bmaxlist )
+        bmaxlist *= 2;
+      blist = (body_id *)kb_realloc((char *)blist,bmaxlist*sizeof(body_id));
       for ( ; spot < bmaxlist ; spot ++ ) blist[spot] = NULLID;
     }
 #ifdef MPI_EVOLVER
@@ -3409,7 +3627,7 @@ void read_bodies()
 #endif
 
     f_id = NULLID;  /* in case no facets */
-    while ( (tok = gettok(INTEGER_)) == INTEGER_ )
+    while ( (tok = gettok(INTEGER_TOK)) == INTEGER_TOK )
     { 
      
       f = yylval.i;
@@ -3430,12 +3648,12 @@ void read_bodies()
         face_count++;
         if ( abs(f) >= fmaxlist )
         { sprintf(errmsg,"Body %d: face %d is not defined.\n",k,f);
-          kb_error(1188,errmsg,DATAFILE_ERROR);
+          kb_error(1188,errmsg,RECOVERABLE /*DATAFILE_ERROR*/);
         }
         f_id = f > 0 ? flist[f] : facet_inverse(flist[-f]);
         if ( !valid_id(f_id) )
         { sprintf(errmsg,"Body %d: face %d is not defined.\n",k,f);
-          kb_error(1189,errmsg,DATAFILE_ERROR);
+          kb_error(1189,errmsg,RECOVERABLE /*DATAFILE_ERROR*/);
         }
         set_facet_body(f_id, b_id);
       }
@@ -3450,8 +3668,8 @@ void read_bodies()
 #ifdef MPI_EVOLVER
     if ( mpi_local_bodies_flag && (body_task != this_task ) )
     {  /* skip until next body */
-        while ( (tok != LEAD_INTEGER_) && (tok != LEAD_INTEGER_AT_) &&
-               (tok != READ_) && (tok != 0) )
+        while ( (tok != LEAD_INTEGER_TOK) && (tok != LEAD_INTEGER_AT_TOK) &&
+               (tok != READ_TOK) && (tok != 0) )
 		{ tok = yylex();
         }
        continue;
@@ -3462,13 +3680,23 @@ void read_bodies()
     while ( more_attr )
       switch ( tok )
       {
-        case EXTRA_ATTRIBUTE_:
-        case ARRAY_ATTRIBUTE_:
-              read_extra(blist[k],yylval.qnum);
+        case EXTRA_ATTRIBUTE_TOK:
+        case ARRAY_ATTRIBUTE_TOK:
+               if ( yylval.etype != BODY )
+               { sprintf(errmsg,"'%s' is a %s attribute, not a body attribute.\n",
+                        yytext,typenames[yylval.etype]);
+                 kb_error(4319,errmsg,DATAFILE_ERROR);
+               }
+               read_extra(blist[k],yylval.qnum);
+              break;
+       
+        case CENTEROFMASS_TOK:
+              set_attr(blist[k],WANT_CENTEROFMASS);
+              tok = yylex();
               break;
 
-        case ORIGINAL_:
-              if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+        case ORIGINAL_TOK:
+              if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
               { kb_error(2117,"ORIGINAL value missing.\n",DATAFILE_ERROR);
                 break;
               }
@@ -3476,7 +3704,7 @@ void read_bodies()
               tok = yylex();
               break;
 
-        case VOLUME_:
+        case VOLUME_TOK:
               /* have a fixed volume constraint */
               if ( read_const(&vol) <= 0 )
                 kb_error(1191,"Missing VOLUME value.\n",DATAFILE_ERROR);
@@ -3487,7 +3715,7 @@ void read_bodies()
               }
               break;
 
-        case ACTUAL_VOLUME_: 
+        case ACTUAL_VOLUME_TOK: 
               /* have a declared volume */
               if ( read_const(&vol) <= 0 )
                 kb_error(1075,"Missing ACTUAL_VOLUME value.\n",DATAFILE_ERROR);
@@ -3499,37 +3727,37 @@ void read_bodies()
               break;
 
 
-        case VOLCONST_:
+        case VOLCONST_TOK:
               /* have a body volume adjustment */
               if ( read_const(&vol) <= 0 )
-                kb_error(1192,"Missing VOLCONST value.\n",WARNING);
+                kb_error(1192,"Missing VOLCONST value.\n",DATAFILE_ERROR);
               else tok = yylex();
               set_body_volconst(blist[k],vol); 
               break;
 
-        case DENSITY_:
+        case DENSITY_TOK:
               /* have density for gravity */
               if ( read_const(&den) <= 0 )
-                kb_error(1193,"Missing DENSITY value.\n",WARNING);
+                kb_error(1193,"Missing DENSITY value.\n",DATAFILE_ERROR);
               else tok = yylex();
               web.gravflag = 1;
               set_body_density(blist[k],den);
               set_attr(blist[k],DENSITY);
               break;
 
-        case PRESSURE_:
+        case PRESSURE_TOK:
               /* have prescribed pressure */
               web.pressflag = 1;
               set_attr(blist[k],PRESSURE);
               if ( read_const(&value) <= 0 )
-                kb_error(1194,"Missing PRESSURE value.\n",WARNING);
+                kb_error(1194,"Missing PRESSURE value.\n",DATAFILE_ERROR);
               else 
               { set_body_pressure(blist[k],value);
                 tok = yylex();
               }
               break;
 
-        case LAGRANGE_MULTIPLIER_:
+        case LAGRANGE_MULTIPLIER_TOK:
               if ( read_const(&value) <= 0 )
                 kb_error(2118,"Missing lagrange_multiplier value.\n",DATAFILE_ERROR);
               else 
@@ -3538,7 +3766,7 @@ void read_bodies()
               }
               break;
               
-        case PHASE_: 
+        case PHASE_TOK: 
               if ( !phase_flag )
                 kb_error(1195,"Phases not in effect.\n",DATAFILE_ERROR);
 
@@ -3546,7 +3774,7 @@ void read_bodies()
                 kb_error(1196,"Phases must be on facets in STRING model.\n",
 
                    DATAFILE_ERROR);
-              if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+              if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
                { kb_error(1197,"Phase missing.\n",DATAFILE_ERROR);
                   break;
                }
@@ -3557,14 +3785,20 @@ void read_bodies()
               tok = yylex();
               break;
 
-           case METHOD_:  /* apply method instance to edge */
+           case METHOD_TOK:  /* apply method instance to edge */
               tok = yylex();
-           case METHOD_NAME_:
+              if ( tok != METHOD_NAME_TOK )
+              { kb_error(5777,"Missing method instance name.\n",DATAFILE_ERROR);
+                break;
+              }
+              // else fall through to METHOD_NAME_TOK
+
+           case METHOD_NAME_TOK:
               apply_method(blist[k],yytext);
               tok = yylex();
               break;
 
-           case IDENT_:  /* maybe method or quantity */
+           case IDENT_TOK:  /* maybe method or quantity */
               if ( globals(yylval.i)->flags & METHOD_NAME )
                 apply_method(blist[k],yytext);
               else if ( globals(yylval.i)->flags & QUANTITY_NAME )
@@ -3576,9 +3810,10 @@ void read_bodies()
               tok = yylex();
               break;
 
-		   case READ_: case LEAD_INTEGER_: case NO_TOKEN: case LEAD_INTEGER_AT_:
-                more_attr = 0 ; break;  /* error recovery */
-        case UNPUTTED_: 
+		   case READ_TOK: case LEAD_INTEGER_TOK: case NO_TOKEN: case LEAD_INTEGER_AT_TOK:
+                more_attr = 0 ; break; 
+ /* error recovery */
+        case UNPUTTED_TOK: 
                 kb_error(3703,
                    "Internal error: forgot to get lookahead token.\n",
                        WARNING);

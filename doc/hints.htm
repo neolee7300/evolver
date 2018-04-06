@@ -1,16 +1,21 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML>
 <HEAD><TITLE>Surface Evolver Documentation: Hints
-</title></head>
+</title>
+<link rel="stylesheet" type="text/css" href="evdoc-style.css" />
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+</head>
 
 <BODY>
-<center>
-<h1><a href="http://www.susqu.edu/facstaff/b/brakke/evolver/evolver.htm">
+
+<h1 class="center">
+ <a href="http://www.susqu.edu/brakke/evolver/evolver.htm" class="comic">
 Surface Evolver</a> Documentation</h1>
-</center>
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
+
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 
-<center><H1> HINTS</h1></center>
+<H1> HINTS</h1>
 This is a collection helpful hints gained from my own experience with Evolver
 and from helping others.
 
@@ -19,9 +24,9 @@ and from helping others.
 work best when size, surface tension, volume, etc. are near 1.
 If you decide to work in units that give very large or small numbers,
 you may have to adjust parameters such as
-<a href="datafile.htm#scale_limit">scale_limit</a>,
-<a href="syntax.htm#target_tolerance">target_tolerance</a>, and
-<a href="syntax.htm#constraint_tolerance">constraint_tolerance</a>.
+<a href="datafile.htm#scale_limit" class="keyword">scale_limit</a>,
+<a href="syntax.htm#target_tolerance" class="keyword">target_tolerance</a>, and
+<a href="syntax.htm#constraint_tolerance" class="keyword">constraint_tolerance</a>.
 <p>
 
 <li> When drawing a sketch for constructing the initial datafile, make
@@ -88,7 +93,7 @@ are several ways to discourage that:
     formula:  guides[1]*x + guides[2]*y = 0  // radial guide planes  </pre>
 Then you can set the guide coefficients at runtime with
 <pre>   set vertex.guides[1] -y where on_constraint 1
-   set vertex.guides[2] x where on_constraint 1  </pre>
+   set vertex.guides[1] x where on_constraint 1  </pre>
    <li> If you understand exactly what energy or volume condition
     is encouraging the short-cutting, you can adjust the energy or
      content integrand on the curved constraint to compensate enough
@@ -96,7 +101,7 @@ Then you can set the guide coefficients at runtime with
    the surface area of the gap between the edge and the curved constraint,
    or the volume bounded by the gap.
    <li> Declare the curved constraint 
-    <a href="constrnt.htm#convex constraint">CONVEX</a>. This adds an energy
+    <a href="constrnt.htm#convex-constraint" class="keyword">CONVEX</a>. This adds an energy
     roughly proportional to the gap area.  This is simple to do, and
     works if you set the gap_constant high enough (you should leave 
     the gap constant as low as will work, however), but you cannot
@@ -115,10 +120,10 @@ Then you can set the guide coefficients at runtime with
 
 <p>
 <li>  Groom your surface triangulation with 
-      <a href="single.htm#V">V</a> (vertex averaging),
-      <a href="single.htm#u">u</a> (equiangulation),
-      <a href="single.htm#l">l</a> (long edge division), and
-      <a href="single.htm#t">t</a> (tiny edge deletion).
+      <a href="single.htm#V" class="keyword">V</a> (vertex averaging),
+      <a href="single.htm#u" class="keyword">u</a> (equiangulation),
+      <a href="single.htm#l" class="keyword">l</a> (long edge division), and
+      <a href="single.htm#t" class="keyword">t</a> (tiny edge deletion).
       It may take some experimenting to get the right sequence, along
       with refinements.  It may be better to divide certain long edges
       than simply refine the whole surface.  However, overdoing it may
@@ -128,13 +133,13 @@ Then you can set the guide coefficients at runtime with
       Once you work out a good script, write it down in a handy command
       at the end of the datafile for easy use.
  <p>
-<li> Use the <a href="commands.htm#dump">dump</a> or 
-     <a href="single.htm#d">d</a> commands to save your evolved surface
+<li> Use the <a href="commands.htm#dump" class="keyword">dump</a> or 
+     <a href="single.htm#d" class="keyword">d</a> commands to save your evolved surface
      regularly. Remember that Evolver has no undo feature to roll back
      disastrous commands.     
 
 <p>
-<li>  Use <a href="iterate.htm#conjugate gradient">conjugate gradient</a>
+<li>  Use <a href="iterate.htm#conjugate-gradient">conjugate gradient</a>
       mode for faster gradient descent,
       but not too soon.  Use regular gradient descent to adjust
       to volume or constraint changes.
@@ -155,8 +160,8 @@ Then you can set the guide coefficients at runtime with
 <li>  Second-order Hessian convergence is much faster than first-order
       gradient descent, when Hessian works.  So my advice is to use gradient 
       descent just to get to where it's safe to use 
-      <a href="commands.htm#hessian">hessian</a>
-      <a href="commands.htm#hessian_seek">hessian_seek</a>.
+      <a href="commands.htm#hessian" class="keyword">hessian</a>
+      <a href="commands.htm#hessian_seek" class="keyword">hessian_seek</a>.
       Actually, hessian_seek is pretty  much always safe to use, since
       it makes sure energy is decreasing.  I have found circumstances
       where hessian_seek does an amazingly good job as an iteration step,
@@ -166,9 +171,9 @@ Then you can set the guide coefficients at runtime with
 <li>  Beware saddle points of energy.  A symmetric surface, e.g.
       a blob of solder on a pad or around a wire, may seem to 
       converge with gradient descent, but just have reached a 
-      saddle point.  Use the <a href="commands.htm#eigenprobe">eigenprobe</a>
+      saddle point.  Use the <a href="commands.htm#eigenprobe" class="keyword">eigenprobe</a>
       command to test for stability, and if not stable, use
-      the <a href="commands.htm#saddle">saddle</a> command to
+      the <a href="commands.htm#saddle" class="keyword">saddle</a> command to
       get off the saddle point.
 
 <p>
@@ -178,8 +183,8 @@ Then you can set the guide coefficients at runtime with
       or less constant scale factor and energy isn't changing much,
       and running in conjugate gradient mode for a long time doesn't
       change much, then you're probably in good shape.  But use
-      the <a href="eigentut.htm#eigenprobe">eigenprobe</a> command to 
-      make sure, and <a href="commands.htm#hessian">hessian</a> to
+      the <a href="eigentut.htm#eigenprobe" class="keyword">eigenprobe</a> command to 
+      make sure, and <a href="commands.htm#hessian" class="keyword">hessian</a> to
       finish off convergence.
 
 <p>
@@ -191,7 +196,7 @@ Then you can set the guide coefficients at runtime with
 
 <hr>
 
-<a name="checking"></a>
+<a   id="checking"></a>
 <h4>Checking your datafile</h4>
 
 You should always check your initial datafile to be sure it is doing
@@ -277,7 +282,7 @@ Enter command: foreach edge where constraint_1_energy != 0 do print constraint_1
 </pre>
 <hr>
 
-<a name="reasonable"></a>
+<a   id="reasonable"></a>
 <h3> Reasonable scale factors. </h3>
 Trouble in evolving is usually signaled by a small scale, which means
 there is some obstacle to evolution. Of course, that means you have to
@@ -291,32 +296,40 @@ length and
 the units of energy are length<sup>q</sup>.  The dimensional analysis goes
 like this:  Let D be the perturbation of one vertex away from an equilibrium
 surface.  In general, energy is quadratic around an equibrium, so
-<blockquote><tt>  E = D<sup>2</sup>L<sup>q-2</sup> </tt></blockquote>
+<pre>
+   E = D<sup>2</sup>L<sup>q-2</sup>
+</pre>
 
 So the gradient of energy at the vertex is 
-<blockquote><tt>  grad E = 2<sup>D </sup>L<sup>q-2</sup>  </tt></blockquote>
+<pre>
+    grad E = 2<sup>D </sup>L<sup>q-2</sup>
+</pre>
 
 The motion is the scale times the gradient, which we want proportional to D,
 so 
-<blockquote><tt> scale * grad E = scale * 2 D L<sup>q-2</sup> = D  </tt>
-</blockquote>
+<pre>
+    scale * grad E = scale * 2 D L<sup>q-2</sup> = D  
+</pre>
 So scale is on the order of L <sup>2-q</sup>.  Some examples:
-<table border="2" align="center">
-<caption align="top"><b>Dimensional Dependence of Scale</b></caption>
+<table border="1" style="margin-left:auto;margin-right:auto">
+<caption ><b>Dimensional Dependence of Scale</b></caption>
 <tr><td><b>Energy</b></td><td><b>Energy dimension</b></td>
 <td><b>Scale</b> </td><td><b>Example file</b></td></tr>
 <tr>
-<td>Area of soapfilm </td><td align="center">L<sup>2</sup> </td>
-<td align="center"> L<sup>0</sup> </td><td>quad.fe</td></tr>
+<td>Area of soapfilm </td><td style="text-align:center">L<sup>2</sup> </td>
+<td style="text-align:center"> L<sup>0</sup> </td><td>quad.fe</td></tr>
 <tr>
-<td>Length of string </td><td align="center">L<sup>1</sup> </td><td align="center"> L<sup>1</sup> </td><td>flower.fe</td></tr>
+<td>Length of string </td><td style="text-align:center">L<sup>1</sup>
+ </td><td style="text-align:center"> L<sup>1</sup> </td><td>flower.fe</td></tr>
 <tr>
-<td>Squared curvature of string </td><td align="center">L<sup>-1</sup> </td>
- <td align="center"> L<sup>3</sup></td>
+<td>Squared curvature of string </td><td style="text-align:center">
+L<sup>-1</sup> </td>
+ <td style="text-align:center"> L<sup>3</sup></td>
    <td>elastic8.fe</td></tr>
 <tr>
-<td>Squared mean curvature of soapfilm </td><td align="center">L<sup>0</sup> </td>
-<td align="center"> L<sup>2</sup></td>
+<td>Squared mean curvature of soapfilm </td>
+<td style="text-align:center">L<sup>0</sup> </td>
+<td style="text-align:center"> L<sup>2</sup></td>
  <td>sqcube.fe</td></tr>
 </table>
 In particular, the scale for area evolution is independent of refinement,
@@ -331,7 +344,8 @@ set scale_limit to be the inverse of the surface tension.
 
 
 <hr>
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 
 </body>

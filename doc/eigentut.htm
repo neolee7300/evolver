@@ -1,15 +1,20 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
-<HEAD><TITLE>Surface Evolver Documentation</title></head>
+<!DOCTYPE HTML>
+<HEAD><TITLE>Surface Evolver Documentation - Stability Tutorial</title>
+<link rel="stylesheet" type="text/css" href="evdoc-style.css" />
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+</head>
 <BODY>
 <!--NewPage-->
-<center>
-<h1><a href="http://www.susqu.edu/facstaff/b/brakke/evolver/evolver.htm">
+
+<h1 class="center">
+<a href="http://www.susqu.edu/brakke/evolver/evolver.htm" class="comic">
 Surface Evolver</a> Documentation</h1>
-</center>
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
+
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 
-<a name="hessian tutorial"></a>
+<a   id="hessian-tutorial"></a>
 <h1>Hessian, Eigenvalues, Eigenvectors, and Stability
 in the Surface Evolver</h1>
 
@@ -18,28 +23,28 @@ into a linear algebra problem.
 <p>
 Contents:
 <ol>
-<li> <a href="#configuration space">How to think of surfaces discretized in the Evolver.</a>
-<li> <a href="#hessian intro">What is the Hessian?</a>
+<li> <a href="#configuration-space">How to think of surfaces discretized in the Evolver.</a>
+<li> <a href="#hessian-intro">What is the Hessian?</a>
 <li> <a href="#eigenvalues">Eigenvalues and eigenvectors.</a>
-<li> <a href="#eigenpair interpretation">Physical interpretation of eigenvalues and eigenvectors.</a>
+<li> <a href="#eigenpair-interpretation">Physical interpretation of eigenvalues and eigenvectors.</a>
 <li> <a href="#eigenprobe">Eigenprobe command.</a>
 <li> <a href="#ritz">Ritz command.</a>
 <li> <a href="#square">The Square example.</a>
-<li> <a href="#hessian metric">Hessian with metric.</a>
-<li> <a href="#hessian normal mode">Normal motion mode.</a>
-<li> <a href="#eigenvector visualization">Visualizing eigenvectors.</a>
-<li> <a href="#hessian iteration">Hessian iteration.</a>
+<li> <a href="#hessian-metric">Hessian with metric.</a>
+<li> <a href="#hessian-normal-mode">Normal motion mode.</a>
+<li> <a href="#eigenvector-visualization">Visualizing eigenvectors.</a>
+<li> <a href="#hessian-iteration">Hessian iteration.</a>
 <li> <a href="#hessian_seek">Hessian_seek.</a>
-<li> <a href="#saddle example">Saddle.</a>
-<li> <a href="#unstable surfaces">Unstable surfaces.</a>
-<li> <a href="#eigenvalue accuracy">Accuracy of eigenvalues.</a>
-<li> <a href="#hessian caveats">Caveats and warnings.</a>
+<li> <a href="#saddle-example">Saddle.</a>
+<li> <a href="#unstable-surfaces">Unstable surfaces.</a>
+<li> <a href="#eigenvalue-accuracy">Accuracy of eigenvalues.</a>
+<li> <a href="#hessian-caveats">Caveats and warnings.</a>
 </ol>
 For background,
-see any decent linear algebra text, such as Strang <a href="biblio.htm#ref[SG]">[SG]</a>, especially chapter 6.
-For more on stability and bifurcations, see Arnol'd <a href="biblio.htm#ref[AV]">[AV]</a> or Hale and
-Kocak <a href="biblio.htm#ref[HK]">[HK]</a>.
-<hr><a name="configuration space"></a><h2>
+see any decent linear algebra text, such as Strang <a href="biblio.htm#refSG">[SG]</a>, especially chapter 6.
+For more on stability and bifurcations, see Arnol'd <a href="biblio.htm#refAV">[AV]</a> or Hale and
+Kocak <a href="biblio.htm#refHK">[HK]</a>.
+<hr><a   id="configuration-space"></a><h2>
 1. How to think of surfaces discretized in the Evolver.</h2>
 
 The Surface Evolver parameterizes a surface in terms of vertex
@@ -52,7 +57,7 @@ a scalar function on configuration space.  Visualize the graph
 of the energy function as a rolling landscape with mountains, valleys,
 and mountain passes.  The gradient of the energy is the steepest
 uphill direction.  The ordinary 
- '<a href="single.htm#g">g</a>' iteration step of Evolver 
+ '<a href="single.htm#g" class="keyword">g</a>' iteration step of Evolver 
 minimizes energy by moving in the downhill direction, the negative
 of the gradient direction, seeking a local minimum.
 <p>
@@ -61,7 +66,7 @@ such that X is restricted to lie on a particular level set.  A
 global constraint, such 
 as a volume constraint, determines a hypersurface, that is, it removes one 
 degree of freedom from the configuration space.  
-<a href="constrnt.htm#level set constraints">Level-set constraints</a>
+<a href="constrnt.htm#level-set-constraints">Level-set constraints</a>
  on vertices, 
 such as x^2 + y^2 = 4, are actually a separate constraint for each vertex
 they apply to.  Each removes one degree of freedom for each vertex
@@ -70,22 +75,22 @@ is called the "feasible set", and is the set of all possible
 configurations satisfying all the constraints.  If there are any nonlinear
 constraints, such as curved walls or volume constraints, then the
 feasible set will be curved.  When a surface is moved, by 
-'<a href="single.htm#g">g</a>' for
+'<a href="single.htm#g" class="keyword">g</a>' for
 example, the vector for the direction of motion is always first
 projected to be tangent to the feasible set.  However, if the
 feasible set is curved, straight-line motion will deviate
 slightly from the feasible set.  Therefore, after every motion
 X is projected back to the feasible set using Newton's Method.
 
-<hr><a name="hessian intro"></a><h2>
+<hr><a   id="hessian-intro"></a><h2>
 2. What is the Hessian?</h2>
 
 Consider a particular surface in a particular configuration X, 
 and consider a small perturbation Y added to X. Then the energy 
 may be expanded in a Taylor series:
-<blockquote><tt>
+<pre>
    E(X+Y) = E<sub>0</sub> + G<sup>T</sup> Y + 1/2 Y<sup>T</sup> H Y + ...
-</tt></blockquote>
+</pre>
 Here the constant E<sub>0</sub> is the original energy, E<sub>0</sub> = E(X).
 G is the vector of first derivatives, the gradient, which is a 
 vector the same dimension as Y or X (G<sup>T</sup> is a 1-form, if you want
@@ -119,12 +124,12 @@ to the feasible set after motion.  This does not affect the gradient,
 but it does affect the Hessian.  In particular, if Q is the Hessian
 of a global constraint and q is the Lagrange multiplier for the constraint,
 then the adjusted energy Hessian is H - qQ.  Therefore it is necessary
-to do a '<a href="single.htm#g">g</a>' step to calculate Lagrange
+to do a '<a href="single.htm#g" class="keyword">g</a>' step to calculate Lagrange
 multipliers before doing any Hessians when there are global constraints.
 
 
-<hr><a name="eigenvectors"></a><h2>
-<a name="eigenvalues"></a>
+<hr><a   id="eigenvectors"></a><h2>
+<a   id="eigenvalues"></a>
 3. Eigenvalues and eigenvectors.</h2>
 
 The Hessian H is a real symmetric matrix.  Therefore it can
@@ -147,24 +152,24 @@ is
 which is obvious in an eigenvector basis, but serves to define 
 eigenvectors in an arbitrary basis.
 <p>
-<a name="index"></a> 
+<a   id="index"></a> 
 <b>Index and inertia.</b>
 The number of negative eigenvalues of H is called the <em>index</em> of H.
-<a name="inertia"></a>
+<a   id="inertia"></a>
 The triple of numbers of negative, zero, and positive eigenvalues is called
 the <em>inertia</em> of H.  One can also speak of the inertia relative
 to a value c as the inertia of H-cI, i.e. the number of eigenvalues
 less than c, equal to c, and greater than c.
 Sylvester's Law of Inertia says that if P is a nonsingular matrix
 of the same dimension as H, then the matrix
-<blockquote><tt>
+<pre>
 			K = P H P<sup>T</sup>
-</tt></blockquote>
+</pre>
 has the same inertia as H, although not the same eigenvalues.  The
 Evolver can factor a Hessian into a form
-<blockquote><tt>
+<pre>
 			H = L D L<sup>T</sup>
-</tt></blockquote>
+</pre>
 where L is a lower triangular matrix and D is diagonal.  Hence the
 inertia of H can be found by counting signs on the diagonal of D.
 Inertia relative to c can be found by factoring H-cI.
@@ -173,7 +178,18 @@ The eigenvectors associated to a particular eigenvalue form a
 subspace, whose dimension is called the "multiplicity" of the
 eigenvalue.
 
-<hr><a name="eigenpair interpretation"></a><h2>
+<b> With volume constraints.</b>  If a surface is subject to
+volume constraints or named quantity constraints, these are taken
+into account in calculating eigenvalues and eigenvectors.  In particular,
+when defining a perturbation by a vectorfield, projection back to
+the constraints is done at the end of the projection.  So for a 
+nonlinear volume constraint (which is usually the case), adding
+a volume constraint is different than taking the eigenvalues of
+the unconstrained hessian relative to a linear subspace.  It can
+happen that adding a constraint can have a lower lowest eigenvalue
+than without the constraint.
+
+<hr><a   id="eigenpair-interpretation"></a><h2>
 4.  Physical interpretation of eigenvalues and eigenvectors.</h2>
 
 One can think of an eigenvector as a mode of pertubation of the surface,
@@ -198,32 +214,33 @@ grow or decay independently, since in an eigenvector basis the
 Hessian is diagonal and there are no terms linking the different
 modes.
 
-<hr><a name="eigenprobe"></a>
+<hr><a   id="eigenprobe"></a>
 <h2>5. Eigenprobe command</h2>
 The inertia of the Hessian with respect to some value 
-may be found with  the <a href="commands.htm#eigenprobe">eigenprobe</a>
+may be found with  the <a href="commands.htm#eigenprobe" class="keyword">eigenprobe</a>
 command.
-The syntax to find the inertia relative to a probe value c is "eigenprobe c".
-  For example, "eigenprobe 1" 
+The syntax to find the inertia relative to a probe value c is 
+ "<code class="shortcode">eigenprobe c</code>".
+  For example, "<code class="shortcode">eigenprobe 1</code>" 
 would report the number of eigenvalues less than 1, equal to 1, 
-and greater than 1.  For example, suppose we use cube.fe,
-do "r; r; g 5; eigenprobe 1".
+and greater than 1.  For example, suppose we use cube.fe, and
+do "<code class="shortcode">r; r; g 5; eigenprobe 1</code>".  Then we get
 <pre>
-Vertices: 50  Edges: 144  Facets: 96  Bodies: 1  Facetedges: 288
-Element memory: 39880
-Total data memory: 294374 bytes.
-Enter command: r
-Vertices: 194  Edges: 576  Facets: 384  Bodies: 1  Facetedges: 1152
-Element memory: 157384
-Total data memory: 422022 bytes.
-Enter command: g 5
-  5. area:  5.35288108682446 energy:  5.35288108682446  scale: 0.233721
-  4. area:  5.14937806689761 energy:  5.14937806689761  scale: 0.212928
-  3. area:  5.04077073041990 energy:  5.04077073041990  scale: 0.197501
-  2. area:  4.97600054126748 energy:  4.97600054126748  scale: 0.213378
-  1. area:  4.93581733363156 energy:  4.93581733363156  scale: 0.198322
-Enter command: eigenprobe 1
-Eigencounts:    18 &lt;,  0 ==,  175 &gt;
+   Vertices: 50  Edges: 144  Facets: 96  Bodies: 1  Facetedges: 288
+   Element memory: 39880
+   Total data memory: 294374 bytes.
+   Enter command: r
+   Vertices: 194  Edges: 576  Facets: 384  Bodies: 1  Facetedges: 1152
+   Element memory: 157384
+   Total data memory: 422022 bytes.
+   Enter command: g 5
+     5. area:  5.35288108682446 energy:  5.35288108682446  scale: 0.233721
+     4. area:  5.14937806689761 energy:  5.14937806689761  scale: 0.212928
+     3. area:  5.04077073041990 energy:  5.04077073041990  scale: 0.197501
+     2. area:  4.97600054126748 energy:  4.97600054126748  scale: 0.213378
+     1. area:  4.93581733363156 energy:  4.93581733363156  scale: 0.198322
+   Enter command: eigenprobe 1
+   Eigencounts:    18 &lt;,  0 ==,  175 &gt;
 </pre>
 This means the Hessian has 18 eigenvalues less than 1, none equal to 1,
 and 175 greater than 1.  Note the total number of eigenvalues is equal
@@ -234,36 +251,38 @@ case
 </pre>
 where the constraint is the volume constraint.  Why there is one
 degree of freedom per vertex instead of three is explained below in
-the <a href="#hessian normal mode">normal_motion</a> section.
+the <a href="#hessian-normal-mode" class="keyword">normal_motion</a> section.
 <p>
 
 <hr>
-<a name="ritz"></a>
+<a   id="ritz"></a>
 <h2>6. Ritz command</h2>
 
 
 For calculation of eigenvalues near a particular probe value, 
-there is the <a href="commands.htm#ritz">ritz</a>
+there is the <a href="commands.htm#ritz" class="keyword">ritz</a>
 command (named after the Rayleigh-Ritz algorithm).  The syntax is
-"ritz(c,n)", where c is the probe value and n is the desired 
+"<code>ritz(<em>c,n</em>)</code>", where c is the probe value and n is the desired 
 number of eigenvalues.
 <p>
-For example, evolve cube.fe with "g 5; r; g 5; r; g 5", and do "ritz(0,5)".
+For example, evolve cube.fe with "<code class="shortcode">g 5; r; g 5; r; g 5</code>",
+ and do "<code class="shortcode">ritz(0,5)</code>".
 You should get output like this:
-<pre>Enter command: ritz(0,5)
-Eigencounts:    0 &lt;,  0 ==,  193 &gt;
-  1.    0.001687468263013
-  2.    0.001687468263013
-  3.    0.001687468263013
-  4.    0.2517282974725
-  5.    0.2517282974731
-Iterations: 710. Total eigenvalue changes in last iteration: 4.0278891e-013
+<pre>
+   Enter command: ritz(0,5)
+   Eigencounts:    0 &lt;,  0 ==,  193 &gt;
+    1.    0.001687468263013
+    2.    0.001687468263013
+    3.    0.001687468263013
+    4.    0.2517282974725
+    5.    0.2517282974731
+   Iterations: 710. Total eigenvalue changes in last iteration: 4.0278891e-013
 </pre>
 The first line of output is the inertia, exactly as in eigenprobe.  Then
 come the eigenvalues as the algorithm finds them, usually in order away
 from the probe value.
 <p>
-How ritz works: For ritz(c,n), Evolver creates a random 
+How ritz works: For <code class="shortcode">ritz(c,n)</code>, Evolver creates a random 
 n-dimensional subspace and applies shifted inverse iteration to it,
 i.e. repeatedly applies (H - cI)<sup>-1</sup> to the subspace and
 orthonormalizes it.  Eigenvalues of H near p correspond to large
@@ -280,10 +299,10 @@ approximations.
  least eigenvalue, so H-cI is positive
 definite.  Makes the factoring more numerically stable. 
 
-<hr> <a name="square"></a>
+<hr> <a   id="square"></a>
 <h2>7. The Square example</h2>
 
-<img src="square.gif" align="right" alt="square">
+<img src="square.gif"  alt="square"><br>
 We now explore the eigenvalues of a very simple surface, a flat square
 with fixed sides.   For a continuous surface, classical calculus of variations
 reveals that the Hessian for area is the Laplace operator.  For
@@ -292,7 +311,7 @@ for m,n = 1,2,3,..., or in ascending sequence
 2, 5, 5, 8, 10, 10, 13, 13, 17, 17, .. 
  (you may remember this from PDE analysis of the heat
 equation).  Run the datafile square.fe and refine it twice (no need to
-evolve, since it is already flat).  Do "ritz(0,10)".
+evolve, since it is already flat).  Do "<code class="shortcode">ritz(0,10)</code>".
 
 <pre>
 Enter command: ritz(0,10)
@@ -310,7 +329,7 @@ Eigencounts:    0 &lt;,  0 ==,  25 &gt;
 </pre>
 Doesn't look exactly like we expected. It does have multiplicity two
 eigenvalues in the right places, though.  Maybe we haven't refined enough.
-Refine again and do "ritz(0,10)".  You get
+Refine again and do "<code class="shortcode">ritz(0,10)</code>".  You get
 <pre>
 Enter command: ritz(0,10)
 Eigencounts:    0 &lt;,  0 ==,  113 &gt;
@@ -328,7 +347,7 @@ Eigencounts:    0 &lt;,  0 ==,  113 &gt;
 Things are getting worse! The eigenvalues all shrunk drastically!  They
 are not converging!  What's going on?  The next section explains.
 
-<hr><a name="hessian metric"></a><h2>
+<hr><a   id="hessian-metric"></a><h2>
 8.  Hessian with metric.</h2>
 
 One would expect that refining the surface would lead the eigenvalues
@@ -372,25 +391,27 @@ where HQ is the force, M is the mass, and qQ is the acceleration.
 In other words, in an eigenmode, the acceleration is proportional
 to the perturbation.
 <p>
-The Evolver command "<a href="toggle.htm#linear_metric">linear_metric</a>" 
+The Evolver toggle command
+ "<a href="toggle.htm#linear_metric" class="keyword">linear_metric</a>" 
 includes M in the eigenvector
 calculations.  Two metrics are available.  In the simplest,
 the "star metric", M is a diagonal matrix, and the "mass" associated with 
 each vertex is 1/3 of the area of the adjacent facets (1/3 since each
 facet gets shared among 3 vertices).  The other, the "linear metric",
 extends functions from vertices to facets by linear interpolation
-and integrates with respect to area.  By default, "linear_metric"
+and integrates with respect to area.  By default, "<code>linear_metric</code>"
 uses a 50/50 mix of the two, which seems to work best.  See the
-more detailed discussion below in the <a href="#eigenvalue accuracy">
+more detailed discussion below in the <a href="#eigenvalue-accuracy">
 eigenvalue accuracy</a> section.  The fraction of linear metric
 can be set by assigning the fraction to the internal variable 
-<a href="syntax.htm#linear_metric_mix">linear_metric_mix</a>.
-By default, linear_metric_mix is 0.5.  In quadratic mode, however,
+<a href="syntax.htm#linear_metric_mix" class="keyword">linear_metric_mix</a>.
+By default, <code>linear_metric_mix</code> is 0.5.  In quadratic mode, however,
 only the quadratic interpolation metric is used, since the star metric
 restricts convergence to order h<sup>2</sup> while the quadratic interpolation
 metric permits h<sup>4</sup> convergence.
 <p>
-Example: Run square.fe, and refine twice.  Do "linear_metric" and "ritz(0,10)".
+Example: Run square.fe, and refine twice.  Do "<code class="code">linear_metric</code>" and
+ "<code class="code">ritz(0,10)</code>".
 <pre>
 Enter command: linear_metric
 Using linear interpolation metric with Hessian.
@@ -426,14 +447,14 @@ Iterations: 163. Total eigenvalue changes in last iteration: 1.9186042e-014
 </pre>
 This looks much more convergent.
 <p>
-Using linear_metric does NOT change the inertia of the Hessian, by
+Using <code>linear_metric</code> does NOT change the inertia of the Hessian, by
 Sylvester's Law of Inertia.  So the moral of the story is that if
-you care only about stability, you don't need to use linear_metric.
+you care only about stability, you don't need to use <code>linear_metric</code>.
 If you do care about the actual values of eigenvectors, and want them
-relatively independent of your triangulation, then use linear_metric.
+relatively independent of your triangulation, then use <code>linear_metric</code>.
 
 
-<hr><a name="hessian normal mode"></a><h2>
+<hr><a   id="hessian-normal-mode"></a><h2>
 9.  Normal motion mode. </h2>
 
 The alert reader will have notice that in the examples so far there
@@ -445,8 +466,9 @@ the two degrees of freedom of motion of a vertex tangential to the
 surface.  The reason is that tangential motion changes the energy
 of the surface very little if at all, leading to many small eigenvalues
 and a severely singular Hessian.  For example, run square.fe, refine twice,
-and do "hessian_normal off" to enable all degrees of freedom.  Now
-"eigenprobe 0" reveals 50 zero eigenvalues:
+and do "<code class="shortcode">hessian_normal off</code>" to 
+enable all degrees of freedom.  Now
+"<code class="shortcode">eigenprobe 0</code>" reveals 50 zero eigenvalues:
 <pre>Enter command: hessian_normal off
 hessian_normal OFF. (was on)
 Enter command: eigenprobe 0
@@ -454,13 +476,13 @@ Eigencounts:    0 &lt;,  50 ==,  25 &gt;
 </pre>
 For a curved surface, the extra eigenvalues generally won't be zero, but
 they will all be close to zero, both positive and negative, which can
-really foul things up.  The default value of hessian_normal is therefore
+really foul things up.  The default value of <code>hessian_normal</code> is therefore
 the ON state.  The moral of the story is to always leave hessian normal
 on, unless you really really know what you are doing.
 <p>
 On some surfaces, for example soap films with triple junctions and
 tetrahedral points, there are vertices with no natural normal vector.
-Evolver hessian_normal mode assigns those points normal subspaces
+Evolver <code>hessian_normal</code> mode assigns those points normal subspaces
 instead, so that vertices on a triple line can move in a two-dimensional
 normal space perpendicular to the triple line, and tetrahedral points
 can move in all three dimensions.
@@ -504,19 +526,20 @@ positive eigenvalue.  This effect decreases with refinement.
 <p>
 There are times when the normal direction is not the direction
 one wants.  If one knows the perturbation direction, one can use
-the <a href="datafile.htm#hessian_special_normal_vector">
+the <a href="datafile.htm#hessian_special_normal_vector" class="keyword">
 hessian_special_normal</a> feature to use that instead of the default
 normal. Beware that
 hessian_special_normal also applies to the normal calculated by
-the  <a href="elements.htm#vertexnormal">vertexnormal</a> attribute and the normal
+the  <a href="elements.htm#vertex_normal" class="keyword">vertex_normal</a> 
+attribute and the normal
  used by regular <a href="commands.htm#vertex_average">vertex averaging</a>. 
 
-<hr><a name="eigenvector visualization"></a><h2>
+<hr><a   id="eigenvector-visualization"></a><h2>
 10.  Visualizing eigenvectors.</h2>
 
 Naturally, you want to see what various modes look like.  At present.
 Evolver can do this through a subsidiary menu invoked by the 
-command "<a href="commands.htm#hessian_menu">hessian_menu</a>".  
+command "<a href="commands.htm#hessian_menu" class="keyword">hessian_menu</a>".  
 This is a menu I use to test out various Hessian-related features.  
 
 <table>
@@ -526,7 +549,7 @@ This is a menu I use to test out various Hessian-related features.
 <td>
 1 </td><td>Initialize Hessian.</td></tr>
 <tr>
-<td valign="top">
+<td style="vertical-align:text-top">
 Z </td><td> Do ritz calculation of multiple eigenpairs.  This 
            prompts for a shift value.  Pick a value near the 
            eigenvalues you want, preferably below them so the
@@ -535,7 +558,7 @@ Z </td><td> Do ritz calculation of multiple eigenpairs.  This
            approximations are printed as they converge.  You
            can stop the iterations with a keyboard interrupt.</td></tr>
 <tr>
-<td valign="top">
+<td  style="vertical-align:text-top" >
 X </td><td>Pick which eigenvector you want to use for moving.
  You can enter
 the eigenvector by its number in the list from the  Z option.
@@ -543,18 +566,18 @@ As a special bonus useful when there are multiple eigenvectors for an
 eigenvalue, you can enter the vector as a linear combination of
 eigenvectors, e.g. "0.4 v1 + 1.3 v2 - 2.13 v3".</td></tr>
 <tr>
-<td valign="top">
+<td style="vertical-align:text-top">
 4   </td><td> Move.  This prompts you for a scale factor. 1 is a
            reasonable first guess.  If it is too big or too
            small, option 7 restores the original surface so
            you can try option 4 again.</td></tr>
 <tr>
-<td valign="top">
+<td style="vertical-align:text-top" >
 7 </td><td>Restore original surface.  Do this unless you want
            your surface to stay moved when you exit hessian_menu.
            Can repeat cycle by doing option X again.</td></tr>
 <tr>
-<td valign="top">
+<td style="vertical-align:text-top" >
  q </td><td>Quit back to main prompt.  The surface is not
            automatically restored to its original state.  Be 
            sure to do option 7 before quitting if you don't
@@ -589,16 +612,32 @@ Do option 7 to get back to the orignal.  By doing the cycle of options
 x, 4, and 7 you should be able to look at all the eigenmodes found
 by the ritz command.
 
+<p>  The eigenvector components used to move vertices are stored
+in the v_velocity vertex vector attribute, so you may access them
+after exiting hessian_menu, for example <pre>
+  set vertex __x   __x + 0.5*v_velocity
+</pre>
 
+<b>Ragged-looking eigenvectors:</b> If you have a volume constraint
+and make a large move to show an eigenvector, you may get a bumpy
+shape instead of the smooth shape you were expecting.  This is because
+the surface is projected to the volume constraint after moving in
+the eigenvector direction.  The eigenvector itself is smooth, but
+the projection back to the target volume uses the volume gradient,
+which depends very much on the triangulation and need not be smooth.
+To see the eigenvector without volume projection, from a command
+prompt you can do <pre>
+  set vertex __x   __x + 0.5*v_velocity
+</pre>
 
 
 <p>
 Hessian_menu can do sundry  other things, mostly for my use in
 debugging.  Would-be gurus can
-consult the <a href="commands.htm#hessian_menu">hessian_menu</a>
+consult the <a href="commands.htm#hessian_menu" class="keyword">hessian_menu</a>
 command documentation for a smorgasbord of more things to do with the Hessian.
 
-<hr><a name="hessian iteration"></a>
+<hr><a   id="hessian-iteration"></a>
 <h2>11. Hessian iteration.</h2>
 
 Or how to converge really really fast.
@@ -607,19 +646,19 @@ Suppose we assume the quadratic approximation to the surface energy is a
 good one.  Then we can find an equilibrium point by solving for 
 motion Y that makes the energy gradient zero. Recalling that G and 
 H depend only on X, the energy gradient as a function of Y is
-<blockquote><tt>
+<pre>
 	  grad E = G<sup>T</sup> + Y<sup>T</sup> H.
-</tt></blockquote>
+</pre>
 So we want G<sup>T</sup> + Y<sup>T</sup> H = 0, or transposing,
-<blockquote><tt>
+<pre>
 	   G + H Y = 0.
-</tt></blockquote>
+</pre>
 Solving for Y gives
-<blockquote><tt>
+<pre>
 	    Y = - H<sup>-1</sup> G.
-</tt></blockquote>
+</pre>
 This is actually the Newton-Raphson Method applied to the gradient.
-The Evolver's "<a href="commands.htm#hessian command">hessian</a>" 
+The Evolver's "<a href="commands.htm#hessian-command" class="keyword">hessian</a>" 
 command does this calculation and
 motion.  It works best when the surface is near an equilibrium
 point.  It doesn't matter if the equilibrium is a minimum,
@@ -627,12 +666,12 @@ a saddle, or a maximum.  However, nearness does matter. Remember
 we are dealing with thousands of variables, and you don't have
 to be very far away from an equilibrium for the equilibrium
 to not be within the scope of the quadratic approximation.
-When it does work, "hessian" will converge very quickly,
+When it does work, <code>hessian</code> will converge very quickly,
 4 or 5 iterations at most.  
 <p>
 Example: Start with the cube datafile cube.fe.
-Evolve with "r; g 5; r; g 5;". This gets
-very close to an equilibrium. Doing "hessian" a couple of times
+Evolve with "<code class="shortcode">r; g 5; r; g 5;</code>". This gets
+very close to an equilibrium. Doing <code>hessian</code> a couple of times
 gets to the equilibrium:
 <pre>
 Enter command: hessian
@@ -645,27 +684,27 @@ Enter command: hessian
 So Hessian iteration converged in two steps.  Furthermore, this is 
 a local minimum rather than a saddle point, since Evolver did not
 complain about a non-positive definite Hessian. 
-<p>NOTE: The  hessian command will work with indefinite Hessians,
+<p>NOTE: The  <code>hessian</code> command will work with indefinite Hessians,
 as long as there are no eigenvalues too close to zero.
 The warning about non-positive definite is for your information;
-it is does not mean hessian has failed.
+it is does not mean <code>hessian</code> has failed.
 <p>
 
-<hr> <a name="hessian_seek"></a>
+<hr> <a   id="hessian_seek"></a>
 <h2> 12. Hessian_seek.</h2>
 
 
 Even when the Hessian is positive definite, a hessian iteration
 may blow up since the surface is not near enough to the minimum
 for the Hessian approximation to be valid.  For this circumstance,
-the hessian_seek command does the same calculation as the hessian
+the <code>hessian_seek</code> command does the same calculation as the <code>hessian</code>
 command, except it does a line search along the direction of motion
 for the minimum energy instead of jumping directly to the supposed
-equilibrium.  Basically, it does the same thing as the 'g' command in
+equilibrium.  Basically, it does the same thing as the '<code>g</code>' command in
 optimizing mode, except using the hessian solution instead of the
 gradient.
 <p>
-<b>Cube example.</b> Run cube.fe, do g, r, and hessian_seek.
+<b>Cube example.</b> Run cube.fe, and do "<code class="shortcode">g; r; hessian_seek"</code>.
 <pre>Enter command: g
   0. area:  5.13907252918614 energy:  5.13907252918614  scale: 0.185675
 Enter command: r
@@ -675,31 +714,32 @@ Total data memory: 299082 bytes.
 Enter command: hessian_seek
   1. area:  4.91067149153091 energy:  4.91067149153091  scale: 0.757800
 </pre>
-This is kind of a trivial example, since hessian doesn't blow up here.
-But in general, when in doubt that hessian will work, use hessian_seek.
-If hessian_seek reports a scale near 1, then it is probably safe to
-use hessian to get the last few decimal places of convergence.
-Hessian_seek cannot be as accurate as hessian at final convergence,
-since hessian_seek uses differences of energies, which are very
+This is kind of a trivial example, since <code>hessian</code> doesn't blow up here.
+But in general, when in doubt that hessian will work, use <code>hessian_seek</code>.
+If <code>hessian_seek</code> reports a scale near 1, then it is probably safe to
+use <code>hessian</code> to get the last few decimal places of convergence.
+<code>Hessian_seek</code> cannot be as accurate as <code>hessian</code> at final convergence,
+since <code>hessian_seek</code> uses differences of energies, which are very
 small near the minimum.
 <p>
-Hessian_seek is safe to use even when the Hessian is not positive
+<code>Hessian_seek</code> is safe to use even when the Hessian is not positive
 definite.  I have sometimes found it surprisingly effective even 
 when the surface is nowhere near a minimum.
 
-<hr><a name="saddle example"></a>
+<hr><a   id="saddle-example"></a>
 <h2> 13. Saddle.</h2>
 
 Sometimes your surface may reach a saddle point of energy where gradient
 descent becomes very very slow or even useless.  Or you may be wanting
 to use hessian, but there are pesky negative eigenvalues.  The obvious
 thing to do is pick a negative eigenvalue and move in the eigenvector
-direction.  You could do it by hand with hessian_menu, but the "saddle"
+direction.  You could do it by hand with <code>hessian_menu</code>, but the 
+<code>saddle</code>
 command packages it all nicely.  It finds the most negative eigenvector
 and does a line search in that direction for the lowest energy.
 To see an example, run catbody.fe with the following evolution:
-<p> <img src="catbody-saddle.gif" align="right" alt="catenoid">
-<img src="catbody.gif" align="right" alt="catenoid">
+<p> <img src="catbody-saddle.gif"  alt="catenoid">  &nbsp;&nbsp;&nbsp;
+<img src="catbody.gif" alt="catenoid">
 <pre> u
  body[1].target := 4
  g 5
@@ -712,21 +752,23 @@ To see an example, run catbody.fe with the following evolution:
  eigenprobe 0
  saddle
 </pre>
-Further evolution after "saddle" is necessary to find the lowest
-energy surface; "saddle" just gives an initial push.
-It is not necessary to run "eigenprobe 0" first; if saddle finds no
+Further evolution after <code>saddle</code> is necessary to find the lowest
+energy surface; <code>saddle</code> just gives an initial push.
+It is not necessary to run "<code class="shortcode">eigenprobe 0</code>" first; 
+if <code>saddle</code> finds no
 negative eigenvalues, it says so and exits without moving the surface.
 
 <p>
 Saddle is safe to use even when nowhere near an equilibrium point.
 
-<hr><a name="unstable surfaces"></a><h2>
+<hr><a   id="unstable-surfaces"></a><h2>
 14. Detecting the onset of instability and evolving unstable surfaces.</h2>
 
 The Hessian features can be used to detect the onset of instability
 as some parameter changes, and even evolve unstable equilibrium surfaces.
 <p>
-Instability detection is done by watching eigenvalues with the ritz
+Instability detection is done by watching eigenvalues with the
+<a href="commands.htm#ritz" class="keyword">ritz</a>
 command.  As an example, consider a ring of liquid outside a cylinder, with
 the volume increasing until the symmetric ring becomes unstable.  This
 is set up in the datafile catbody.fe, which is just cat.fe with a body
@@ -790,8 +832,8 @@ for the next paragraph.
 <b>Evolving into unstable territory</b>
 Typically these are surfaces with just a few unstable modes.
 The idea is to get close to the desired equilibrium and use
-"hessian" to reach it. 
-Regular 'g' gradient descent
+<code>hessian</code> to reach it. 
+Regular '<code>g</code>' gradient descent
  iteration should not be used.  To change the surface,
 i.e. to follow an equilibrium curve through a phase diagram,
 make small changes to the control parameter and use a couple of
@@ -805,7 +847,7 @@ when a surface introduces new modes of instability.
 <p>
 Example: Catbody.fe, continued.  With catbody.fe in the nearly-critical
 state found above, increase the body volume by steps of .1 and run
-hessian a couple of times each step:
+<code>hessian</code> a couple of times each step:
 <pre> body[1].target += .1
  hessian
  hessian
@@ -822,7 +864,7 @@ hessian a couple of times each step:
  hessian
  hessian
 </pre>
-So hessian alone is enough to evolve with, as long as you stay
+So <code>hessian</code> alone is enough to evolve with, as long as you stay
 near enough to the equilibrium.
 <p>
 Other methods for evolving unstable surfaces:
@@ -840,7 +882,7 @@ For example, unstable catenoids can be made stable by adding a
 volume constraint and adjusting the volume until the pressure is 0.
 </ul>
 
-<hr><a name="eigenvalue accuracy"></a>
+<hr><a   id="eigenvalue-accuracy"></a>
 <h2> 15.  Eigenvalue Accuracy.</h2>
 For the hard-core Evolver guru.
 <p>
@@ -849,8 +891,8 @@ The question here is how well the eigenvalues of the discrete surface
 approximate the eigenvalues of the smooth surface.  This is significant
 when deciding the stability of a surface.  I present some comparisons
 in cases where an analytic result is possible. All are done in
-<a href="#hessian normal mode">hessian_normal</a> mode with 
-<a href="#hessian metric">linear_metric</a>.
+<a href="#hessian-normal-mode" class="keyword">hessian_normal</a> mode with 
+<a href="#hessian-metric" class="keyword">linear_metric</a>.
 <p>
 Any general theorem on accuracy is difficult, since any of
 these situations may arise:
@@ -958,17 +1000,17 @@ In quadratic mode (net 4 times as many vertices per facet)
 14.   12.1019587927495  10.1262981044110 10.0089922470904 10.0005516797052
 15.   12.6934178610912  10.1478397915001 10.0106695599620 10.0007050467653
 </pre>
-<hr><a name="hessian caveats"></a><h2>
+<hr><a   id="hessian-caveats"></a><h2>
 16. Caveats and warnings.</h2>
 
 When not near enough to an equilibrium, incautious use of 
-"<a href="commands.htm#hessian command">hessian</a>" 
+<a href="commands.htm#hessian-command" class="keyword">hessian</a>
 can wreck a surface.  If you don't know what's going to happen,
 save the surface first.  Or use hessian_seek.
- Or use <a href="commands.htm#hessian_menu">
+ Or use <a href="commands.htm#hessian_menu" class="keyword">
 hessian_menu</a>, where you can restore
-the surface with option 7.  Or set "<a href="toggle.htm#check_increase">
-check_increase</a>", which will 
+the surface with option 7.  Or set <a href="toggle.htm#check_increase" class="keyword">
+check_increase</a>, which will 
 abort a hessian iteration that would increase energy.  But remember
 sometimes hessian should increase energy, for example to satisfy
 a volume constraint or reach an unstable equilibrium.
@@ -976,24 +1018,26 @@ a volume constraint or reach an unstable equilibrium.
 <p>
 Not all energies have built-in Hessians.  If Evolver complains about
 lacking a Hessian for a particular energy,  you will either have
-to forego hessian or find a way to phrase your problem in terms
+to forego <code>hessian</code> or find a way to phrase your problem in terms
 of an energy with a Hessian.
 
 <p>
 There are three methods of sparse matrix factoring built into Evolver:
 YSMP (Yale Sparse Matrix Package), my own minimal degree algorithm, and
-<a href="install.htm#metis install">METIS</a> recursive bisection.  
-The <a href="toggle.htm#ysmp">ysmp</a> and <a href="toggle.htm">
+<a href="install.htm#metis-install">METIS</a> recursive bisection.  
+The <a href="toggle.htm#ysmp" class="keyword">ysmp</a> and 
+<a href="toggle.htm#metis_factor" class="keyword">
 metis_factor</a> toggles can be used to control which is active.
-METIS is the best overall, particularly on large surfaces, but requires
+<code>Metis</code> is the best overall, particularly on large surfaces, but requires
 a separate download and compilation of the METIS library (but it's easy;
-see the <a href="install.htm#metis install">installation</a> instructions).
+see the <a href="install.htm#metis-install">installation</a> instructions).
 
 <hr>
-<a href="#hessian tutorial">back to Hessian top</a>
+<a href="#hessian-tutorial">back to Hessian top</a>
 
 <hr>
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 </body>
 </html>

@@ -21,8 +21,9 @@
 *                current object.
 */
 
-void display_file(arg)
-int arg; /* menu choice; -1 to invoke user dialog */
+void display_file(
+  int arg /* menu choice; -1 to invoke user dialog */
+) 
 {
   char response[100];
   REAL val;
@@ -64,7 +65,7 @@ int arg; /* menu choice; -1 to invoke user dialog */
      { ps_colorflag = gridflag = labelflag = crossingflag = -1; }
     do_gfile('0'+arg,NULL);
   }
-}
+} // end display_file()
 
 /***********************************************************************
 *
@@ -74,22 +75,24 @@ int arg; /* menu choice; -1 to invoke user dialog */
 *          graphics drivers.
 */
 
-void do_gfile(choice,fname)
-int choice;
-char *fname;
+void do_gfile(
+  int choice,  // type of graphics file to do
+  char *fname
+)
 {
   /* for saving old graphics state */
-  void (*old_edge)ARGS((struct tsort *)); 
-  void (*old_facet)ARGS((struct tsort *));
-  void (*old_gfacet)ARGS((struct graphdata *,facet_id)); 
-  void (*old_gedge)ARGS((struct graphdata *,edge_id));
-  void (*old_init)ARGS((void));
-  void (*old_finish)ARGS((void));
-  void (*old_start)ARGS((void));
-  void (*old_end)ARGS((void));  
+  void (*old_edge)(struct tsort *); 
+  void (*old_facet)(struct tsort *);
+  void (*old_gfacet)(struct graphdata *,facet_id); 
+  void (*old_gedge)(struct graphdata *,edge_id);
+  void (*old_init)(void);
+  void (*old_finish)(void);
+  void (*old_start)(void);
+  void (*old_end)(void);  
+
+  if ( torus_display_mode == TORUS_DEFAULT_MODE ) ask_wrap_display();
 
   ENTER_GRAPH_MUTEX      
-  if ( torus_display_mode == TORUS_DEFAULT_MODE ) ask_wrap_display();
   switch ( toupper(choice) )
   {
     case 0: /* null file with painter, for bounding box */
@@ -108,9 +111,9 @@ char *fname;
        finish_graphics = null_function;
        graph_start = painter_start;
        graph_edge  = painter_edge;
-       display_edge = (void (*)ARGS((struct tsort *))) null_function;
+       display_edge = (void (*)(struct tsort *)) null_function;
        graph_facet = painter_facet;
-       display_facet =  (void (*)ARGS((struct tsort *)))null_function;
+       display_facet =  (void (*)(struct tsort *))null_function;
        graph_end = painter_end;
        need_bounding_box = 1;
        edgewidths = otherwidths;
@@ -290,6 +293,27 @@ char *fname;
        graph_edge = old_gedge;
        break;
 
+ 
+    case 'D': /* for detorus() */
+       old_start   = graph_start;
+       old_end     = graph_end;
+       old_gfacet  = graph_facet;
+       old_gedge   = graph_edge;
+       graph_start = detorus_start;
+       graph_edge  = detorus_edge;
+       graph_facet = detorus_facet;
+       graph_end   = detorus_end;
+
+       /* do output */
+       graphgen();
+
+       /* restore old graphics */
+       graph_start = old_start;
+       graph_end   = old_end;
+       graph_facet = old_gfacet;
+       graph_edge  = old_gedge;
+       break;
+
     case '8': /* interactive geomview */
        Begin_geomview(fname);
        go_display_flag = 1;  /* default autodisplay */
@@ -320,7 +344,8 @@ char *fname;
   }
   LEAVE_GRAPH_MUTEX 
   inner_clip_flag = 0; /* turn off inner clipping */
-}
+
+} // end do_gfile()
 
 /*****************************************************************
 *
@@ -332,16 +357,25 @@ char *fname;
 *
 */
 
-REAL gray_level(normal)
-float *normal;
+REAL gray_level(float *normal)
 { REAL cosine;
   REAL denom;
   denom = sqrt(dotf(normal,normal,3));
   if ( denom == 0.0 ) return 0.0;
-  cosine = normal[1]/denom;
-  if ( (REAL)normal[2] < 0.0 ) return brightness - 0.9*(1-brightness)*cosine;
+  if ( rotate_lights_flag )
+  { REAL mag = sqrt(view[0][2]*view[0][2]+view[1][2]*view[1][2]
+                  + view[2][2]*view[2][2]);
+    cosine = (normal[2]*view[0][2]+normal[0]*view[1][2]+normal[1]*view[2][2])
+               /denom/mag;
+    return brightness + 0.9*(1-brightness)*fabs(cosine);
+  }
+  else
+    cosine = normal[1]/denom;
+  if ( (REAL)normal[2] < 0.0 ) 
+    return brightness - 0.9*(1-brightness)*cosine;
   return brightness + 0.9*(1-brightness)*cosine;
-}
+
+} // end gray_level()
 
 /********************************************************************
 *
@@ -354,10 +388,9 @@ float *normal;
 static int trans_max = 500;
 static REAL ***work_transforms;
 
-void generate_transforms(depth)
-int depth;
+void generate_transforms(int depth)
 { int start,stop; /* range of transforms to apply gens to */
-  int i,j,k,m,n,level;
+  int i,j,k,n,level;
   MAT2D(temp_mat,MAXCOORD+1,MAXCOORD+1);
 
   /* clean up old stuff */
@@ -371,6 +404,7 @@ int depth;
   work_transforms = dmatrix3(depth+1,SDIM+1,SDIM+1);
   matcopy(work_transforms[0],identmat,SDIM+1,SDIM+1);
 
+   ENTER_GRAPH_MUTEX;
 restart:
   if ( view_transforms ) free_matrix3(view_transforms);
   view_transforms = dmatrix3(trans_max,SDIM+1,SDIM+1);
@@ -386,26 +420,14 @@ restart:
   for ( level = 2 ; level <= depth ; level++ )
   { start = stop; stop = transform_count;
     for ( n = start ; n < stop ; n++ )
-     for ( i = 0 ; i < transform_gen_count ; i++ )
-     { mat_mult(view_transform_gens[i],view_transforms[n],
+    { for ( i = 0 ; i < transform_gen_count ; i++ )
+      { mat_mult(view_transform_gens[i],view_transforms[n],
           view_transforms[transform_count],SDIM+1,SDIM+1,SDIM+1);
-       /* see if already have, by crude linear search */
-       for ( j = 0 ; j < transform_count ; j++ )
-       { /* compare */
-         for ( k = 0 ; k < SDIM + 1 ; k++ )
-           for ( m = 0 ; m < SDIM+1 ; m++ )
-             if ( fabs(view_transforms[transform_count][k][m]
-                     -view_transforms[j][k][m]) > 1e-6 )  
-               goto different;
-           /* same */ 
-           goto same;
-different: ;  /* continue search */
-       }
-       /* now know have new transform */
-       transform_count++;
-       if ( transform_count >= trans_max ) { trans_max *= 2; goto restart; }
-same: ;
+        transform_count++;
+        if ( transform_count >= trans_max ) { trans_max *= 2; goto restart; }
+      }
     }
+    transform_count = mat_simplify(view_transforms,transform_count);
   }
   if ( view_transform_det ) myfree((char*)view_transform_det);
   view_transform_det = (int*)mycalloc(transform_count,sizeof(int));
@@ -431,6 +453,7 @@ same: ;
        view_transform_det[n] = 1;
     else  view_transform_det[n] = -1;
   }
+  LEAVE_GRAPH_MUTEX;
   free_matrix3(work_transforms);
 } /* end generate_transforms() */
 
@@ -443,15 +466,14 @@ same: ;
 *                quasi-regular expression.
 *  Expression syntax:
 *      G is nonterminal, represents set of transforms
+*      Rules, in precedence order
 *      G ::=  letter - corresponding generator, a - z, G = {I,a}
-*                       but a! generates only {a}
-*      G ::=  GG      - all ordered products
 *      G ::=  G|G     - union
+*      G ::=  GG      - all ordered products
 *      G ::=  nG      - all ordered n-fold products
+*      G ::=  !G      - delete identity matrix from G
 *      G ::=  (G)     - for precedence, same set
-*      Leading ! in string means do not include identity transform, even
-*             if generated by other transforms.
-*          
+*      
 *  Sets global variable view_transforms to matrix list allocated with dmatrix3()
 *  Sets global variable transform_count
 */
@@ -464,7 +486,7 @@ struct stack {        /* parsing stack */
       int *swapcolor; /* list of front-back swap color flags */
     };
 #define SMAX 100
-/* types */
+/* types */ 
 #define G_START 0
 #define G_NUM 1
 #define G_SET 2
@@ -473,23 +495,41 @@ struct stack {        /* parsing stack */
 #define G_RIGHT 5
 #define G_LBRACKET 6
 #define G_SINGLE 7
+#define G_NO_IDENTITY 8
  
-int matcomp ARGS((REAL***,REAL***));
+int matcomp (REAL***,REAL***);
 
-int matcomp(a,b)  /* lexicographic comparison of matrices */
-REAL ***a,***b;
-{ int i,j;
+/* lexicographic comparison of matrices, used by transform_gen_expr() */
+int matcomp(REAL ***a, REAL***b)
+{ int i,j,k;
   REAL *aa,*bb;
+  
+   /* see if give same image of user-chosen point */
+  if ( view_transforms_unique_point_flag )
+  { /* lexicographical comparison of image of unique point */
+    REAL image_new[MAXCOORD],image_old[MAXCOORD];
+    view_transforms_unique_point[SDIM] = 1.0; /* homogeneous */
+    matvec_mul(*a,view_transforms_unique_point,image_new,SDIM+1,SDIM+1);
+    matvec_mul(*b,view_transforms_unique_point,image_old,SDIM+1,SDIM+1);
+    for ( k = 0 ; k < SDIM ; k++ )
+    { if ( (image_old[k]/image_old[SDIM]-image_new[k]/image_new[SDIM]) > dt_eps ) return -1;
+      if ( (image_old[k]/image_old[SDIM]-image_new[k]/image_new[SDIM]) < -dt_eps ) return 1;
+    }  
+    return 0;
+  }
+   
   for ( i = 0 ; i <= SDIM ; i++ )
     for ( j = 0,aa = a[0][i],bb = b[0][i] ; j <= SDIM ; j++,aa++,bb++ )
     { if ( *aa < *bb-1e-6 ) return -1;
       else if ( *aa > *bb+1e-6 ) return 1;
     }
+    
   return 0; /* equal, within error */
-}
 
-void transform_gen_expr(expr)
-char *expr;
+} // end matcomp()
+
+/* And now the function itself */
+void transform_gen_expr(char *expr)
 {   int errnum = 0;
     struct stack stack[SMAX];
     int stacktop;
@@ -499,21 +539,19 @@ char *expr;
     int i,j,k,n,m;
     int old_count;
     REAL ***old_mats;
-    REAL ***id;
     MAT2D(temp_mat,MAXCOORD+1,MAXCOORD+1);
-    int no_identity = 0;
 
     if ( expr[0] == 0 ) /* empty transform string */
-    { stacktop = 1 ; stack[1].count = 0; 
+    { stacktop = 1 ; stack[1].count = 1; 
       stack[stacktop].mats = dmatrix3(1,SDIM+1,SDIM+1);
+      matcopy(stack[stacktop].mats[0],identmat,SDIM+1,SDIM+1);
       goto skip_stuff;
     }
 
     stacktop = 0;
     stack[stacktop].type = G_START;
     c =  expr;
-    if ( *c == '!' ) 
-    { no_identity = 1; c++; }
+
     while ( *c || (stacktop > 1) )
     { /* test first for reduction */
       if ( stack[stacktop].type == G_SET )
@@ -585,6 +623,31 @@ char *expr;
                 stack[stacktop].mats = new_mats;
                 stack[stacktop].type = G_SET;
                 continue;
+
+             case G_NO_IDENTITY: /* strip out identity matrix */
+                /* move set down in stack */
+                stacktop -= 1;
+                stack[stacktop].type = G_SET;
+                stack[stacktop].count = stack[stacktop+1].count;
+                stack[stacktop].mats = stack[stacktop+1].mats;
+                /* search for and remove identity */
+                for ( j = 0 ; j < stack[stacktop].count ; j++ )
+                { for ( m = 0 ; m <= SDIM ; m++ )
+                    for ( n = 0 ; n <= SDIM ; n++ )
+                      if ( stack[stacktop].mats[j][m][n] != identmat[m][n] )
+                      { n = m = 100;
+                        break;
+                      }
+                  if ( m == SDIM+1 )
+                  { // remove matrix by replacing with last one
+                    if ( j < stack[stacktop].count-1 )
+                      matcopy(stack[stacktop].mats[j],stack[stacktop].mats[stack[stacktop].count-1],SDIM+1,SDIM+1);
+                    stack[stacktop].count--;
+                  }
+                }
+                continue;
+
+ 
              } /* end switch */
          }
          else if ( stack[stacktop].type == G_RIGHT )
@@ -619,17 +682,11 @@ char *expr;
         }
         /* set up set */
         stack[++stacktop].type = G_SET;
-        if ( c[1] == '!' ) /* exclude identity */
-        { stack[stacktop].count = 1;
-          stack[stacktop].mats = dmatrix3(1+1,SDIM+1,SDIM+1);
-          matcopy(stack[stacktop].mats[0],view_transform_gens[n],SDIM+1,SDIM+1);
-          c++;
-        } else /* include identity */
-        { stack[stacktop].count = 2;
-          stack[stacktop].mats = dmatrix3(2+1,SDIM+1,SDIM+1);
-          matcopy(stack[stacktop].mats[0],identmat,SDIM+1,SDIM+1);
-          matcopy(stack[stacktop].mats[1],view_transform_gens[n],SDIM+1,SDIM+1);
-        }
+        /* include identity */
+        stack[stacktop].count = 2;
+        stack[stacktop].mats = dmatrix3(2+1,SDIM+1,SDIM+1);
+        matcopy(stack[stacktop].mats[0],identmat,SDIM+1,SDIM+1);
+        matcopy(stack[stacktop].mats[1],view_transform_gens[n],SDIM+1,SDIM+1);      
 
         if ( transform_gen_swap[n] )
           for ( i = 0 ; i <= SDIM ; i++ )
@@ -648,6 +705,7 @@ char *expr;
       else if ( *c == '|' ) { stack[++stacktop].type = G_OR; c++; }
       else if ( *c == '[' ) { stack[++stacktop].type = G_LBRACKET; c++; }
       else if ( *c == ']' ) { stack[++stacktop].type = G_RIGHT; c++; }
+      else if ( *c == '!' ) { stack[++stacktop].type = G_NO_IDENTITY; c++; }
       else if ( (*c==' ')||(*c=='\t') ) c++ ;
       else { sprintf(errmsg,"Illegal character '%c' in transform expression.\n",
                     *c);
@@ -662,33 +720,22 @@ char *expr;
     errnum = 2604;
     goto err_exit;
   }
-  strncpy(transform_expr,expr,sizeof(transform_expr));
 
 skip_stuff:
-  /* put identity at the head of the list, if not excluded */
-  id = (REAL***)bsearch((char*)&identmat,(char*)stack[1].mats,stack[1].count,
-            sizeof(REAL**), FCAST  matcomp);
-  if ( no_identity )
-  { if ( id )
-      *id = stack[1].mats[--stack[1].count];
+    
+  strncpy(transform_expr,expr,sizeof(transform_expr));
+
+  // Make sure identity matrix is first, if present
+  if ( matcomp(stack[1].mats+0,&identmat) != 0 )
+  { for ( n = 1 ; n < stack[1].count ; n++ )
+      if ( matcomp(stack[1].mats+n,&identmat) == 0 )
+      { matcopy(stack[1].mats[n],stack[1].mats[0],SDIM+1,SDIM+1);
+        matcopy(stack[1].mats[0],identmat,SDIM+1,SDIM+1);
+        break;
+      }        
   }
-  else
-  { if ( id && (*id != stack[1].mats[0]) )
-    { REAL **mat = stack[1].mats[0];
-      stack[1].mats[0] = *id;
-      *id = mat;
-    }
-    else if ( !id )
-    {
-      for ( i = 0 ; i <= SDIM ; i++ )
-        for ( j = 0 ; j <= SDIM ; j++ )
-        { stack[1].mats[stack[1].count][i][j] = stack[1].mats[0][i][j];
-          stack[1].mats[0][i][j] = ( i==j ) ? 1.0 : 0.0;
-        }
-      stack[1].count++;
-    }
-  }
-  
+
+  // Install
   ENTER_GRAPH_MUTEX;
   transform_count = stack[1].count;
   if ( view_transforms ) free_matrix3(view_transforms);
@@ -732,9 +779,10 @@ err_exit:
 * return value: number of distinct matrices left
 */
 
-int mat_simplify(mats,count)
-REAL ***mats;
-int count;
+int mat_simplify(
+  REAL ***mats,
+  int count
+)
 { int newcount;
   int i;
 

@@ -6,7 +6,7 @@
 
 /******************************************************************
 *
-*    file:        knotenergy.c
+*    file:        knot1.c
 *
 *    Contents:  Functions calculating knot energy and its gradient
 *
@@ -31,12 +31,12 @@ static REAL ke_power;         /* half of power */
 int charge_attr = -1;
 
 /* prototypes to keep some compilers happy */
-REAL radp ARGS((REAL *, REAL *, REAL *));
-REAL dradp ARGS((REAL*, REAL*, REAL*, REAL*, REAL));
-void xfacet_knot_energy_init ARGS((int,struct method_instance *));
-REAL xfacet_knot_energy ARGS(( struct qinfo *));
-REAL xfacet_knot_energy_gradient ARGS(( struct qinfo *));
-REAL rad ARGS((REAL*,REAL*,REAL*));
+REAL radp(REAL *, REAL *, REAL *);
+REAL dradp(REAL*, REAL*, REAL*, REAL*, REAL);
+void xfacet_knot_energy_init(int,struct method_instance *);
+REAL xfacet_knot_energy( struct qinfo *);
+REAL xfacet_knot_energy_gradient( struct qinfo *);
+REAL rad(REAL*,REAL*,REAL*);
 
 /***************************************************************
 *
@@ -45,9 +45,10 @@ REAL rad ARGS((REAL*,REAL*,REAL*));
 *  purpose: initialization for all knot_energies which have variable power
 */
 
-void knot_power_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void knot_power_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 {
   charge_attr = find_attribute(VERTEX,CHARGE_ATTR_NAME);
           /* see if charge attribute */
@@ -67,7 +68,7 @@ struct method_instance *mi;
     ke_power_flag = -1;
   else if ( fabs(ke_power_i - ke_power) < 1e-12 && ke_power <= 150)
     ke_power_flag = 1;
-}
+} // end knot_power_init()
 
 #define ke_pow(r,p) \
  {if (ke_power_flag>0) {int i; for (p = r,i=1; i<ke_power_i; i++) p *= r;}\
@@ -83,8 +84,11 @@ struct method_instance *mi;
 *  written to only work in 3d
 */
 
-REAL radp(a, b, c)
-REAL *a, *b, *c;
+REAL radp(
+  REAL *a, 
+  REAL *b, 
+  REAL *c
+)
 {
   REAL vab[3], vbc[3], vca[3];
   REAL lab=0, lbc=0, lca=0, Area=0, rr, temp;
@@ -102,7 +106,7 @@ REAL *a, *b, *c;
   rr = 4*Area/(lab*lbc*lca); if (rr==0.) return 0;
   ke_pow(rr,temp);
   return temp;
-}
+} // end radp()
 
 
 /**************************************************************
@@ -114,8 +118,11 @@ REAL *a, *b, *c;
 *  written to only work in 3d
 */
 
-REAL rad(a, b, c)
-REAL *a, *b, *c;
+REAL rad(
+  REAL *a, 
+  REAL *b, 
+  REAL *c
+)
 {
 /******
   REAL vab[MAXCOORD], vbc[MAXCOORD], vca[MAXCOORD], Ar[MAXCOORD];
@@ -138,19 +145,24 @@ REAL *a, *b, *c;
   temp = vca[2]*vab[0]-vca[0]*vab[2]; Area += temp*temp;
 /*****/
   return sqrt(lab*lbc*lca/(4*Area));
-}
+} // end 
 
 /**************************************************************
 *
-*  function: dradp(a, b, c, result)
+*  function: dradp()
 *
 *  purpose: calculates gradient, w.r.t. a, of radp(a,b,c)
 *       and adds it (times mult) to result; returns radp (times mult).
 *  written to only work in 3d
 */
 
-REAL dradp(a, b, c, result, mult)
-REAL *a, *b, *c, *result, mult;
+REAL dradp(
+  REAL *a, 
+  REAL *b, 
+  REAL *c, 
+  REAL *result, 
+  REAL mult
+)
 {
   REAL vab[3], vbc[3], vca[3], Ar[3], tmp[3];
   REAL lab=0, lbc=0, lca=0, Area, rp, rr;
@@ -169,7 +181,7 @@ REAL *a, *b, *c, *result, mult;
   for ( i = 0 ; i < SDIM ; i++ )
     result[i] += mult*(vca[i]/lca - vab[i]/lab + tmp[i]/Area);
   return rp;
-}
+} // end dradp()
 
 /**************************************************************
 *
@@ -182,8 +194,7 @@ REAL *a, *b, *c, *result, mult;
 *
 */
 
-REAL knot_thickness_0(v_info)
-struct qinfo *v_info;
+REAL knot_thickness_0(struct qinfo *v_info)
 { REAL *a = get_coord(v_info->id), *b, *c;
   REAL thick = 0.0;  /* for this vertex */
   edge_id e_id;  /* edge to create triple */
@@ -196,7 +207,7 @@ struct qinfo *v_info;
     thick += radp(a,b,c);
   }
   return thick;
-}
+} // end knot_thickness_0()
 
 
 /**************************************************************
@@ -207,8 +218,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL knot_thickness_0_gradient(v_info)
-struct qinfo *v_info;
+REAL knot_thickness_0_gradient(struct qinfo *v_info)
 { REAL *a , *b, *c, *d;
   REAL thick = 0.0;  /* thickness at this vertex */
   edge_id e_id;  /* edge to create triple */
@@ -236,7 +246,7 @@ struct qinfo *v_info;
       dradp(a,c,d, v_info->grad[0], 1.);
   }
   return thick;
-}
+} // end knot_thickness_0_gradient()
 
 
 /**************************************************************
@@ -252,8 +262,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL knot_thickness(v_info)
-struct qinfo *v_info;
+REAL knot_thickness(struct qinfo *v_info)
 { REAL *a = get_coord(v_info->id), *b, *c;
   REAL r, thick = -1.;
   edge_id e_id;  /* edge to create triple */
@@ -267,7 +276,7 @@ struct qinfo *v_info;
     if (thick < 0 || r < thick) thick = r;
   }
   return thick; /* returns -1 if component only has 2 edges */
-}
+} // end knot_thickness()
 
 
 /**************************************************************
@@ -283,8 +292,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL knot_thickness2(v_info)
-struct qinfo *v_info;
+REAL knot_thickness2(struct qinfo *v_info)
 { REAL *a = get_coord(v_info->id), *b, *c;
   REAL r, thick = -1.;
   vertex_id v_id,w_id,w1_id,w2_id;  /* vertex and neighbors to create triple */
@@ -303,7 +311,7 @@ struct qinfo *v_info;
     if (thick < 0 || r < thick) thick = r;
   }
   return thick;
-}
+} // end knot_thickness2()
 
 /**************************************************************
 *
@@ -318,8 +326,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL knot_local_thickness(v_info)
-struct qinfo *v_info;
+REAL knot_local_thickness(struct qinfo *v_info)
 { REAL *a = get_coord(v_info->id), *b, *c;
   edge_id e_id;  /* edge to create triple */
 
@@ -329,7 +336,8 @@ struct qinfo *v_info;
   c = get_coord(get_edge_headv(e_id)); /* b and c are two nbrs of v */
 
   return rad(b,a,c);
-}
+} // end knot_local_thickness()
+
 
 /**************************************************************
 *
@@ -344,15 +352,13 @@ struct qinfo *v_info;
 *
 */
 
-REAL knot_thickness_id ARGS((vertex_id));
-REAL knot_thickness_id2 ARGS((vertex_id));
+REAL knot_thickness_id(vertex_id);
+REAL knot_thickness_id2(vertex_id);
 
-REAL knot_thickness_p2(v_info)
-struct qinfo *v_info;
+REAL knot_thickness_p2(struct qinfo *v_info)
 { return knot_thickness_id2(v_info->id); }
 
-REAL knot_thickness_id2(v_id)
-vertex_id v_id;
+REAL knot_thickness_id2(vertex_id v_id)
 { REAL *a = get_coord(v_id), *b, *c;
   REAL thick = 0.0;  /* for this vertex */
   vertex_id w_id,w1_id,w2_id;  /* vertex and neighbors to create triple */
@@ -367,10 +373,10 @@ vertex_id v_id;
     e_id = get_next_tail_edge(e_id);  /* assuming two edges per vertex */
     if ((w2_id = get_edge_headv(e_id))==v_id) continue;
     c = get_coord(w2_id);
-    thick += radp(a,b,c) * get_vertex_star(w_id);
+    thick += radp(a,b,c) * get_vertex_length_star(w_id);
   }
-  return thick * get_vertex_star(v_id);
-}
+  return thick * get_vertex_length_star(v_id);
+} // end knot_thickness_id2()
 
 
 /**************************************************************
@@ -385,8 +391,7 @@ vertex_id v_id;
 *
 */
 
-REAL knot_thickness_p2_gradient(v_info)
-struct qinfo *v_info;
+REAL knot_thickness_p2_gradient(struct qinfo *v_info)
 { vertex_id v_id = v_info->id;
   REAL *a = get_coord(v_id), *b, *c, *d, *bb, *cc;
   REAL temp[MAXCOORD], e1[MAXCOORD], e2[MAXCOORD];
@@ -397,10 +402,10 @@ struct qinfo *v_info;
   int i;
 
   e1_id = get_vertex_edge(v_id);
-  v1_id=get_edge_headv(e1_id); lv1 = get_vertex_star(v1_id);
+  v1_id=get_edge_headv(e1_id); lv1 = get_vertex_length_star(v1_id);
   get_edge_side(e1_id,e1); l1 = get_edge_length(e1_id);
   e2_id = get_next_tail_edge(e1_id); /* assuming two edges per vertex */
-  v2_id=get_edge_headv(e2_id); lv2 = get_vertex_star(v2_id);
+  v2_id=get_edge_headv(e2_id); lv2 = get_vertex_length_star(v2_id);
    /* v1 and v2 are two nbrs of v  and lv1,lv2 are their star lengths */
   get_edge_side(e2_id,e2); l2 = get_edge_length(e2_id);
     /* e1, e2 are edge vectors out of v; l1, l2 are their lengths */
@@ -409,7 +414,7 @@ struct qinfo *v_info;
     e1[i] /= 2*l1; e2[i] /= 2*l2; /* now they're half unit vectors */
     temp[i] = 0;
   }
-  lv = get_vertex_star(v_id); /* should be half of l1+l2 */
+  lv = get_vertex_length_star(v_id); /* should be half of l1+l2 */
 
   FOR_ALL_VERTICES(w_id)
   {
@@ -419,7 +424,7 @@ struct qinfo *v_info;
     e_id = get_next_tail_edge(e_id);  /* assuming two edges per vertex */
     if ((w2_id = get_edge_headv(e_id))==v_id) continue;
     thick += dradp(a,get_coord(w1_id),get_coord(w2_id),
-                 temp, get_vertex_star(w_id));
+                 temp, get_vertex_length_star(w_id));
   }     /* now temp is sum_w l(w)*d_v(rp(v,w1,w2)) */
   for ( i = 0 ; i < SDIM ; i++ )
     v_info->grad[0][i] += (temp[i]*lv - thick*(e1[i]+e2[i]));
@@ -445,7 +450,7 @@ struct qinfo *v_info;
   { /* here w is playing the role of v, and v that of w (or w1 or w2) */
     REAL t,lw;
     if (w_id == v_id) continue; /* not allowed in any of the three */
-    d = get_coord(w_id); lw = get_vertex_star(w_id);
+    d = get_coord(w_id); lw = get_vertex_length_star(w_id);
 
     if (w_id != v1_id && w_id != v2_id)
     {
@@ -465,13 +470,13 @@ struct qinfo *v_info;
     /* now, when v2=c is w, v=a is w2, and cc is w1 */
     if (w_id != v2_id && w_id != v22_id)
     {
-      t = dradp( a,cc,d, v_info->grad[0], lv2*lw ) / get_vertex_star(v2_id);
+      t = dradp( a,cc,d, v_info->grad[0], lv2*lw ) / get_vertex_length_star(v2_id);
       for ( i = 0 ; i < SDIM ; i++ )
         v_info->grad[0][i] -= t*e2[i];
     }
   }
- return thick * get_vertex_star(v_id);
-}
+  return thick * get_vertex_length_star(v_id);
+} // end knot_thickness_p2_gradient()
 
 
 /**************************************************************
@@ -485,14 +490,12 @@ struct qinfo *v_info;
 *
 */
 
-REAL knot_thickness_id();
+REAL knot_thickness_id(vertex_id);
 
-REAL knot_thickness_p(v_info)
-struct qinfo *v_info;
+REAL knot_thickness_p(struct qinfo *v_info)
 { return knot_thickness_id(v_info->id); }
 
-REAL knot_thickness_id(v_id)
-vertex_id v_id;
+REAL knot_thickness_id(vertex_id v_id)
 { REAL *a = get_coord(v_id), *b, *c;
   REAL thick = 0.0;  /* for this vertex */
   edge_id e_id;  /* edge to create triple */
@@ -504,8 +507,8 @@ vertex_id v_id;
     b = get_coord(eh_id); c = get_coord(et_id);
     thick += radp(a,b,c) * get_edge_length(e_id);
   }
-  return thick * get_vertex_star(v_id); /* this is rp(v,eh,et)*l(e)*l(v) */
-}
+  return thick * get_vertex_length_star(v_id); /* this is rp(v,eh,et)*l(e)*l(v) */
+} // end knot_thickness_id()
 
 
 /**************************************************************
@@ -516,8 +519,7 @@ vertex_id v_id;
 *
 */
 
-REAL knot_thickness_p_gradient(v_info)
-struct qinfo *v_info;
+REAL knot_thickness_p_gradient(struct qinfo *v_info)
 { REAL *a , *b, *c, *d;
   REAL temp[MAXCOORD], e1[MAXCOORD], e2[MAXCOORD], l1, l2;
   REAL thick = 0.0;  /* thickness at this vertex */
@@ -543,11 +545,11 @@ struct qinfo *v_info;
     thick += dradp(a,b,c,temp, get_edge_length(e_id));
   }     /* now temp is sum_e l(e)*d_v(rp(v,eh,et)) */
   for ( i = 0 ; i < SDIM ; i++ )
-    v_info->grad[0][i] += (temp[i] * get_vertex_star(v_info->id) -
+    v_info->grad[0][i] += (temp[i] * get_vertex_length_star(v_info->id) -
                              thick * (e1[i]/l1 + e2[i]/l2)/2);
     /* so far we should have the gradient of knot_thickness_p(v_info) */
     /* which is: d_v(l(v))*thick + l(v)*temp */
-  thick *= get_vertex_star(v_info->id);
+  thick *= get_vertex_length_star(v_info->id);
 
     /* Next we consider the triple v1,v,v2,
        which enters into thickness at v1 and v2 */
@@ -555,16 +557,16 @@ struct qinfo *v_info;
   if (v1_id != v2_id) /* skip if v valence 1 */
   {
     dradp(a,b,c, v_info->grad[0],       /* triples (v,v1,v2), (v,v2,v1) */
-        l1*get_vertex_star(v2_id) + l2*get_vertex_star(v1_id));
+        l1*get_vertex_length_star(v2_id) + l2*get_vertex_length_star(v1_id));
 	/* this term gets d_v rp(a,b,c) times appropriate lengths */
     for ( i = 0 ; i < SDIM ; i++ )
     { v_info->grad[0][i] -= radp(a,b,c) *  /* - is from orientation of ei */
-			  ( get_vertex_star(v2_id)*e1[i]/l1 +
-			    get_vertex_star(v1_id)*e2[i]/l2  );
+			  ( get_vertex_length_star(v2_id)*e1[i]/l1 +
+			    get_vertex_length_star(v1_id)*e2[i]/l2  );
 	/* term above accounts for changing lengths at v as l(e) factor */
       v_info->grad[0][i] -=
-       (  knot_thickness_id(v1_id)*e1[i]/l1/get_vertex_star(v1_id)/2
-        + knot_thickness_id(v2_id)*e2[i]/l2/get_vertex_star(v2_id)/2 );
+       (  knot_thickness_id(v1_id)*e1[i]/l1/get_vertex_length_star(v1_id)/2
+        + knot_thickness_id(v2_id)*e2[i]/l2/get_vertex_length_star(v2_id)/2 );
 	/* this is effect of v on l(v1) and l(v2) in energy at v1 and v2 */
     }
   }
@@ -572,16 +574,16 @@ struct qinfo *v_info;
   FOR_ALL_VERTICES(w_id)
   { if (w_id == v_info->id || w_id == v1_id || w_id == v2_id) continue;
     d = get_coord(w_id);
-    dradp(a,b,d, v_info->grad[0], l1*get_vertex_star(w_id));
-    if (v1_id != v2_id) dradp(a,c,d, v_info->grad[0], l2*get_vertex_star(w_id));
+    dradp(a,b,d, v_info->grad[0], l1*get_vertex_length_star(w_id));
+    if (v1_id != v2_id) dradp(a,c,d, v_info->grad[0], l2*get_vertex_length_star(w_id));
 	/* these are changes d_v (rp(w,ei)) times lengths, i=1,2 */
     for ( i = 0 ; i < SDIM ; i++ )
-      v_info->grad[0][i] -= (  radp(a,b,d) * get_vertex_star(w_id) * e1[i]/l1
-                             + radp(a,c,d) * get_vertex_star(w_id) * e2[i]/l2 );
+      v_info->grad[0][i] -= (  radp(a,b,d) * get_vertex_length_star(w_id) * e1[i]/l1
+                             + radp(a,c,d) * get_vertex_length_star(w_id) * e2[i]/l2 );
         /* v's effect on l(ei), i=1,2 */
   }
   return thick;
-}
+} // end knot_thickness_p_gradient()
 
 
 /**************************************************************
@@ -595,8 +597,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL knot_energy(v_info)
-struct qinfo *v_info;
+REAL knot_energy(struct qinfo *v_info)
 { REAL *x = get_coord(v_info->id);
   REAL energy = 0.0;  /* for this vertex */
   vertex_id v_id;  /* other vertex */
@@ -618,7 +619,7 @@ struct qinfo *v_info;
     energy += charges/p;  /* inverse power potential */
   }
   return 2*energy; /* since each pair once */
-}
+} // end knot_energy()
 
 
 
@@ -633,8 +634,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL knot_energy_gradient(v_info)
-struct qinfo *v_info;
+REAL knot_energy_gradient(struct qinfo *v_info)
 { REAL *x = get_coord(v_info->id);
   REAL energy = 0.0;  /* for this vertex */
   vertex_id v_id;
@@ -659,7 +659,7 @@ struct qinfo *v_info;
       v_info->grad[0][i] -= 2*charges*fact*d[i];
   }
   return energy;
-}
+} // end knot_energy_gradient()
 
 /*******************************************************
 *
@@ -668,9 +668,7 @@ struct qinfo *v_info;
 *     purpose: calculate knot energy hessian
 */
 
-
-REAL knot_energy_hessian(v_info)
-struct qinfo *v_info;
+REAL knot_energy_hessian(struct qinfo *v_info)
 {
   REAL *x = get_coord(v_info->id);
   REAL energy = 0.0;  /* for this vertex */
@@ -685,7 +683,7 @@ struct qinfo *v_info;
         *((REAL*)get_extra(v_info->id,charge_attr)) : 1.;
 
   modulus = METH_INSTANCE(v_info->method)->modulus
-                  *GEN_QUANT(METH_INSTANCE(v_info->method)->quant)->modulus;
+                  *GEN_QUANT(METH_INSTANCE(v_info->method)->quants[0])->modulus;
   /* need modulus due to direct insertion into hessian */
 
   for(i=0;i<SDIM;i++) for(j=0;j<SDIM;j++) hessvv[i][j]=0.;
@@ -715,7 +713,7 @@ struct qinfo *v_info;
   }
   fill_self_entry(v_info->S, v_info->id, hessvv);
   return modulus*energy;
-}
+} // end knot_energy_hessian()
 
 /********************************************************************/
 /*  This set of routines is for the gradient^2 of the last energy */
@@ -731,9 +729,10 @@ static int cg_nverts = 0;
 *  purpose: initialization for charge_gradient() and 
 *              charge_gradient_gradient().
 */
-void charge_gradient_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void charge_gradient_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 {
     vertex_id u_id,v_id;  /* two vertices */
     int nv;
@@ -766,7 +765,7 @@ struct method_instance *mi;
           for ( i = 0 ; i < SDIM ; i++ ) w[i] -= d[i]/pow(rr,(2*ke_power+2)/2);
       }
    }
-}
+} // end charge_gradient_init()
 
 /**************************************************************
 *
@@ -778,14 +777,13 @@ struct method_instance *mi;
 *
 */
 
-REAL charge_gradient(v_info)
-struct qinfo *v_info;
+REAL charge_gradient(struct qinfo *v_info)
 {
   REAL *x = get_coord(v_info->id);
   REAL *w = charge_grads+MAXCOORD*ordinal(v_info->id);
   REAL wx = SDIM_dot(w,x);
   return SDIM_dot(w,w) - wx*wx;
-}
+} // end charge_gradient()
 
 
 /**************************************************************
@@ -799,8 +797,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL charge_gradient_gradient(v_info)
-struct qinfo *v_info;
+REAL charge_gradient_gradient(struct qinfo *v_info)
 { REAL *xi = get_coord(v_info->id);
   vertex_id v_id;
   int i;
@@ -828,7 +825,7 @@ struct qinfo *v_info;
       v_info->grad[0][i] += (-2*yd[i] + 2*(2*ke_power+2)*ddd*d[i]/rr)/p;
   }
   return SDIM_dot(yi,yi);
-}
+} // end charge_gradient_gradient()
 
 /* Next set of routines is for uniform charge distribution */
 
@@ -840,9 +837,10 @@ struct qinfo *v_info;
 *              knot_energy_gradient() and knot_thickness_p().
 */
 
-void uniform_knot_energy_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void uniform_knot_energy_init(
+int mode, /* energy or gradient */
+struct method_instance *mi
+)
 {
   edge_id e_id;
   vertex_id v_id;
@@ -851,16 +849,13 @@ struct method_instance *mi;
 
   FOR_ALL_VERTICES(v_id)
   {
-     set_vertex_star(v_id,0.);
      get_vertex_evalence(v_id);
   }
   FOR_ALL_EDGES(e_id)
   {
      calc_edge(e_id);
-     add_vertex_star(get_edge_tailv(e_id),get_edge_length(e_id)/2);
-     add_vertex_star(get_edge_headv(e_id),get_edge_length(e_id)/2);
   } /* each vertex_star is now half the total length of incident edges */
-}
+} // end uniform_knot_energy_init()
 
 /**************************************************************
 *
@@ -873,8 +868,7 @@ struct method_instance *mi;
 *
 */
 
-REAL uniform_knot_energy(v_info)
-struct qinfo *v_info;
+REAL uniform_knot_energy(struct qinfo *v_info)
 { REAL *x = get_coord(v_info->id);
   REAL energy = 0.0;  /* for this vertex */
   vertex_id v_id;  /* other vertex */
@@ -884,17 +878,17 @@ struct qinfo *v_info;
   REAL ti;  /* length weights of vertices, ti for home vertex */
   REAL p;
 
-  ti = get_vertex_star(v_info->id);
+  ti = get_vertex_length_star(v_info->id);
   FOR_ALL_VERTICES(v_id)
   { REAL *y = get_coord(v_id);
     if ( v_id <= v_info->id ) continue; /* each pair once */
       for ( i = 0 ; i < SDIM ; i++ ) d[i] = x[i] - y[i];
     rr = SDIM_dot(d,d);
     ke_pow(rr,p);
-    energy += ti*get_vertex_star(v_id)/p;
+    energy += ti*get_vertex_length_star(v_id)/p;
   }
   return 2*energy; /* since each pair once */
-}
+} // end uniform_knot_energy()
 
 
 /**************************************************************
@@ -908,8 +902,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL uniform_knot_energy_gradient(v_info)
-struct qinfo *v_info;
+REAL uniform_knot_energy_gradient(struct qinfo *v_info)
 { REAL *x = get_coord(v_info->id);
   REAL energy = 0.0;  /* for this vertex */
   vertex_id v_id;
@@ -925,7 +918,7 @@ struct qinfo *v_info;
 
   for ( i = 0 ; i < SDIM ; i++ ) 
       v_info->grad[0][i] = 0.0; /* initialize gradient */
-  ti = get_vertex_star(v_info->id);
+  ti = get_vertex_length_star(v_info->id);
   e_id = get_vertex_edge(v_info->id);
   xright = get_coord(get_edge_headv(e_id));
   e_id = get_next_tail_edge(e_id);  /* assuming exactly two edges per vertex */
@@ -935,7 +928,7 @@ struct qinfo *v_info;
   { REAL *y = get_coord(v_id);
     REAL fact;
 
-    tj = get_vertex_star(v_id);
+    tj = get_vertex_length_star(v_id);
 
     for ( i = 0 ; i < SDIM ; i++ ) d[i] = x[i] - y[i];
     rr = SDIM_dot(d,d);
@@ -976,7 +969,7 @@ struct qinfo *v_info;
       v_info->grad[0][i] += ((left[i]/leftmag + right[i]/rightmag)*sum
                      + left[i]/leftmag*sumleft + right[i]/rightmag*sumright);
   return energy;
-}
+} // end uniform_knot_energy_gradient()
 
 /******************************************************************
 *
@@ -986,8 +979,7 @@ struct qinfo *v_info;
 *              singular divergence of integral.
 */
 
-REAL uniform_normalization(v_info)
-struct qinfo *v_info;
+REAL uniform_normalization(struct qinfo *v_info)
 {
   vertex_id v_id;
   edge_id e_id,ee_id;
@@ -1011,7 +1003,7 @@ struct qinfo *v_info;
     energy += ti*tj/pow(dist,power);
   }
   return 2*energy;
-}
+} // end uniform_normalization()
 
 /******************************************************************
 *
@@ -1021,8 +1013,7 @@ struct qinfo *v_info;
 *              singular divergence of integral.  Uses shorter distance.
 */
 
-REAL uniform_binormalization(v_info)
-struct qinfo *v_info;
+REAL uniform_binormalization(struct qinfo *v_info)
 {
   vertex_id v_id;
   edge_id e_id,ee_id;
@@ -1049,7 +1040,7 @@ struct qinfo *v_info;
     energy += ti*tj/pow((2*dist<comp_len? dist : comp_len-dist), power);
   }
   return energy;
-}
+} // end uniform_binormalization()
 
 /***************************************************************
 *
@@ -1061,19 +1052,11 @@ struct qinfo *v_info;
 
 #define SURF_KNOTPOW_NAME "surface_knot_power"
 
-void facet_knot_energy_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void facet_knot_energy_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 {
-  exponent_param = lookup_global(SURF_KNOTPOW_NAME);
-  if ( exponent_param < 0 ) /* missing, so add */
-  { exponent_param = add_global(SURF_KNOTPOW_NAME);
-    globals(exponent_param)->value.real = 4.0;  /* default */
-    globals(exponent_param)->flags |=  ORDINARY_PARAM | RECALC_PARAMETER | ALWAYS_RECALC;
-  }
-    
-
-  {
   REAL *x;
   vertex_id v_id,vv_id; 
   int i;
@@ -1081,28 +1064,15 @@ struct method_instance *mi;
   REAL rr;
   REAL power;
   REAL tj;  
-  facetedge_id fe;
-  REAL area,s11,s12,s22,side1[MAXCOORD],side2[MAXCOORD];
-  facet_id f_id;
 
+   exponent_param = lookup_global(SURF_KNOTPOW_NAME);
+  if ( exponent_param < 0 ) /* missing, so add */
+  { exponent_param = add_global(SURF_KNOTPOW_NAME);
+    globals(exponent_param)->value.real = 4.0;  /* default */
+    globals(exponent_param)->flags |=  ORDINARY_PARAM | RECALC_PARAMETER | ALWAYS_RECALC;
+  }
+    
   power = globals(exponent_param)->value.real;
-
-  /* will need areas of all vertex stars */
-  FOR_ALL_VERTICES(v_id) set_vertex_star(v_id,0.0);
-  FOR_ALL_FACETS(f_id)
-    { fe = get_facet_fe(f_id);
-      get_edge_side(get_fe_edge(fe),side1);
-      get_edge_side(get_fe_edge(get_next_edge(fe)),side2);
-      s11 = SDIM_dot(side1,side1);
-      s22 = SDIM_dot(side2,side2);
-      s12 = SDIM_dot(side1,side2);
-      area = sqrt(s11*s22 - s12*s12)/2;
-      for ( i = 0 ; i < FACET_VERTS ; i++ )
-        { vv_id = get_fe_tailv(fe);
-          add_vertex_star(vv_id,area/3);
-          fe = get_next_edge(fe);
-        }
-    }
 
   /* basic sums */
   if ( f_sums ) myfree((char*)f_sums);
@@ -1111,13 +1081,13 @@ struct method_instance *mi;
   FOR_ALL_VERTICES(v_id)
   { int ordv = ordinal(v_id);
      REAL val;
-     REAL ti = get_vertex_star(v_id);
+     REAL ti = get_vertex_length_star(v_id);
      x = get_coord(v_id);
      FOR_ALL_VERTICES(vv_id)
      { REAL *y = get_coord(vv_id);
         int ordvv = ordinal(vv_id);
         if ( ordvv <= ordv ) continue;
-        tj = get_vertex_star(vv_id);
+        tj = get_vertex_length_star(vv_id);
         for ( i = 0 ; i < SDIM ; i++ ) d[i] = x[i] - y[i];
         rr = SDIM_dot(d,d);
         val = pow(rr,power/2);  /* inverse power potential */
@@ -1125,9 +1095,7 @@ struct method_instance *mi;
         f_sums[ordvv] += ti/val;
      }
   }
-  }
-
-}
+} // end facet_knot_energy_init()
 
 /**************************************************************
 *
@@ -1140,14 +1108,13 @@ struct method_instance *mi;
 *
 */
 
-REAL facet_knot_energy(v_info)
-struct qinfo *v_info;
+REAL facet_knot_energy(struct qinfo *v_info)
 { REAL ti,energy;
 
-  ti = get_vertex_star(v_info->id);
+  ti = get_vertex_area_star(v_info->id);
   energy = ti*f_sums[ordinal(v_info->id)];
   return energy; /* because pair counts in both orders */
-}
+} // end facet_knot_energy()
 
 
 /**************************************************************
@@ -1161,8 +1128,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL facet_knot_energy_gradient(v_info)
-struct qinfo *v_info;
+REAL facet_knot_energy_gradient(struct qinfo *v_info)
 { REAL *x = get_coord(v_info->id);
   vertex_id v_id;
   int i;
@@ -1175,7 +1141,7 @@ struct qinfo *v_info;
   REAL s11,s12,s22,side1[MAXCOORD],side2[MAXCOORD];
   REAL da[MAXCOORD],sum[MAXCOORD];
 
-  ti = get_vertex_star(v_info->id);
+  ti = get_vertex_area_star(v_info->id);
   power = globals(exponent_param)->value.real;
   halfpower = power/2;
   for ( i = 0 ; i < SDIM ; i++ ) 
@@ -1186,7 +1152,7 @@ struct qinfo *v_info;
   FOR_ALL_VERTICES(v_id)
   { REAL *y = get_coord(v_id);
 
-    tj = get_vertex_star(v_id);
+    tj = get_vertex_area_star(v_id);
     for ( i = 0 ; i < SDIM ; i++ ) d[i] = x[i] - y[i];
     rr = SDIM_dot(d,d);
     if ( rr > 1e-12 ) /* don't do self */
@@ -1222,7 +1188,7 @@ struct qinfo *v_info;
       fe = next_fe;
     }
   return 2*ti*sumi;
-}
+} // end facet_knot_energy_gradient()
 
 /**************************************************************************/
 /**************************************************************************/
@@ -1243,9 +1209,10 @@ static REAL *fix_sums;  /* for sums to other vertices connected by edges */
 *
 */
 
-void facet_knot_energy_fix_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void facet_knot_energy_fix_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 {
   edge_id e_id;
   REAL *x;
@@ -1254,9 +1221,6 @@ struct method_instance *mi;
   REAL d[MAXCOORD]; /* difference vector between vertices */
   REAL rr;
   REAL power;
-  facetedge_id fe;
-  REAL area,s11,s12,s22,side1[MAXCOORD],side2[MAXCOORD];
-  facet_id f_id;
 
   exponent_param = lookup_global(SURF_KNOTPOW_NAME);
   if ( exponent_param < 0 ) /* missing, so add */
@@ -1265,23 +1229,6 @@ struct method_instance *mi;
      globals(exponent_param)->flags |=  ORDINARY_PARAM | RECALC_PARAMETER | ALWAYS_RECALC;
    }
     
-  /* will need areas of all vertex stars */
-  FOR_ALL_VERTICES(v_id) set_vertex_star(v_id,0.0);
-  FOR_ALL_FACETS(f_id)
-    { fe = get_facet_fe(f_id);
-      get_edge_side(get_fe_edge(fe),side1);
-      get_edge_side(get_fe_edge(get_next_edge(fe)),side2);
-      s11 = SDIM_dot(side1,side1);
-      s22 = SDIM_dot(side2,side2);
-      s12 = SDIM_dot(side1,side2);
-      area = sqrt(s11*s22 - s12*s12)/2;
-      for ( i = 0 ; i < 3 ; i++ )
-        { vv_id = get_fe_tailv(fe);
-          add_vertex_star(vv_id,area/3);
-          fe = get_next_edge(fe);
-        }
-    }
-
   /* get basic sums */
   power = globals(exponent_param)->value.real/2; /* since rr already square */
   if ( fix_sums ) myfree((char*)fix_sums);
@@ -1299,15 +1246,15 @@ struct method_instance *mi;
      ordvv = ordinal(vv_id);
      x = get_coord(v_id);
      y = get_coord(vv_id);
-     ti = get_vertex_star(v_id);
-     tj = get_vertex_star(vv_id);
+     ti = get_vertex_area_star(v_id);
+     tj = get_vertex_area_star(vv_id);
      for ( i = 0 ; i < SDIM ; i++ ) d[i] = x[i] - y[i];
      rr = SDIM_dot(d,d);
      val = pow(rr,power);  /* inverse power potential */
      fix_sums[ordv] += tj/val;
      fix_sums[ordvv] += ti/val;
   }
-}
+} // end facet_knot_energy_fix_init()
 
 /**************************************************************
 *
@@ -1320,14 +1267,13 @@ struct method_instance *mi;
 *
 */
 
-REAL facet_knot_energy_fix(v_info)
-struct qinfo *v_info;
+REAL facet_knot_energy_fix(struct qinfo *v_info)
 { REAL ti,energy;
 
-  ti = get_vertex_star(v_info->id);
+  ti = get_vertex_area_star(v_info->id);
   energy = ti*fix_sums[ordinal(v_info->id)];
   return energy;
-}
+} // end facet_knot_energy_fix()
 
 
 /**************************************************************
@@ -1341,8 +1287,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL facet_knot_energy_fix_gradient(v_info)
-struct qinfo *v_info;
+REAL facet_knot_energy_fix_gradient(struct qinfo *v_info)
 { REAL *x = get_coord(v_info->id);
   vertex_id v_id;
   int i;
@@ -1355,7 +1300,7 @@ struct qinfo *v_info;
   REAL s11,s12,s22,side1[MAXCOORD],side2[MAXCOORD];
   REAL da[MAXCOORD],sum[MAXCOORD];
 
-  ti = get_vertex_star(v_info->id);
+  ti = get_vertex_area_star(v_info->id);
   power = globals(exponent_param)->value.real;
   halfpower = power/2;
   for ( i = 0 ; i < SDIM ; i++ ) 
@@ -1372,7 +1317,7 @@ struct qinfo *v_info;
       v_id = get_fe_headv(fe);
       y = get_coord(v_id);
 
-      tj = get_vertex_star(v_id);
+      tj = get_vertex_area_star(v_id);
       for ( i = 0 ; i < SDIM ; i++ ) d[i] = x[i] - y[i];
       rr = SDIM_dot(d,d);
       if ( rr > 1e-12 ) /* don't do self */
@@ -1411,8 +1356,7 @@ struct qinfo *v_info;
       fe = next_fe;
     }
   return ti*sumi;
-}
-
+} // end facet_knot_energy_fix_gradient()
 
 /**************************************************************************/
 /**************************************************************************/
@@ -1426,42 +1370,19 @@ struct qinfo *v_info;
 *  Does not do fsums in attempt to be more efficient with MPI
 */
 
-
-void xfacet_knot_energy_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
-{ vertex_id v_id,vv_id; 
-  int i;
-  facetedge_id fe;
-  REAL area,s11,s12,s22,side1[MAXCOORD],side2[MAXCOORD];
-  facet_id f_id;
-
+void xfacet_knot_energy_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
+{
   exponent_param = lookup_global(SURF_KNOTPOW_NAME);
   if ( exponent_param < 0 ) /* missing, so add */
-        { exponent_param = add_global(SURF_KNOTPOW_NAME);
-          globals(exponent_param)->value.real = 4.0;  /* default */
-          globals(exponent_param)->flags |=  ORDINARY_PARAM | RECALC_PARAMETER | ALWAYS_RECALC;
-        }
+  { exponent_param = add_global(SURF_KNOTPOW_NAME);
+    globals(exponent_param)->value.real = 4.0;  /* default */
+    globals(exponent_param)->flags |=  ORDINARY_PARAM | RECALC_PARAMETER | ALWAYS_RECALC;
+  }
 
-
-  /* will need areas of all vertex stars */
-  FOR_ALL_VERTICES(v_id) set_vertex_star(v_id,0.0);
-  FOR_ALL_FACETS(f_id)
-    { fe = get_facet_fe(f_id);
-      get_edge_side(get_fe_edge(fe),side1);
-      get_edge_side(get_fe_edge(get_next_edge(fe)),side2);
-      s11 = SDIM_dot(side1,side1);
-      s22 = SDIM_dot(side2,side2);
-      s12 = SDIM_dot(side1,side2);
-      area = sqrt(s11*s22 - s12*s12)/2;
-      for ( i = 0 ; i < 3 ; i++ )
-        { vv_id = get_fe_tailv(fe);
-          add_vertex_star(vv_id,area/3);
-          fe = get_next_edge(fe);
-        }
-    }
-
-}
+} // end xfacet_knot_energy_init()
 
 /**************************************************************
 *
@@ -1474,14 +1395,13 @@ struct method_instance *mi;
 *
 */
 
-REAL xfacet_knot_energy(v_info)
-struct qinfo *v_info;
+REAL xfacet_knot_energy(struct qinfo *v_info)
 { REAL ti,energy;
 
-  ti = get_vertex_star(v_info->id);
+  ti = get_vertex_area_star(v_info->id);
   energy = ti*f_sums[ordinal(v_info->id)];
   return energy;
-}
+} // end xfacet_knot_energy()
 
 
 /**************************************************************
@@ -1495,8 +1415,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL xfacet_knot_energy_gradient(v_info)
-struct qinfo *v_info;
+REAL xfacet_knot_energy_gradient(struct qinfo *v_info)
 { REAL *x = get_coord(v_info->id);
   vertex_id v_id;
   int i;
@@ -1509,7 +1428,7 @@ struct qinfo *v_info;
   REAL s11,s12,s22,side1[MAXCOORD],side2[MAXCOORD];
   REAL da[MAXCOORD],sum[MAXCOORD];
 
-  ti = get_vertex_star(v_info->id);
+  ti = get_vertex_length_star(v_info->id);
   power = globals(exponent_param)->value.real;
   halfpower = power/2;
   for ( i = 0 ; i < SDIM ; i++ ) 
@@ -1520,7 +1439,7 @@ struct qinfo *v_info;
   FOR_ALL_VERTICES(v_id)
   { REAL *y = get_coord(v_id);
 
-    tj = get_vertex_star(v_id);
+    tj = get_vertex_length_star(v_id);
     for ( i = 0 ; i < SDIM ; i++ ) d[i] = x[i] - y[i];
     rr = SDIM_dot(d,d);
     if ( rr > 1e-12 ) /* don't do self */
@@ -1556,7 +1475,7 @@ struct qinfo *v_info;
       fe = next_fe;
     }
   return ti*sumi;
-}
+} // end xfacet_knot_energy_gradient()
 
 /**************************************************************************/
 /**************************************************************************
@@ -1584,8 +1503,7 @@ crossing.
 *
 */
 
-REAL buck_knot_energy(v_info)
-struct qinfo *v_info;
+REAL buck_knot_energy(struct qinfo *v_info)
 { edge_id e1 = v_info->id,e2;
   REAL *x1,*x2,*yy1,*y2; /* end coordinates */
   REAL d1,d2,d3,d4,L1,L2;
@@ -1624,7 +1542,7 @@ struct qinfo *v_info;
       energy += pow(denom ,-power);
     }
   return 2*energy; /* since each pair once */
-}
+} // end buck_knot_energy()
 
 /**************************************************************
 *
@@ -1637,8 +1555,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL buck_knot_energy_gradient(v_info)
-struct qinfo *v_info;
+REAL buck_knot_energy_gradient(struct qinfo *v_info)
 { edge_id e1 = v_info->id,e2;
   REAL *x1,*x2,*yy1,*y2; /* end coordinates */
   REAL d1,d2,d3,d4,L1,L2;
@@ -1686,7 +1603,7 @@ struct qinfo *v_info;
          }
     }
   return energy;
-}
+} // end buck_knot_energy_gradient()
 
 /******************* bi_surface named method **********************
 
@@ -1714,19 +1631,16 @@ int bi_surface_attr; /* number of attribute */
 char *bi_surface_attr_name = "bi_surface_attr";
 REAL *bi_sums;  /* values for vertices */
 
-void bi_surface_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void bi_surface_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 {
   REAL *x;
   vertex_id v_id,vv_id; 
   int i;
   REAL d[MAXCOORD]; /* difference vector between vertices */
-  REAL rr;
   REAL tj;  
-  facetedge_id fe;
-  REAL area,s11,s12,s22,side1[MAXCOORD],side2[MAXCOORD];
-  facet_id f_id;
 
   bi_surface_attr = find_attribute(VERTEX,bi_surface_attr_name);
   if ( bi_surface_attr >= 0 )
@@ -1737,32 +1651,15 @@ struct method_instance *mi;
          RECOVERABLE);
   }
 
-  /* will need areas of all vertex stars */
-  FOR_ALL_VERTICES(v_id) set_vertex_star(v_id,0.0);
-  FOR_ALL_FACETS(f_id)
-    { fe = get_facet_fe(f_id);
-      get_edge_side(get_fe_edge(fe),side1);
-      get_edge_side(get_fe_edge(get_next_edge(fe)),side2);
-      s11 = SDIM_dot(side1,side1);
-      s22 = SDIM_dot(side2,side2);
-      s12 = SDIM_dot(side1,side2);
-      area = sqrt(s11*s22 - s12*s12)/2;
-      for ( i = 0 ; i < FACET_VERTS ; i++ )
-        { vv_id = get_fe_tailv(fe);
-          add_vertex_star(vv_id,area/3);
-          fe = get_next_edge(fe);
-        }
-    }
-
   /* basic sums */
   if ( bi_sums ) myfree((char*)bi_sums);
   bi_sums = (REAL *)mycalloc(web.skel[VERTEX].max_ord+1,sizeof(REAL));
 
   FOR_ALL_VERTICES(v_id)
   { int ordv = ordinal(v_id);
-    int vattr;
+    int vattr=0;
     REAL val;
-    REAL ti = get_vertex_star(v_id);
+    REAL ti = get_vertex_area_star(v_id);
     x = get_coord(v_id);
     if ( bi_surface_attr >= 0) 
       vattr = *(int*)get_extra(v_id,bi_surface_attr);
@@ -1776,16 +1673,15 @@ struct method_instance *mi;
       { vvattr = *(int*)get_extra(vv_id,bi_surface_attr);
         if ( vvattr == vattr ) continue; /* only do for different values */
       }
-      tj = get_vertex_star(vv_id);
+      tj = get_vertex_area_star(vv_id);
       for ( i = 0 ; i < SDIM ; i++ ) d[i] = x[i] - y[i];
-      rr = SDIM_dot(d,d);
       val = eval(mi->expr[0],d,v_id,NULL); 
       bi_sums[ordv] += tj*val;
       bi_sums[ordvv] += ti*val;
     }
   }
-
-}
+ 
+} // end bi_surface_init()
 
 /**************************************************************
 *
@@ -1798,14 +1694,13 @@ struct method_instance *mi;
 *
 */
 
-REAL bi_surface_energy(v_info)
-struct qinfo *v_info;
+REAL bi_surface_energy(struct qinfo *v_info)
 { REAL ti,energy;
 
-  ti = get_vertex_star(v_info->id);
+  ti = get_vertex_area_star(v_info->id);
   energy = ti*bi_sums[ordinal(v_info->id)];
   return energy; /* because pair counts in both orders */
-}
+} // end bi_surface_energy()
 
 
 /**************************************************************
@@ -1825,21 +1720,18 @@ struct qinfo *v_info;
   vertex_id v_id;
   int i;
   REAL d[MAXCOORD]; /* difference vector between vertices */
-  REAL power,halfpower;
   REAL ti,tj;  /* length weights of vertices, ti for home vertex */
   facetedge_id fe,start_fe,next_fe;
   REAL sumi,sumj,sumjj,area;
   REAL s11,s12,s22,side1[MAXCOORD],side2[MAXCOORD];
   REAL da[MAXCOORD],sum[MAXCOORD];
-  int vattr;
+  int vattr = 0;
   struct method_instance *mi = METH_INSTANCE(v_info->method);
 
   if ( bi_surface_attr >= 0)
     vattr = *(int*)get_extra(v_info->id,bi_surface_attr);
 
-  ti = get_vertex_star(v_info->id);
-  power = globals(exponent_param)->value.real;
-  halfpower = power/2;
+  ti = get_vertex_area_star(v_info->id);
   for ( i = 0 ; i < SDIM ; i++ ) 
     v_info->grad[0][i] = 0.0; /* intialize gradient */
 
@@ -1859,7 +1751,7 @@ struct qinfo *v_info;
       if ( equal_id(v_id,v_info->id) )
         continue; /* don't do self */
 
-    tj = get_vertex_star(v_id);
+    tj = get_vertex_area_star(v_id);
     for ( i = 0 ; i < SDIM ; i++ ) d[i] = x[i] - y[i];
     eval_all(mi->expr[0],d,3,&val,partials,v_info->id);
     for ( i = 0 ; i < SDIM ; i++ ) 
@@ -1892,7 +1784,7 @@ struct qinfo *v_info;
       fe = next_fe;
     }
   return 2*ti*sumi;
-}
+} // end bi_surface_gradient()
 
 /**************************************************************************/
 /**************************************************************************/

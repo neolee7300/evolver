@@ -5,8 +5,9 @@
 // For mapping simply connected regions to unit disk minimizing Dirichlet
 // energy to get conformal mappings.
 
-// Prerequisites: Dirichlet energy defined, but no others.
-// Usage: Remove all constraints and boundaries.  Run to_disk.  Then evolve.
+// Prerequisites: Dirichlet_elastic energy defined, but no others.
+// Usage: Remove all constraints and boundaries.  Run to_disk or 
+// to_triangle.  Then evolve.
 
 define constraint circle_con formula: x^2 + y^2 = 1
 define facet attribute form_factors real[3]
@@ -23,25 +24,24 @@ set_ff := {
 // Mapping to triangle.  Especially nice since can use the three conformal
 // degrees of freedom to map particular vertices to corners, and straight
 // sides should let Hessian minimize Dirichlet energy in one step.
-define cornerx real[4];
-cornerx[1] :=  1.0;
-cornerx[2] :=  0.0;
-cornerx[3] := -1.0;
-cornerx[4] :=  1.0;
-define cornery real[4];
-cornery[1] := 0.0;
-cornery[2] := sqrt(3);
-cornery[3] := 0.0;
-cornery[4] := 0.0;
+
 define constraint side_1_con formula: sqrt(3)*x + y = sqrt(3);
 define constraint side_2_con formula: -sqrt(3)*x + y = sqrt(3);
 define constraint side_3_con formula: y = 0;
-define cornerv integer[3]
-cornerv[1] := 0
-cornerv[2] := 0
-cornerv[3] := 0
-define sidecounts integer[3]  // how many sides mapped to each triangle side
+
 to_triangle := {
+   local thise,starte,counter,sidenumber,nexte,rimcount,sidenum,lambda;
+   local sidecounts,cornerx,cornery,cornerv;
+
+   define cornerx real[4];
+   cornerx := { 1.0, 0.0, -1.0, 1.0 };
+   define cornery real[4];
+   cornery := { 0.0, sqrt(3), 0.0, 0.0 };
+   define cornerv integer[3];
+   cornerv := 0;
+
+   define sidecounts integer[3];  // how many sides mapped to each triangle side
+
    // Check simple connectivity
    if vertex_count - edge_count + facet_count != 1 then
    { errprintf "to_disk error: Surface not simply connected. Aborting.\n";
@@ -122,6 +122,8 @@ to_triangle := {
  
 
 to_disk := {
+   local thise,starte,counter,nexte,rimcount;
+
    // Check simple connectivity
    if vertex_count - edge_count + facet_count != 1 then
    { errprintf "to_disk error: Surface not simply connected. Aborting.\n";
@@ -160,4 +162,8 @@ to_disk := {
    
    
 // Prerequisites: Dirichlet energy defined, but no others.
-// Usage: Remove all constraints and boundaries.  Run to_disk.  Then evolve.
+// Usage: Remove all constraints and boundaries.  Run to_disk or to_triangl.  
+// Then evolve.
+
+
+

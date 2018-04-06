@@ -1,14 +1,16 @@
 // quadmeet.cmd
 // For detecting intersection of quadratic facets in 3D
 // Not suitable for torus model.
-// Needs quadbbox.cmd to be loaded first.
+// Needs quadbbox.cmd.
 
 // Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
 
 // Usage: quadmeet
 // Results: Prints id numbers of intersecting facets.
 
-tiny := 1e-20  // criterion for dist^2 = 0
+read "quadbbox.cmd"
+
+quadbbox_tiny := 1e-20  // criterion for dist^2 = 0
 quadmeet := { 
     local xa1,xa2,xa3,xa4,xa5,xa6;
     local ya1,ya2,ya3,ya4,ya5,ya6;
@@ -19,19 +21,17 @@ quadmeet := {
     local eps,ua,va,ub,vb,xa,ya,za,xb,yb,zb,dx,dy,dz,dd;
     local xau,xav,yau,yav,zau,zav;
     local xbu,xbv,ybu,ybv,zbu,zbv;
-    local uagrad,vagrad,ubgrad,vbgrad,tt;
+    local uagrad,vagrad,ubgrad,vbgrad,tt,inx;
 
     fboxes;   // find facet bounding boxes
     // test all facet pairs
     foreach facet fa do
     { foreach facet fb where fb.id > fa.id do
       {  // first, check bounding boxes
-         if ( fb.fbox[1] >= fa.fbox[2] or
-              fb.fbox[2] <= fa.fbox[1] or
-              fb.fbox[3] >= fa.fbox[4] or
-              fb.fbox[4] <= fa.fbox[3] or
-              fb.fbox[5] >= fa.fbox[6] or
-              fb.fbox[6] <= fa.fbox[5] ) then continue;
+         for ( inx := 1 ; inx <= space_dimension ; inx += 1 )
+           if ( fb.fbox[inx][1] >= fa.fbox[inx][2] or
+              fb.fbox[inx][2] <= fa.fbox[inx][1] ) then
+             continue 2;
 
          // extract coordinates
          xa1 := fa.edge[1].vertex[1].x;
@@ -95,7 +95,7 @@ quadmeet := {
               + ub*vb*zb5 + 0.5*vb*(vb-1)*zb6; 
            dx := xa-xb; dy := ya-yb; dz := za - zb;
            dd := dx*dx + dy*dy + dz*dz;
-           if ( dd < tiny ) then break;
+           if ( dd < quadbbox_tiny ) then break;
            xau := (ua + va - 1.5)*xa1 + (2-2*ua-va)*xa2 + (ua-0.5)*xa3
                    - va*xa4 + va*xa5;
            xav := (ua + va - 1.5)*xa1 - ua*xa2 +(2-ua-2*va)*xa4 + ua*xa5
@@ -145,8 +145,12 @@ quadmeet := {
            vb := vb - tt*vbgrad;
            eps := eps/5;
          };
-         if ( dd < tiny )
-          then printf "Facets %d and %d intersect at (%g,%g,%g).\n",xa,ya,za;
+         if ( dd < quadbbox_tiny )
+          then printf "Facets %d and %d intersect at (%g,%g,%g).\n",
+            fa.id,fb.id,xa,ya,za;
       } 
   }
-}
+} // end quadmeet.cmd
+
+
+// Usage: quadmeet

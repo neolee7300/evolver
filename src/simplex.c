@@ -22,8 +22,10 @@
 *
 */
 
-void calc_simplex_energy(f_id)
-facet_id f_id;
+void calc_simplex_energy(
+  facet_id f_id,
+  int mode  // not used
+)
 {
   vertex_id *v = get_facet_vertices(f_id);
   REAL side[MAXCOORD][MAXCOORD];
@@ -56,7 +58,7 @@ facet_id f_id;
          energy *= get_facet_density(f_id);
   binary_tree_add(web.total_energy_addends,energy);
       
-}
+} // end calc_simplex_energy()
 
 /**********************************************************************
 *
@@ -66,8 +68,7 @@ facet_id f_id;
 *
 */
 
-void calc_simplex_forces(f_id)
-facet_id f_id;
+void calc_simplex_forces(facet_id f_id)
 {
     vertex_id *v = get_facet_vertices(f_id);
     REAL side[MAXCOORD][MAXCOORD];
@@ -110,13 +111,7 @@ facet_id f_id;
          }
      }
 
-  /* accumulate 1/n area around each vertex to scale motion */
-     { REAL energy = sqrt(det)/web.simplex_factorial;
-        for ( k = 0  ; k <= web.dimension ; k++ )
-          add_vertex_star(v[k],energy);
-     }
-
-}
+} // end calc_simplex_forces()
 
 
 /**********************************************************************
@@ -128,8 +123,7 @@ facet_id f_id;
 *
 */
 
-void calc_simplex_volume(f_id)
-facet_id f_id;
+void calc_simplex_volume(facet_id f_id)
 {
   vertex_id *v = get_facet_vertices(f_id);
   REAL *x[MAXCOORD];
@@ -159,7 +153,7 @@ facet_id f_id;
      add_body_volume(b_id0,vol);
   if ( valid_id(b_id1) ) 
      add_body_volume(b_id1,-vol);
-}
+} // end calc_simplex_volume()
 
 /******************************************************************
 *    
@@ -212,7 +206,7 @@ void simplex_grad_l()
      }
     }
   } /* end facet loop */
-}
+} // end simplex_grad_l()
 
 
 /**************************************************************************
@@ -224,11 +218,12 @@ void simplex_grad_l()
 */
 
 
-void refine_simplex(dim,vlist,elist,slist)
-     int dim;     /* dimension of simplex */
-     int *vlist;     /* vertices of simplex  */
-     struct divedge *elist; /* edges of simplex */
-     struct simplex *slist; /* generated simplices */
+void refine_simplex(
+     int dim,        /* dimension of simplex */
+     int *vlist,     /* vertices of simplex  */
+     struct divedge *elist, /* edges of simplex */
+     struct simplex *slist  /* generated simplices */
+)
 { int v1,v2;
   int basept;
   int numedges = (dim*(dim+1))/2;
@@ -296,7 +291,7 @@ void refine_simplex(dim,vlist,elist,slist)
 
 exxit:
   temp_free((char*)newelist);
-}
+} // end refine_simplex()
 
 static struct simplex *slist;
 static struct simplex *slist_edge;
@@ -304,12 +299,12 @@ static int dim;
 static int count,scount;
 static REAL (*vcoord)[MAXCOORD];
 
-/* temporary explicit refinements */
+/* explicit refinements */
 static struct simplex slist3[8] = { {{0,4,5,6}}, {{1,4,8,7}}, {{2,5,7,9}},
     {{3,6,9,8}}, {{4,5,8,7}}, {{4,8,5,6}}, {{6,8,5,9}}, {{5,8,7,9}} };
 static struct simplex slist2[4] = { {{0,3,4}},{{1,5,3}},{{2,4,5}},{{3,5,4}}};
 static struct simplex slist1[2] = { {{0,2}}, {{2,1}}};
-struct simplex *slistmake ARGS((int));
+struct simplex *slistmake(int);
 
 /***********************************************************************
 *
@@ -318,7 +313,7 @@ struct simplex *slistmake ARGS((int));
 * purpose: set up data structures needed in simplex refining.
 */
 
-void refine_simplex_init( )
+void refine_simplex_init()
 {
 
   dim = web.dimension;
@@ -332,7 +327,7 @@ void refine_simplex_init( )
        case 1: slist = slist1; slist_edge = slist1; return;
        default: slist = slistmake(dim); slist_edge = slistmake(dim-1);
      }
-}     
+}  // end refine_simplex_init()
 
 /***********************************************************************
 *
@@ -340,8 +335,7 @@ void refine_simplex_init( )
 *
 * purpose: Make list of refined simplices of a simplex.
 */
-struct simplex *slistmake(sdim)
-int sdim;
+struct simplex *slistmake(int sdim)
 {
   int vlist[MAXCOORD+1];
   int i,j;
@@ -394,7 +388,7 @@ int sdim;
   temp_free((char*)elist);
     
   return sslist;
-}
+} // end slistmake()
 
 /************************************************************************
 *
@@ -402,9 +396,10 @@ int sdim;
 *
 * purpose: check orientation of simplices in a subdivision.
 */
-void check_orientation(sslist,sdim)
-struct simplex *sslist;
-int sdim;
+void check_orientation(
+  struct simplex *sslist,
+  int sdim
+)
 {
   int i,j,k;
   MAT2D(mat,MAXCOORD,MAXCOORD);
@@ -422,7 +417,7 @@ int sdim;
              sslist[i].pt[1] = j;
           }
      }
-}
+} // end check_orientation()
 
 /* Now come the routines for refining all the simplices.  Idea is to
 go through simplices refining and keep subdivided edges in hash table
@@ -439,6 +434,11 @@ static int tablesize;     /* current table size, power of 2 */
  /*#define hash_2(id)     (((id)*1003)>>+7) */
 #define hash_2(id) 1
 
+/************************************************************************
+* function: init_hash_table()
+*
+* purpose: initialize simplex edge hash table
+*/
 void init_hash_table()
 {
   hashentries = 0;
@@ -448,6 +448,11 @@ void init_hash_table()
   simhashtable = (struct entry *)mycalloc(tablesize,sizeof(struct entry));
 }
 
+/************************************************************************
+* function: rehash()
+*
+* purpose: rehash all entries upon table expansion
+*/
 void rehash()
 { struct entry *oldhashtable = simhashtable;
   int i,j;
@@ -471,8 +476,8 @@ void rehash()
              hash += hash2;
              hash %= hashmask;
           }
-if ( simhashtable[hash].divpt )
-  kb_error(1546,"Fatal hash conflict in rehash.\n",UNRECOVERABLE);
+  if ( simhashtable[hash].divpt )
+    kb_error(1546,"Fatal hash conflict in rehash.\n",UNRECOVERABLE);
 
         simhashtable[hash] = *h;  /* move in entry */
         recount++;
@@ -485,22 +490,33 @@ if ( simhashtable[hash].divpt )
   tablesize <<= 1;  /* REAL tablesize */
   maxload <<= 1;
   myfree((char*)oldhashtable);
-}
+} // end rehash()
 
+/*********************************************************************
+*
+* function: end_hash_table()
+*
+* purpose: deallocate simplex edge hash table
+*/
 void end_hash_table()
 { 
   myfree((char*)simhashtable);
   simhashtable = NULL;
-}
+} // end end_hash_table()
 
-vertex_id simplex_edge_divide(v1,v2)
-vertex_id v1,v2;
+/*********************************************************************
+*
+* function: simplex_edge_divide()
+*
+* purpose: divide one edge
+*/
+vertex_id simplex_edge_divide(vertex_id v1,vertex_id v2)
 { vertex_id newv;
   REAL *x1,*x2;
   REAL newx[MAXCOORD];
   unsigned int hash1,hash2,hash;
   int i;
-  conmap_t conmap[MAXCONPER];
+  conmap_t conmap[MAXCONPER]; // for common
 
   /* get vertices in canonical order */
   if ( v1 > v2 ) { vertex_id temp = v1; v1 = v2; v2 = temp;}
@@ -510,15 +526,15 @@ vertex_id v1,v2;
   hash2 = (unsigned int)(hash_2(v1) + hash_2(v2));
   hash = hash1 % hashmask;
   for ( i = 0 ; i <= hashentries ; i++ )
-     { 
-        if ( !simhashtable[hash].divpt ) break; /* missing */
-        if ( (simhashtable[hash].endpt[0]==v1) && (simhashtable[hash].endpt[1]==v2) )
-          return simhashtable[hash].divpt; /* found! */
-        hash += hash2;
-        hash %= hashmask;
-     }
-if ( simhashtable[hash].divpt )
-  kb_error(1548,"Fatal hash conflict.\n",UNRECOVERABLE);
+  { 
+    if ( !simhashtable[hash].divpt ) break; /* missing */
+    if ( (simhashtable[hash].endpt[0]==v1) && (simhashtable[hash].endpt[1]==v2) )
+       return simhashtable[hash].divpt; /* found! */
+    hash += hash2;
+    hash %= hashmask;
+  }
+  if ( simhashtable[hash].divpt )
+    kb_error(1548,"Fatal hash conflict.\n",UNRECOVERABLE);
 
   /* need to insert new edge and dividing point */
   simhashtable[hash].endpt[0] = v1;
@@ -529,7 +545,7 @@ if ( simhashtable[hash].divpt )
   simhashtable[hash].divpt = newv = new_vertex(newx,NULLID);
   set_attr(newv,get_vattr(v1)&get_vattr(v2));
 
-  get_v_common_conmap(v1,v2,conmap);
+  get_v_common_conmap(v1,v2,conmap,MAXCONPER);
   set_v_conmap(newv,conmap);
 
   if ( (get_vattr(v1)&BOUNDARY) && (get_boundary(v1) == get_boundary(v2)) )
@@ -541,7 +557,7 @@ if ( simhashtable[hash].divpt )
      rehash();
 
   return newv;
-}
+} // end simplex_edge_divide()
 
 /***********************************************************************
 *
@@ -650,7 +666,7 @@ void refine_all_simplices()
   end_hash_table();
 
   reflevel++;
-}
+} // end refine_all_simplices()
 
 
 /******************************************************************
@@ -739,7 +755,7 @@ void hi_dim_graph()
        }
      }
   }
-}
+} // end hi_dim_graph()
 
 /******************************************************************
 *
@@ -749,8 +765,10 @@ void hi_dim_graph()
 *
 */
 
-void calc_simplex_edge_energy(e_id)
-edge_id e_id;
+void calc_simplex_edge_energy(
+  edge_id e_id,
+  int mode // unused
+)
 {
   struct constraint *constr;
   int i,j,k,m;
@@ -800,8 +818,8 @@ edge_id e_id;
 
   binary_tree_add(web.total_energy_addends,
             energy/web.simplex_factorial*web.dimension);
-
-}
+ 
+} // end calc_simplex_edge_energy()
 
 
 /******************************************************************
@@ -812,8 +830,7 @@ edge_id e_id;
 *
 */
 
-void calc_simplex_edge_force(e_id)
-edge_id e_id;
+void calc_simplex_edge_force(edge_id e_id)
 {
   struct constraint *constr;
   int i,j,k,m;
@@ -886,7 +903,7 @@ edge_id e_id;
          }          
       }
     }
-}
+} // end calc_simplex_edge_force()
 
 /******************************************************************
 *
@@ -897,11 +914,11 @@ edge_id e_id;
 *
 */
 
-void simplex_edge_hessian(S,e_id,first,second)
-struct linsys *S;
-edge_id e_id;
-REAL **first;  /* first[vert][dim] */
-REAL ****second; /* second[vert][vert][dim][dim] */
+void simplex_edge_hessian(
+   edge_id e_id,
+   REAL **first,  /* first[vert][dim] */
+   REAL ****second /* second[vert][vert][dim][dim] */
+)
 {
   struct constraint *constr;
   int i,j,k,m,n,p;
@@ -1004,7 +1021,7 @@ REAL ****second; /* second[vert][vert][dim][dim] */
              }          
       }
     }
-}
+} // end simplex_edge_hessian()
 
 /*********************************************************************
 *
@@ -1030,14 +1047,13 @@ struct w_edge { vertex_id v[2];  /* endpoints */
 struct s_edge { vertex_id v[2]; /* endpoints in native order */
                 facet_id f;  /* facet with edge */
               };
-int se_comp ARGS((struct s_edge *,struct s_edge *));
 
-int se_comp(a,b) /* comparison function for sorting edge list */
-struct s_edge *a,*b;
+/* comparison function for sorting edge list */
+int se_comp( struct s_edge *a, struct s_edge *b)
 { if ( a->f < b->f ) return -1;
   if ( a->f > b->f ) return 1;
   return 0;
-}
+} // end se_comp()
 
 /**********************************************************************
 *
@@ -1045,12 +1061,8 @@ struct s_edge *a,*b;
 *
 * purpose: refine all 1-edges greater than given length.
 */
-#ifdef ANSI_DEF
+
 int simplex_long_edges(REAL max_len)
-#else
-int simplex_long_edges(max_len)
-REAL max_len;
-#endif
 { struct s_edge *se,*se_ptr;
   int se_count; /* number of edges in se */
   struct w_edge *we,*we_ptr;
@@ -1120,7 +1132,7 @@ REAL max_len;
         REAL *x1, *x2;
         REAL newx[MAXCOORD];
         REAL side[MAXCOORD];
-        conmap_t conmap[MAXCONPER];
+        conmap_t conmap[MAXCONPER];  // for common
         vertex_id newv;
         facet_id newf;
         REAL len;
@@ -1137,7 +1149,7 @@ REAL max_len;
           newx[i] = (x1[i] + x2[i])/2;
         newv = new_vertex(newx,NULLID);
         set_attr(newv,get_vattr(v0)&get_vattr(v1));
-        get_v_common_conmap(v0,v1,conmap);
+        get_v_common_conmap(v0,v1,conmap,MAXCONPER);
         for ( j = 1 ; j <= (int)conmap[0] ; j++ )
         { int c = conmap[j] & CONMASK;
           set_v_constraint_map(newv,c);
@@ -1193,7 +1205,7 @@ REAL max_len;
   temp_free((char*)we);
   temp_free((char*)fedge);
   return divcount;
-}
+} // end simplex_long_edges()
 
 
 /**********************************************************************
@@ -1202,12 +1214,8 @@ REAL max_len;
 *
 * purpose: delete all 1-edges shorter than given length.
 */
-#ifdef ANSI_DEF
+
 int simplex_tiny_edges(REAL min_len)
-#else
-int simplex_tiny_edges(min_len)
-REAL min_len;
-#endif
 { 
   int delcount = 0;  /* number of edges divided */
   int i,j,k;
@@ -1240,7 +1248,7 @@ REAL min_len;
   }
   if ( delcount ) top_timestamp = ++global_timestamp;
   return delcount;
-}
+} // end simplex_tiny_edges()
 
 /***********************************************************************
 *
@@ -1251,11 +1259,10 @@ REAL min_len;
 *             Does not move kept vertex.
 *             Returns 0 or 1 edges deleted.
 */
-int simplex_delete_edge(v1,v2)
-vertex_id v1,v2;
+int simplex_delete_edge(vertex_id v1, vertex_id v2)
 { vertex_id keepv; /* vertex to keep */
   vertex_id throwv; /* vertex to delete */
-  int attri,attrj;
+  ATTR attri,attrj;
   facet_id f_id,fstart,f_ids[100];
   int k,m,n;
 
@@ -1309,7 +1316,7 @@ vertex_id v1,v2;
     free_element(throwv);
     return 1;
 
-}
+} // end simplex_delete_edge()
 
 /***********************************************************************
 *
@@ -1317,8 +1324,7 @@ vertex_id v1,v2;
 *
 * purpose: Deletes facet by deleting shortest 1-edge.
 */
-int simplex_delete_facet(f_id)
-facet_id f_id;
+int simplex_delete_facet(facet_id f_id)
 {
   int j,k,m,n;
   struct sid { vertex_id v1,v2; REAL length; } sids[MAXCOORD*MAXCOORD],*ss;
@@ -1344,7 +1350,7 @@ facet_id f_id;
      if ( simplex_delete_edge(sids[k].v1,sids[k].v2) )
         return 1;
   return 0;  
-}
+} // end simplex_delete_facet()
 
 /********************************************************************
 *
@@ -1354,9 +1360,10 @@ facet_id f_id;
 *
 */
 
-void simplex_hessian(S,rhs)
-struct linsys *S;
-REAL *rhs;
+void simplex_hessian(
+  struct linsys *S,
+  REAL *rhs
+)
 { REAL **first;
   REAL ****second;
   REAL **p1,**p2;
@@ -1386,7 +1393,7 @@ REAL *rhs;
         memset((char*)second[0][0][0],0,sizeof(REAL)*
             web.dimension*web.dimension*SDIM*SDIM);
 
-        simplex_edge_hessian(S,e_id,first,second);
+        simplex_edge_hessian(e_id,first,second);
     
         /* first derivatives on right hand side */
         for ( i = 0 ; i < web.dimension ; i++ )
@@ -1402,7 +1409,7 @@ REAL *rhs;
           }
         /* second derivatives */
         for ( i = 0 ; i < web.dimension ; i++ )
-         for ( j = i ; j < web.dimension ; j++ )
+          for ( j = i ; j < web.dimension ; j++ )
           {
              if ( (v[i]->freedom==0) || (v[j]->freedom==0) ) continue;
              if ( loc_ordinal(v_id[i]) > loc_ordinal(v_id[j]) )
@@ -1410,13 +1417,13 @@ REAL *rhs;
              else { tail = j; head = i; }
 
              fill_mixed_entry(S,v_id[tail],v_id[head],second[tail][head]);
-            }
+          }
       }
   if ( first ) free_matrix(first);
   if ( second ) free_matrix4(second);
   if ( p1 ) free_matrix(p1);
   if ( p2 ) free_matrix(p2);
-}
+} // end simplex_hessian()
 
 /********************************************************************
 *
@@ -1426,9 +1433,10 @@ REAL *rhs;
 *
 */
 
-void simplex_facet_hessian(S,rhs)
-struct linsys *S;
-REAL *rhs;
+void simplex_facet_hessian(
+  struct linsys *S,
+  REAL *rhs
+)
 {
   int i,j,k;
   int m;
@@ -1540,7 +1548,7 @@ REAL *rhs;
 Integral of vectorfield over facet.  nD facet in (n+1)D only.
 
 *********************************************************************/
-REAL simplex_vector_integral_all ARGS((struct qinfo*,int));
+REAL simplex_vector_integral_all (struct qinfo*,int);
 /*********************************************************************
 *
 * function: simplex_vector_integral_init()
@@ -1549,9 +1557,10 @@ REAL simplex_vector_integral_all ARGS((struct qinfo*,int));
 *
 */
 
-void simplex_vector_integral_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void simplex_vector_integral_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   if ( web.dimension != SDIM-1 )
      kb_error(1551,"simplex_vector_integral method only for N-1 D facets in N D.\n",
@@ -1561,7 +1570,7 @@ struct method_instance *mi;
      kb_error(1552,"simplex_vector_integral method only for LINEAR model.\n",
 
         RECOVERABLE);
-}
+} // end simplex_vector_integral_init()
 
 /*********************************************************************
 *
@@ -1571,8 +1580,7 @@ struct method_instance *mi;
 *
 */
 
-REAL simplex_vector_integral(f_info)
-struct qinfo *f_info;
+REAL simplex_vector_integral(struct qinfo *f_info)
 { int i,m,j;
   REAL value=0.0;
   MAT2D(mat,MAXCOORD,MAXCOORD);
@@ -1588,7 +1596,7 @@ struct qinfo *f_info;
      value += gauss2Dwt[m]*det_adjoint(mat,SDIM);
   }
   return sign*value/web.simplex_factorial; 
-}
+} // end simplex_vector_integral()
 
 /*********************************************************************
 *
@@ -1598,9 +1606,7 @@ struct qinfo *f_info;
 *
 */
 
-
-REAL simplex_vector_integral_grad(f_info)
-struct qinfo *f_info;
+REAL simplex_vector_integral_grad(struct qinfo *f_info)
 { int i,m,j,k,jj;
   REAL value = 0.0;
   REAL val[MAXCOORD];
@@ -1636,7 +1642,7 @@ struct qinfo *f_info;
      for ( k = 0 ; k < f_info->vcount ; k++ )
         f_info->grad[k][j] /= web.simplex_factorial;
   return value/web.simplex_factorial;  
-}
+} // end simplex_vector_integral_grad()
 
 /*********************************************************************
 *
@@ -1649,9 +1655,18 @@ REAL simplex_vector_integral_hess(f_info)
 struct qinfo *f_info;
 { return simplex_vector_integral_all(f_info,METHOD_HESSIAN);
 }
-REAL simplex_vector_integral_all(f_info,mode)
-struct qinfo *f_info;
-int mode;
+
+/*********************************************************************
+*
+* function: simplex_vector_integral_all()
+*
+* purpose:  value, gradient, and hessian of simplex_vector_integral
+*
+*/
+REAL simplex_vector_integral_all(
+  struct qinfo *f_info,
+  int mode
+)
 { int i,m,j,k,jj,ii,kk;
   REAL sum,value = 0.0;
   REAL val[MAXCOORD];
@@ -1730,7 +1745,7 @@ int mode;
   free_matrix(tr);
   free_matrix4(ada);
   return value;  
-}
+} // end simplex_vector_integral_all()
 
 
 /*********************************************************************
@@ -1740,7 +1755,7 @@ int mode;
 Integral of (n-k)vectorfield over k-facet. Will do edge equally well. 
 
 *********************************************************************/
-REAL simplex_k_vector_integral_all ARGS((struct qinfo*,int));
+REAL simplex_k_vector_integral_all(struct qinfo*,int);
 /*********************************************************************
 *
 * function: simplex_k_vector_integral_init()
@@ -1749,14 +1764,15 @@ REAL simplex_k_vector_integral_all ARGS((struct qinfo*,int));
 *
 */
 
-void simplex_k_vector_integral_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void simplex_k_vector_integral_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   if ( web.modeltype == QUADRATIC ) 
      kb_error(1553,"simplex_k_vector_integral method not for QUADRATIC model.\n",
         RECOVERABLE);
-}
+} // end simplex_k_vector_integral_init()
 
 /*********************************************************************
 *
@@ -1766,8 +1782,7 @@ struct method_instance *mi;
 *
 */
 
-REAL simplex_k_vector_integral(f_info)
-struct qinfo *f_info;
+REAL simplex_k_vector_integral(struct qinfo *f_info)
 { int i,m,j,k;
   REAL value=0.0;
   MAT2D(mat,MAXCOORD,MAXCOORD);
@@ -1788,7 +1803,7 @@ struct qinfo *f_info;
      value += gauss2Dwt[m]*det_adjoint(mat,SDIM);
   }
   return sign*value/web.simplex_factorial; 
-}
+} // end simplex_k_vector_integral()
 
 /*********************************************************************
 *
@@ -1798,8 +1813,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL simplex_k_vector_integral_grad(f_info)
-struct qinfo *f_info;
+REAL simplex_k_vector_integral_grad(struct qinfo *f_info)
 { int i,m,j,k,jj;
   REAL value = 0.0;
   REAL val[MAXCOORD];
@@ -1841,7 +1855,7 @@ struct qinfo *f_info;
      for ( k = 0 ; k < f_info->vcount ; k++ )
         f_info->grad[k][j] /= web.simplex_factorial;
   return value/web.simplex_factorial;  
-}
+} // end simplex_k_vector_integral_grad()
 
 /*********************************************************************
 *
@@ -1851,15 +1865,14 @@ struct qinfo *f_info;
 *
 */
 
-REAL simplex_k_vector_integral_hess(f_info)
-struct qinfo *f_info;
+REAL simplex_k_vector_integral_hess(struct qinfo *f_info)
 {
   if ( web.modeltype != LAGRANGE )
      kb_error(1554,"simplex_k_vector_integral hess only for LAGRANGE.\n",
          RECOVERABLE);
 
   return lagrange_k_vector_integral_hess(f_info);
-}
+} // end simplex_k_vector_integral_hess()
 
 /***********************************************************************
 *
@@ -1876,9 +1889,10 @@ struct qinfo *f_info;
 *  Output:  normal basis
 *  Return value: dimension of normal space
 */
-int simplex_vertex_normal(v_id,norm)
-vertex_id v_id;
-REAL **norm;  /* for return */
+int simplex_vertex_normal(
+  vertex_id v_id,
+  REAL **norm  /* for return */
+)
 { facet_id f_id,startf;
   MAT2D(sides,MAXCOORD,MAXCOORD);
   int i,j;
@@ -1912,4 +1926,4 @@ REAL **norm;  /* for return */
   } /* end regular point */
 
   return 1;
-}
+} // end simplex_vertex_normal()

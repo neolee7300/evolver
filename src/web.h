@@ -55,7 +55,6 @@ struct webstruct {
      int convex_flag;     /* whether any convex boundaries present */
      int pressflag;        /* whether prescribed pressures present */
      int constr_flag;     /* set if there are any one-sided constraints */
-     int hide_flag;        /* set for hidden surface removal */
      int motion_flag;     /* set for fixed scale of motion;
                                           otherwise seek minimum. */
      int symmetry_flag;  /* whether symmetry group in effect */
@@ -97,6 +96,7 @@ struct webstruct {
      REAL torusv;                 /* unit cell volume or area */
      REAL **torus_period;
      REAL **inverse_periods;/* inverse matrix of torus periods */
+     REAL **inverse_periods_tr;/* transpose of inverse matrix of periods */
      REAL **torus_display_period;
      REAL display_origin[MAXCOORD];
      REAL **inverse_display_periods;/* inverse of torus display periods */
@@ -165,21 +165,22 @@ struct webstruct {
          so as to be easily exported.  Previous global names are defined
          to web fields elsewhere.
          */
-     DY_OFFSET dy_gen_quants_w;
      int gen_quant_count_w;
      int gen_quant_alloc_w;
+     int gen_quant_free_head_w;
      int global_count;
      int maxglobals;  /* number allocated */
      int perm_global_count;
      int max_perm_globals;  /* number allocated */
 
-     DY_OFFSET dy_meth_inst_w; /* for storing instance structures */
      int meth_inst_alloc_w;  /* number allocated */
      int meth_inst_count_w;  /* number defined    */
+     int meth_inst_free_head_w;  /* start of free list */
 
      /* global method instances, applying to every element of type */
-     int global_meth_inst_w[NUMELEMENTS][MAXGLOBINST]; /* lists */
+     int *global_meth_inst_w[NUMELEMENTS]; /* lists */
      int global_meth_inst_count_w[NUMELEMENTS];
+     int global_meth_inst_alloc_w[NUMELEMENTS];
 
      /* flags telling which quantity calculations necessary */
      /* flag set for Q_ENERGY,Q_FIXED, or Q_INFO if any element
@@ -189,7 +190,7 @@ struct webstruct {
      DY_OFFSET dy_freestart_w;  /* initial block of freelist, 0 if none */
 #define dy_freestart web.dy_freestart_w
      DY_OFFSET dy_globals_w;  /* global variable table */
-     struct global *dy_perm_globals_w;
+     struct global **dy_perm_globals_w;
      DY_OFFSET dy_globalshash_w; /* hash list for global variables */
 
      /* common */

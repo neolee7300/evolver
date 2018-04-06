@@ -12,13 +12,13 @@
 #include "include.h"
 #include "f2c.h" 
 
-int sdrvmd_ ARGS(( integer *, integer *,integer *, integer *,integer *,REAL *,
+int sdrvmd_ ( integer *, integer *,integer *, integer *,integer *,REAL *,
           REAL *,REAL *, integer *,integer *,REAL *,integer *,
-          integer *, integer *, REAL *));
+          integer *, integer *, REAL *);
 
- int ysmp_negvector ARGS((integer*, integer*, doublereal*,
+ int ysmp_negvector(integer*, integer*, doublereal*,
  integer*, integer*, integer*, doublereal*, doublereal*, doublereal*, 
- doublereal*));
+ doublereal*);
 
 /* *********************************************************************** */
 /* *********************************************************************** */
@@ -59,14 +59,14 @@ int sdrvmd_ ARGS(( integer *, integer *,integer *, integer *,integer *,REAL *,
 /* ====================  change #1  (replacement) =====================1 */
 /* WAS:  SUBROUTINE SDRV */
 /* ===================================================================== */
-/* Subroutine */ int sdrvmd_(n, p, ip, ia, ja, a, b, z, nsp, isp, rsp, esp, 
-          path, flag_, emax)
-integer *n, *p, *ip, *ia, *ja;
-doublereal *a, *b, *z;
-integer *nsp, *isp;
-doublereal *rsp;
-integer *esp, *path, *flag_;
-doublereal *emax;
+int sdrvmd_(
+  integer *n,integer *p,integer *ip,integer *ia,integer *ja,
+  doublereal *a,doublereal *b,doublereal *z,
+  integer *nsp,integer *isp,
+  doublereal *rsp,
+  integer *esp,integer *path,integer *flag_,
+  doublereal *emax
+)
 {
      /* Initialized data */
 
@@ -399,7 +399,8 @@ L110:
 L111:
      *flag_ = *n * 11 + 1;
      return 0;
-} /* sdrvmd_ */
+
+} /* end sdrvmd_() */
 
 
 /* *********************************************************************** */
@@ -407,28 +408,28 @@ L111:
 /* NUMERICAL FACTORIZATION OF SYMMETRIC MATRICES */
 /* *********************************************************************** */
 
-/* ====================  change #1  (replacement) =====================1 */
-/* WAS: */
-/*  SNF -- NUMERICAL UT-D-U FACTORIZATION OF SPARSE SYMMETRIC POSITIVE */
-/*            DEFINITE MATRIX */
-/*         SUBROUTINE  SNF */
+/* ====================  change #1  (replacement) ====================== */
+/* WAS:                                                                  */
+/*  SNF -- NUMERICAL UT-D-U FACTORIZATION OF SPARSE SYMMETRIC POSITIVE   */
+/*            DEFINITE MATRIX                                            */
+/*         SUBROUTINE  SNF                                               */
 /* ===================================================================== */
 
-/*  SNFMOD -- NUMERICAL FACTORIZATION OF SPARSE SYMMETRIC MATRICES M BY */
+/*  SNFMOD -- NUMERICAL FACTORIZATION OF SPARSE SYMMETRIC MATRICES M BY   */
 /*            THE GILL/MURRAY/WRIGHT MODIFIED CHOLESKY FACTORIZATION (GMW */
 /*            MCF) WITHOUT PIVOTING.  THE FACTORIZATION PRODUCES U,D, AND */
-/*            E SO THAT    M + E = UT-D-U,  WHERE  E AND D ARE DIAGONAL */
-/*            MATRICES. THIS ROUTINE IS A MODIFICATION OF THE YSMP */
-/*            routine SNF. ALL CHANGES ARE INDICATED. */
+/*            E SO THAT    M + E = UT-D-U,  WHERE  E AND D ARE DIAGONAL   */
+/*            MATRICES. THIS ROUTINE IS A MODIFICATION OF THE YSMP        */
+/*            routine SNF. ALL CHANGES ARE INDICATED.                     */
 
-/* Subroutine */ int snfmod_(n, p, ip, ia, ja, a, d, iju, ju, iu, u, umax, il,
-            jl, flag_, emax)
-integer *n, *p, *ip, *ia, *ja;
-doublereal *a, *d;
-integer *iju, *ju, *iu;
-doublereal *u;
-integer *umax, *il, *jl, *flag_;
-doublereal *emax;
+int snfmod_(
+  integer *n,integer *p,integer *ip,integer *ia,integer *ja,
+  doublereal *a,doublereal *d,
+  integer *iju,integer *ju,integer *iu,
+  doublereal *u,
+  integer *umax,integer *il,integer *jl,integer *flag_,
+  doublereal *emax
+)
 {
      /* System generated locals */
      integer i__1, i__2;
@@ -740,14 +741,17 @@ L11:
 L107:
      *flag_ = *n * 7 + 1;
      return 0;
-} /* snfmod_ */
+
+} /* snfmod_() */
 
 /* *********************************************************************** */
 /*  SSF --  SYMBOLIC UT-D-U FACTORIZATION OF SPARSE SYMMETRIC MATRIX */
 /* *********************************************************************** */
-/* Subroutine */ int ssf_(n, p, ip, ia, ja, iju, ju, iu, jumax, q, mark, jl, 
-          flag_)
-integer *n, *p, *ip, *ia, *ja, *iju, *ju, *iu, *jumax, *q, *mark, *jl, *flag_;
+int ssf_(
+  integer *n,integer *p,integer *ip,integer *ia,integer *ja,integer *iju,
+  integer *ju,integer *iu,integer *jumax,integer *q,integer *mark,integer *jl,
+  integer*flag_
+)
 { /* System generated locals */
      integer i__1, i__2, i__3;
      /* Local variables */
@@ -986,18 +990,20 @@ L102:
 L106:
      *flag_ = *n * 6 + k;
      return 0;
-} /* ssf_ */
+
+} /* end ssf_() */
 
 
 /* *********************************************************************** */
 /*  SNS -- SOLUTION OF SPARSE SYMMETRIC POSITIVE DEFINITE SYSTEM OF */
 /*            LINEAR EQUATIONS  MX = B  GIVEN UT-D-U FACTORIZATION OF M */
 /* *********************************************************************** */
-/* Subroutine */ int sns_(n, p, d, iju, ju, iu, u, z, b, tmp)
-integer *n, *p;
-doublereal *d;
-integer *iju, *ju, *iu;
-doublereal *u, *z, *b, *tmp;
+int sns_(
+  integer *n,integer *p,
+  doublereal *d,
+  integer *iju,integer *ju,integer *iu,
+  doublereal *u,doublereal *z,doublereal *b,doublereal *tmp
+)
 {
      /* System generated locals */
      integer i__1, i__2;
@@ -1079,7 +1085,8 @@ L5:
      }
 
      return 0;
-} /* sns_ */
+
+} /* end sns_() */
 
 /*************************************************************************
 *  function: ysmp_negvector()
@@ -1090,11 +1097,12 @@ L5:
 *              a 1 in spot corresponding to negative diagonal element.
 *              Adapted from SNS_ by cutting out the UT D Y = B solution step.
 * ************************************************************************/
-/* Subroutine */ int ysmp_negvector(n, p, d, iju, ju, iu, u, z, b, tmp)
-integer *n, *p;
-doublereal *d;
-integer *iju, *ju, *iu;
-doublereal *u, *z, *b, *tmp;
+int ysmp_negvector(
+  integer *n,integer *p,
+  doublereal *d,
+  integer *iju,integer *ju,integer *iu,
+  doublereal *u,doublereal *z,doublereal *b,doublereal *tmp
+)
 {
      /* System generated locals */
      integer i__1, i__2;
@@ -1156,5 +1164,6 @@ L5:
      }
 
      return 0;
-} /* ysmp_negvector */
+
+} /* end ysmp_negvector() */
 

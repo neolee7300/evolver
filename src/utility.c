@@ -25,8 +25,7 @@
 #define write(a,b,c) erroutstring(b)
 #endif
 
-void catcher(sig)
-int sig;
+void catcher(int sig)
 {
 #ifdef SIGALRM
   if ( sig == SIGALRM ) 
@@ -51,18 +50,22 @@ int sig;
     else
 #endif
     if ( iterate_flag == 1 )
-      { write(2,"\nWill break after iteration.\n",29);
-         breakflag = BREAKFULL;
-         iterate_flag = 0;
-      }
+    { write(2,"\nWill break after iteration.\n",29);
+      breakflag = BREAKFULL;
+      iterate_flag = 0;
+    }
     else if ( iterate_flag == 2 ) /* graphing or something */
-      { write(2,"\nWill abort operation.\n",24);
-         breakflag = BREAKFULL;
-         iterate_flag = 0;
-      }
+    { write(2,"\nWill abort operation.\n",24);
+      breakflag = BREAKFULL;
+      iterate_flag = 0;
+    }
+    else if ( hessian_iterate_flag == 1 )
+    { write(2,"\nWill break after iteration.\n",29);
+      breakflag = BREAKFULL;
+    }
     else
-      { write(2,"\nAborting operation.\n",22);
-        if ( TRY_GRAPH_MUTEX(IMMEDIATE_TIMEOUT) )
+    { write(2,"\nAborting operation.\n",22);
+      if ( TRY_GRAPH_MUTEX(IMMEDIATE_TIMEOUT) )
            ABORT_GRAPH_MUTEX
         else
            erroutstring("In GRAPH_MUTEX.  May be deadlocked with graphics thread.\n");
@@ -76,7 +79,7 @@ int sig;
 #else
   kb_error(1357,"",RECOVERABLE_QUIET);
 #endif
-      }
+    }
     while ( commandfd && (commandfd  != stdin) )
          pop_commandfd();
     quiet_flag = 0; 
@@ -106,22 +109,13 @@ int sig;
     broken_pipe_flag = 1;
      }
 #endif
-}
+} // end catcher()
 
 /***********************************************************************
 ************************************************************************
                     Memory allocation routines
 ************************************************************************/
 
-/* Header structure for each block */
-struct memhead {  struct memhead *prev, *next; /* doubly linked list */
-                  size_t size;
-                  int type;   /* see below */
-#ifdef MEMSTRINGS
-                  char file[28];
-                  int line;
-#endif
-               };
 /* Memory block list heads */
 struct memhead *perm_block_head;
 struct memhead *temp_block_head;
@@ -145,7 +139,7 @@ int    size;
   a = b + size/sizeof(int);
   do { sum += *a; } while ( --a != b);
   return sum;
-}
+} // end kb_checksum()
 
 /********************************************************************
 *********************************************************************
@@ -157,8 +151,6 @@ int    size;
               needs to be distributed on a network implementation,
               instead of the present dymem.
 ********************************************************************/
-
-void mem_sanity_check ARGS((void));
 
 /********************************************************************
 *
@@ -203,7 +195,7 @@ void mem_sanity_check()
   { if ( head->type != GRAPH_BLOCK )
       kb_error(2461,"Bad graphics memory block chain!\n",RECOVERABLE);
   }
-}
+} // end mem_sanity_check()
 
 /********************************************************************
 *
@@ -223,7 +215,9 @@ void mem_list_summary()
     else { subtotal += head->size; subcount++; }
   }
   if ( verbose_flag )
-  { sprintf(errmsg,"Session: %7d blocks, %10d bytes \n",subcount,subtotal);
+  { sprintf(errmsg,"Session: %7lu blocks, %10lu KB, or %lu MB \n",
+      (unsigned long)subcount,(unsigned long)subtotal>>10,
+      (unsigned long)subtotal>>20);
     outstring(errmsg);
   }
   total += subtotal; count += subcount;
@@ -234,7 +228,9 @@ void mem_list_summary()
     else { subtotal += head->size; subcount++; }
   }
   if ( verbose_flag )
-  { sprintf(errmsg,"Permanent: %5d blocks, %10d bytes \n",subcount,subtotal);
+  { sprintf(errmsg,"Permanent: %5lu blocks, %10lu KB, or %lu MB \n",
+       (unsigned long)subcount,(unsigned long)(subtotal>>10),
+       (unsigned long)(subtotal>>20));
     outstring(errmsg);
   }
   total += subtotal; count += subcount;
@@ -252,17 +248,22 @@ void mem_list_summary()
   }
 
   if ( verbose_flag )
-  { sprintf(errmsg,"Temporary: %5d blocks, %10d bytes\n",subcount,subtotal);
+  { sprintf(errmsg,"Temporary: %5lu blocks, %10lu KB, or %lu MB\n",
+       (unsigned long)subcount,(unsigned long)(subtotal>>10),
+       (unsigned long)(subtotal>>20));
     outstring(errmsg);
   }
   total += subtotal; count += subcount;
 
   if ( verbose_flag )
-    sprintf(errmsg,"Total data memory: %d blocks, %d bytes.\n",count,total);
+    sprintf(errmsg,"Total data memory: %lu blocks, %lu KB, or %lu MB.\n",
+      (unsigned long)count,(unsigned long)(total>>10),(unsigned long)(total>>20));
   else
-    sprintf(errmsg,"Total data memory: %d bytes.\n",total);
+    sprintf(errmsg,"Total data memory: %lu KB, or %lu MB.\n",
+        (unsigned long)(total>>10), (unsigned long)(total>>20));
   outstring(errmsg);
 
+  // See if we can get video memory
 #ifdef LINUX
   if ( verbose_flag )
   { FILE *fd;
@@ -280,7 +281,7 @@ if ( fd == NULL ) perror(procname);
     outstring(errmsg);
   }
 #endif
-}
+} // end mem_list_summary()
 
 
 /********************************************************************
@@ -298,68 +299,68 @@ void mem_list_dump()
   outstring("\nEternal memory blocks:\n");
   for ( head = eternal_block_head, subcount=0 ; head ; head = head->next )
   { subcount++;
-    sprintf(msg,"%5d. %10d bytes at %p; %28s line %4d\n", 
-      subcount,head->size,head,head->file,head->line);
+    sprintf(msg,"%5d. %12.0f bytes at %p; %18s line %4d\n", 
+      subcount,(double)head->size,head,head->file,head->line);
     outstring(msg);
   }
 
   outstring("\nPermanent memory blocks:\n");
   for ( head = perm_block_head, subcount=0 ; head ; head = head->next )
   { subcount++;
-    sprintf(msg,"%5d. %10d bytes at %p; %28s line %4d\n", 
-      subcount,head->size,head,head->file,head->line);
+    sprintf(msg,"%5d. %12.0f bytes at %p; %18s line %4d\n", 
+      subcount,(double)head->size,head,head->file,head->line);
     outstring(msg);
   }
 
   outstring("\nTemporary memory blocks:\n");
   for ( head = temp_block_head, subcount=0 ; head ; head = head->next )
   { subcount++;
-    sprintf(msg,"%5d. %10d bytes at %p; %28s line %4d\n", 
-      subcount,head->size,head,head->file,head->line);
+    sprintf(msg,"%5d. %12.0f bytes at %p; %18s line %4d\n", 
+      subcount,(double)head->size,head,head->file,head->line);
     outstring(msg);
   }
 
   outstring("\nGraph memory blocks:\n");
   for ( head = graph_block_head, subcount=0 ; head ; head = head->next )
   { subcount++;
-    sprintf(msg,"%5d. %10d bytes at %p; %28s line %4d\n", 
-      subcount,head->size,head,head->file,head->line);
+    sprintf(msg,"%5d. %12.0f bytes at %p; %18s line %4d\n", 
+      subcount,(double)head->size,head,head->file,head->line);
     outstring(msg);
   }
 #else
   outstring("\nEternal memory blocks:\n");
   for ( head = eternal_block_head, subcount=0 ; head ; head = head->next )
   { subcount++;
-    sprintf(msg,"%5d. %10d bytes at %p\n", 
-      subcount,head->size,head);
+    sprintf(msg,"%5ld. %12.0f bytes at %p\n", 
+      (long)subcount,(double)head->size,head);
     outstring(msg);
   }
 
   outstring("\nPermanent memory blocks:\n");
   for ( head = perm_block_head, subcount=0 ; head ; head = head->next )
   { subcount++;
-    sprintf(msg,"%5d. %10d bytes at %p\n", 
-      subcount,head->size,head);
+    sprintf(msg,"%5ld. %12.0f bytes at %p\n", 
+      (long)subcount,(double)head->size,head);
     outstring(msg);
   }
 
   outstring("\nTemporary memory blocks:\n");
   for ( head = temp_block_head, subcount=0 ; head ; head = head->next )
   { subcount++;
-    sprintf(msg,"%5d. %10d bytes at %p\n", 
-      subcount,head->size,head);
+    sprintf(msg,"%5ld. %12.0f bytes at %p\n", 
+      (long)subcount,(double)head->size,head);
     outstring(msg);
   }
 
   outstring("\nGraph memory blocks:\n");
   for ( head = graph_block_head, subcount=0 ; head ; head = head->next )
   { subcount++;
-    sprintf(msg,"%5d. %10d bytes at %p\n", 
-      subcount,head->size,head);
+    sprintf(msg,"%5ld. %12.0f bytes at %p\n", 
+      (long)subcount,(double)head->size,head);
     outstring(msg);
   }
 #endif
-}
+} // end mem_list_dump()
 
 /********************************************************************
               Generic list calloc,realloc,free routines.
@@ -373,17 +374,19 @@ void mem_list_dump()
 */
 
 #ifdef MEMSTRINGS
-char *list_calloc(num,size,type,file,line)
-size_t num; /* number of chunks */
-size_t size; /* size of chunks */
-int type; /* memory list type */
-char *file;
-size_t line;
+char *list_calloc(
+  size_t num, /* number of chunks */
+  size_t size, /* size of chunks */
+  int type, /* memory list type */
+  char *file,
+  size_t line
+)
 #else
-char *list_calloc(num,size,type)
-size_t num; /* number of chunks */
-size_t size; /* size of chunks */
-int type; /* memory list type */
+char *list_calloc(
+  size_t num, /* number of chunks */
+  size_t size, /* size of chunks */
+  int type/* memory list type */
+)
 #endif
 { struct memhead **listhead=NULL;
   struct memhead *ptr;
@@ -396,13 +399,17 @@ int type; /* memory list type */
     default: kb_error(2452,"Internal error: illegal memory block type.\n",
        RECOVERABLE);
   }
- 
+  
   ptr = (struct memhead *)calloc(sizeof(struct memhead)+num*size,1);
   if ( ptr == NULL )
   { 
-   mem_sanity_check(); 
-    sprintf(errmsg,"Internal error: Cannot allocate memory size %d*%d = %d.\n",
-         num,size,num*size);
+    mem_sanity_check(); 
+    sprintf(errmsg,"Internal error: Cannot allocate memory size %lu*%lu = %lu.\n",
+      (unsigned long)num,(unsigned long)size,
+          (unsigned long)num*(unsigned long)size);
+#ifdef MEMSTRINGS
+    sprintf(msg+strlen(msg),"Requested from %s line %d\n",file,line);
+#endif
     kb_error(2550,errmsg, RECOVERABLE);
   }
 
@@ -417,13 +424,14 @@ int type; /* memory list type */
   ptr->type = type;
 #ifdef MEMSTRINGS
   strncpy(ptr->file,file,sizeof(ptr->file)-1);
-  ptr->line = line;
+  ptr->line = (int)line;
 #endif
   
-  if ( memdebug ) mem_sanity_check();
+  if ( memdebug ) 
+    mem_sanity_check();
 
   return (char*)(ptr+1);
-}  
+} // end list_calloc()
 
 /************************************************************************
 *
@@ -434,17 +442,19 @@ int type; /* memory list type */
 */
 
 #ifdef MEMSTRINGS
-char *list_realloc(ptr,size,type,file,line)
-char *ptr;  /* old block */
-size_t size;   /* new size */
-int type;   /* of list */
-char *file;
-size_t line;
+  char *list_realloc(
+  char *ptr,  /* old block */
+  size_t size,   /* new size */
+  int type,   /* of list */
+  char *file,
+  size_t line
+)
 #else
-char *list_realloc(ptr,size,type)
-char *ptr;  /* old block */
-size_t size;   /* new size */
-int type;   /* of list */
+char *list_realloc(
+  char *ptr,  /* old block */
+  size_t size,   /* new size */
+  int type   /* of list */
+)
 #endif
 { struct memhead **listhead=NULL;
   struct memhead *newhead;
@@ -488,8 +498,11 @@ int type;   /* of list */
      (struct memhead *)realloc((char*)oldhead,sizeof(struct memhead)+size);
   if ( newhead == NULL )
   { sprintf(errmsg,
-     "Internal error: Cannot reallocate memory from old size %d to new %d.\n",
-       oldsize,size);
+     "Internal error: Cannot reallocate memory from old size %lu to new %lu.\n",
+       (unsigned long)oldsize,(unsigned long)size);
+#ifdef MEMSTRINGS
+    sprintf(msg+strlen(msg),"Requested from %s line %d\n",file,line);
+#endif
     kb_error(1360,errmsg,RECOVERABLE);
   }
 
@@ -504,14 +517,15 @@ int type;   /* of list */
   newhead->type = type;
 #ifdef MEMSTRINGS
   strncpy(newhead->file,file,sizeof(newhead->file)-1);
-  newhead->line = line;
+  newhead->line = (int)line;
 #endif
   
   newptr = (char*)(newhead+1);
   if (oldsize < size )  memset(newptr+oldsize,0,size-oldsize);
 
 
-  if ( memdebug ) mem_sanity_check();
+  if ( memdebug ) 
+    mem_sanity_check();
 
   return newptr;
 
@@ -524,9 +538,10 @@ int type;   /* of list */
 * purpose: free one block on a memory list.
 */
 
-void list_free(ptr,type)
-char *ptr;
-int type;  /* of memory list */
+void list_free(
+  char *ptr,
+  int type  /* of memory list */
+  )
 { struct memhead *head;
   struct memhead **listhead=NULL;
 
@@ -535,9 +550,9 @@ int type;  /* of memory list */
     return;
   }
   
-  if ( memdebug ) mem_sanity_check();
-
-  
+  if ( memdebug ) 
+    mem_sanity_check();
+ 
   switch(type)
   { case PERM_BLOCK: listhead = &perm_block_head; break;
     case TEMP_BLOCK: listhead = &temp_block_head; break;
@@ -550,38 +565,41 @@ int type;  /* of memory list */
   head = (struct memhead *)ptr - 1;
 
   if ( memdebug )
-  { 
+  { char memmsg[1000];
 #ifdef MEMSTRINGS
-    sprintf(msg,"  allocated from %s:%d\n",head->file,head->line);
+    sprintf(memmsg,"  allocated from %s:%d\n",head->file,head->line);
 #else
-    sprintf(msg,"\n");
+    sprintf(memmsg,"\n");
 #endif
-    erroutstring(msg);
+    erroutstring(memmsg);
   }
 
   if ( head->type != type )
-  { switch ( head->type )
-    { case ETERNAL_BLOCK: case TEMP_BLOCK: case PERM_BLOCK:
-      case GRAPH_BLOCK:
+  { char *headtypename,*typename;
+    switch ( head->type )
+    { case ETERNAL_BLOCK: headtypename = "ETERNAL_BLOCK"; break;
+      case TEMP_BLOCK: headtypename = "TEMP_BLOCK"; break;
+      case PERM_BLOCK: headtypename = "PERM_BLOCK"; break;
+      case GRAPH_BLOCK: headtypename = "GRAPH_BLOCK"; break;
+      default: headtypename = "corrupt";
+    }
+    switch ( type )
+    { case ETERNAL_BLOCK: typename = "ETERNAL_BLOCK"; break;
+      case TEMP_BLOCK: typename = "TEMP_BLOCK"; break;
+      case PERM_BLOCK: typename = "PERM_BLOCK"; break;
+      case GRAPH_BLOCK: typename = "GRAPH_BLOCK"; break;
+      default: headtypename = "corrupt";
+    }
 #ifdef MEMSTRINGS
-		  sprintf(errmsg,"Internal error: Trying to free memory block from wrong type list.\nAllocated from %s:%d\n",
-              head->file,head->line);
+    sprintf(errmsg,"Internal error: Trying to free memory block of type %s from %s list.\nAllocated from %s:%d\n",
+       headtypename,typename,head->file,head->line);
 #else
-		  sprintf(errmsg,"Internal error: Trying to free memory block from wrong type list.\n");
+    sprintf(errmsg,"Internal error: Trying to free memory block of type %s from %s list.\n",
+        headtypename,typename);
 
 #endif
-		  kb_error(2465,errmsg,RECOVERABLE);
-       default: 
-#ifdef MEMSTRINGS
-		  sprintf(errmsg,"Internal error: Trying to free corrupt memory block.\nAllocated from %s:%d\n",
-              head->file,head->line);
-         kb_error(2466,errmsg,RECOVERABLE);
-#else
-         kb_error(3209,
-          "Internal error: trying to free corrupt memory block.\n",
-          RECOVERABLE);
-#endif
-     }
+    kb_error(2465,errmsg,RECOVERABLE);
+
    }
 
   /* delete from my list */
@@ -592,9 +610,10 @@ int type;  /* of memory list */
   LEAVE_MEM_MUTEX
   free((char*)head);
 
-  if ( memdebug ) mem_sanity_check();
+  if ( memdebug ) 
+    mem_sanity_check();
 
-}
+} // end list_free()
 
 /**************************************************************************
 *
@@ -603,8 +622,7 @@ int type;  /* of memory list */
 * purpose: free all blocks on a list.
 */
 
-void list_free_all(type)
-int type;  /* of list */
+void list_free_all(int type)  /* of list */
 { struct memhead **listhead=NULL;
   struct memhead *head,*nexthead;
 
@@ -622,14 +640,14 @@ int type;  /* of list */
   { if ( head->type != type )
       kb_error(3905,"Internal error: corrupt memory list.\n",RECOVERABLE);
     if ( memdebug )
-    {
+    { char memmsg[1000];
 #ifdef MEMSTRINGS
-       sprintf(msg,"Freeing %p, %d bytes, allocated at %s:%d\n",head+1,
+       sprintf(memmsg,"Freeing %p, %d bytes, allocated at %s:%d\n",head+1,
            head->size,head->file,head->line);
 #else
-       sprintf(msg,"Freeing %p, %d bytes\n",head+1,head->size);
+       sprintf(memmsg,"Freeing %p, %ld bytes\n",head+1,(long)head->size);
 #endif
-       erroutstring(msg);
+       erroutstring(memmsg);
     }
     nexthead = head->next;
     free((char*)head);
@@ -655,13 +673,17 @@ int type;  /* of list */
 */
 
 #ifdef MEMSTRINGS
-char *kb_calloc(num,size,file,line)
-size_t num,size;
-char *file;
-size_t line;
+char *kb_calloc(
+  size_t num,
+  size_t size,
+  char *file,
+  size_t line
+)
 #else
-char *kb_calloc(num,size)
-size_t num,size;
+char *kb_calloc(
+  size_t num,
+  size_t size
+)
 #endif
 { char *ptr;
 
@@ -671,7 +693,8 @@ size_t num,size;
     sprintf(errmsg,"mycalloc %30.30s %5d: %10d ",file,line,num*size);
     erroutstring(errmsg);
 #else
-    sprintf(errmsg,"mycalloc %d*%d = %d bytes ",num,size,num*size);
+    sprintf(errmsg,"mycalloc %lu*%lu = %lu bytes ",(unsigned long)num,
+       (unsigned long)size,(unsigned long)num*size);
     erroutstring(errmsg); 
 #endif
   }
@@ -700,14 +723,17 @@ size_t num,size;
 */
 
 #ifdef MEMSTRINGS
-char *KB_realloc(ptr,size,file,line)
-char *ptr;
-size_t size;
-char *file; size_t line;
+char *KB_realloc(
+  char *ptr,
+  size_t size,
+  char *file,
+  size_t line
+)
 #else
-char *KB_realloc(ptr,size)
-char *ptr;
-size_t size;
+char *KB_realloc(
+  char *ptr,
+  size_t size
+)
 #endif
 { char *newptr;
 
@@ -717,8 +743,8 @@ size_t size;
      sprintf(errmsg,"%30.30s %4d: realloc old %p size %d to size %d \n",
          file,line,ptr, (ptr ? ((struct memhead *)ptr)[-1].size:0) ,size);
 #else
-     sprintf(errmsg,"realloc old %p size %d to size %d \n",ptr,
-          (ptr ? ((struct memhead *)ptr)[-1].size:0 ) ,size);
+     sprintf(errmsg,"realloc old %p size %ld to size %ld \n",ptr,
+         (long) (ptr ? ((struct memhead *)ptr)[-1].size:0 ) ,(long)size);
 #endif
      erroutstring(errmsg);
   }
@@ -737,7 +763,7 @@ size_t size;
   }
 
   return newptr;
-} /* end kb_realloc() */
+} /* end KB_realloc() */
 
 /********************************************************************
 *
@@ -747,8 +773,7 @@ size_t size;
 *
 */
 
-void myfree(ptr)
-char *ptr;
+void myfree(char *ptr)
 { 
   if ( memdebug )
   { 
@@ -757,7 +782,7 @@ char *ptr;
   }
 
   list_free(ptr,PERM_BLOCK);
-}
+} // end myfree()
 
 /********************************************************************
               Temporary memory allocation. These blocks
@@ -777,13 +802,17 @@ char *ptr;
 */
 
 #ifdef MEMSTRINGS
-char *kb_temp_calloc(num,size,file,line)
-size_t num,size;
-char *file;
-size_t line;
+char *kb_temp_calloc(
+  size_t num,
+  size_t size,
+  char *file,
+  size_t line
+)
 #else
-char *kb_temp_calloc(num,size)
-size_t num,size;
+char *kb_temp_calloc(
+  size_t num,
+  size_t size
+)
 #endif
 { char *ptr;
   int blocktype = TEMP_BLOCK;
@@ -794,11 +823,11 @@ size_t num,size;
     sprintf(errmsg,"%30.30s %4d: ",file,line);
     erroutstring(errmsg);
 #endif
-    sprintf(errmsg,"temp_calloc %9d bytes ",num*size);
+    sprintf(errmsg,"temp_calloc %9ld bytes ",(long)num*size);
     erroutstring(errmsg);
   }
 
-  THREADBLOCK(blocktype);
+  THREADBLOCK(blocktype);  // set GRAPH_BLOCK or TEMP_BLOCK
 
 #ifdef MEMSTRINGS
   ptr = list_calloc(num,size,blocktype,file,line);
@@ -812,26 +841,28 @@ size_t num,size;
   }
 
   return ptr;
-}
+} // end kb_temp_calloc()
+ 
 
 /********************************************************************
 *
 * function:  temp_realloc()
 *
 * purpose:  Changing size of temporary memory allocation.
-*
 */
 
 #ifdef MEMSTRINGS
-char * kb_temp_realloc(ptr,size,file,line)
-char *ptr;
-size_t size;
-char *file;
-size_t line;
+char * kb_temp_realloc(
+  char *ptr,
+  size_t size,
+  char *file,
+  size_t line
+)
 #else
-char * kb_temp_realloc(ptr,size)
-char *ptr;
-size_t size;
+char * kb_temp_realloc(
+  char *ptr,
+  size_t size
+)
 #endif
 {
   char *newptr;
@@ -843,8 +874,8 @@ size_t size;
     sprintf(errmsg,"%30.30s %4d: temp_realloc\n old size %9d at %p to size %9d",
          file,line, (ptr ? ((struct memhead *)ptr)[-1].size:0),ptr ,size);
 #else
-    sprintf(errmsg,"temp_realloc old %p size %9d to size %9d",ptr,
-          (ptr ? ((struct memhead *)ptr)[-1].size:0 ) ,size);
+    sprintf(errmsg,"temp_realloc old %p size %9ld to size %9ld",ptr,
+          (long)(ptr ? ((struct memhead *)ptr)[-1].size:0 ) ,(long)size);
 #endif
     erroutstring(errmsg);
   }
@@ -863,7 +894,7 @@ size_t size;
   }
 
   return newptr;
-}
+} // end kb_temp_realloc()
 
 
 /********************************************************************
@@ -874,8 +905,7 @@ size_t size;
 *
 */
 
-void temp_free(ptr)
-char *ptr;
+void temp_free(char *ptr)
 {
   int blocktype = TEMP_BLOCK;
   if ( memdebug )
@@ -934,7 +964,7 @@ void temp_free_all()
     e_curve = NULL;
     v_curve = NULL;
   }
-}
+} // end temp_free_all()
 
 
 /********************************************************************
@@ -964,9 +994,10 @@ int dy_overhead = sizeof(struct dy_head);
 DY_OFFSET dy_firstblock;
 DY_OFFSET dy_lastblock;
 
-DY_OFFSET dy_calloc(num,size)
-int num;
-int size;
+DY_OFFSET dy_calloc(
+  int num,
+  int size
+)
 { struct dy_head *ptr,*newptr,*lastptr;
   DY_OFFSET off;
   int needed;
@@ -977,8 +1008,8 @@ int size;
   if ( dymemsize == 0 )  /* initial allocation */
   { if ( sizeof(struct dy_head) % ALIGNSIZE )
     { sprintf(errmsg,
-   "Internal error: sizeof(struct dy_head) %d not multiple of ALIGNSIZE %d\n",
-        sizeof(struct dy_head),ALIGNSIZE);
+   "Internal error: sizeof(struct dy_head) %ld not multiple of ALIGNSIZE %d\n",
+        (long)sizeof(struct dy_head),ALIGNSIZE);
       kb_error(1364,errmsg,UNRECOVERABLE);
     }
     dymem = mycalloc(DY_STARTSIZE,1);
@@ -1060,7 +1091,7 @@ retry_alloc:
 dy_check();
 #endif
       /* some handy debugging equivalences */
-      Globals = globals(0);
+      Globals = (struct global **)(dymem + dy_globals);
       for ( i = 0 ; i < NUMELEMENTS ; i++ )
        Extras[i] = EXTRAS(i);
       return off + sizeof(struct dy_head);
@@ -1097,12 +1128,13 @@ dy_check();
   dymemsize = 2*dymemsize;
   goto retry_alloc;
 
-}
+} // end dy_calloc()
 
-DY_OFFSET dy_realloc(old,newnum,newsize)
-DY_OFFSET old;
-int newnum;
-int newsize;
+DY_OFFSET dy_realloc(
+  DY_OFFSET old,
+  int newnum,
+  int newsize
+)
 { DY_OFFSET newspot;
   struct dy_head *ptr;
   int i;
@@ -1122,7 +1154,7 @@ int newsize;
   LEAVE_GRAPH_MUTEX
 
   /* some handy debugging equivalences */
-  Globals = globals(0);
+  Globals = (struct global **)(dymem + dy_globals);
   for ( i = 0 ; i < NUMELEMENTS ; i++ )
        Extras[i] = EXTRAS(i);
 
@@ -1130,10 +1162,9 @@ int newsize;
 dy_check();
 #endif
   return newspot;
-}
+} // end dy_realloc()
 
-void dy_free(spot)
-DY_OFFSET spot;
+void dy_free(DY_OFFSET spot)
 { DY_OFFSET off = spot - sizeof(struct dy_head);
   struct dy_head *ptr = (struct dy_head *)(dymem + off);
   struct dy_head *prevhead,*nexthead;
@@ -1201,7 +1232,7 @@ DY_OFFSET spot;
 #ifdef _DEBUG
 dy_check();
 #endif
-}
+} // end dy_free()
 
 void dy_check()
 {
@@ -1266,8 +1297,7 @@ void dy_check()
 *
 */
 
-void calc_edge(e_id)
-edge_id e_id;
+void calc_edge(edge_id e_id)
 {
   REAL len=0.0;
   REAL s[MAXCOORD];
@@ -1349,7 +1379,7 @@ edge_id e_id;
    } /* end switch */
  }
  set_edge_length(e_id,len);
-}
+} // end calc_edge()
 
 /************************************************************
 *
@@ -1363,9 +1393,10 @@ edge_id e_id;
 *  Output:    x[] has side components
 */
 
-void get_edge_side(e_id,x)
-edge_id e_id;
-REAL *x;
+void get_edge_side(
+  edge_id e_id,
+  REAL *x
+)
 {
   REAL *y,*z;
   int i;
@@ -1380,7 +1411,7 @@ REAL *x;
   }
   for ( i = 0 ; i < SDIM ; i++ ) 
       x[i] = z[i] - y[i];
-}
+} // end get_edge_side()
 
 /************************************************************
 *
@@ -1395,9 +1426,10 @@ REAL *x;
 *  Output:    x[] has side components
 */
 
-void get_edge_tail_tangent(e_id,x)
-edge_id e_id;
-REAL *x;
+void get_edge_tail_tangent(
+  edge_id e_id,
+  REAL *x
+  )
 {
   int i,n;
   REAL w[MAXCOORD],ww[MAXCOORD];
@@ -1490,7 +1522,7 @@ REAL *x;
         x[i] = -x[i];
     }
   }
-}
+} // end get_edge_tail_tangent()
 
 /*************************************************************
 *
@@ -1498,19 +1530,19 @@ REAL *x;
 *
 *  purpose:  adjust a side vector for torus wrap.
 *        used only in torvol.c.
-*
 */
   
-void get_edge_adjust(e_id,w)
-edge_id e_id;
-REAL *w;
+void get_edge_adjust(
+  edge_id e_id,
+  REAL *w
+)
 {
   REAL x[MAXCOORD];
   int i ;
 
   for ( i = 0 ; i < SDIM ; i++ ) x[i] = 0.0;
   (*sym_wrap)(x,w,get_edge_wrap(e_id));
-}
+} // end get_edge_adjust()
              
 
 
@@ -1522,13 +1554,12 @@ REAL *w;
 *
 */
 
-int get_vertex_evalence(v_id)
-vertex_id v_id;
+int get_vertex_evalence(vertex_id v_id)
 {
   int n = 0;
   edge_id e_id;
   edge_id next_e;
-  int attr = get_vattr(v_id);
+  ATTR attr = get_vattr(v_id);
 
   if ( attr & (Q_MIDPOINT|Q_MIDEDGE) ) return 1;
   e_id = get_vertex_edge(v_id);
@@ -1546,7 +1577,7 @@ vertex_id v_id;
   }
   while ( !equal_id(next_e,e_id) );
   return n;
-}
+} // end get_vertex_evalence()
 
 
 /***************************************************************
@@ -1554,11 +1585,9 @@ vertex_id v_id;
 *  Function:  get_edge_valence
 *
 *  Purpose:  return number of facets around edge
-*
 */
 
-int get_edge_valence(e_id)
-edge_id e_id;
+int get_edge_valence(edge_id e_id)
 {
   int n = 0,m=0;
   facetedge_id fe = get_edge_fe(e_id);
@@ -1578,7 +1607,7 @@ edge_id e_id;
   }
   while ( next_fe != fe );
   return n;
-}
+} // end get_edge_valence()
 
 
 
@@ -1590,8 +1619,7 @@ edge_id e_id;
 *
 */
 
-int get_facet_valence(f_id)
-facet_id f_id;
+int get_facet_valence(facet_id f_id)
 {
   int n = 0;
   facetedge_id fe = get_facet_fe(f_id);
@@ -1610,18 +1638,16 @@ facet_id f_id;
   }
   while ( valid_id(next_fe) && (next_fe != fe) );
   return n;
-}
+} // end get_facet_valence()
 
 /***************************************************************
 *
 *  Function:  get_body_valence
 *
 *  Purpose:  return number of facets around a body
-*
 */
 
-int get_body_valence(b_id)
-body_id b_id;
+int get_body_valence(body_id b_id)
 {
   int n = 0;
   facet_id f_id = get_body_facet(b_id);
@@ -1641,7 +1667,7 @@ body_id b_id;
   }
   while ( (next_f != f_id) && (n < 3*web.skel[FACET].count) );
   return n;
-}
+} // end get_body_valence()
 
 /*********************************************************************
 *
@@ -1649,18 +1675,18 @@ body_id b_id;
 *
 * purpose: Fill in vertex lists of facets.
 */
-void set_facet_vertices ARGS((void));
+
 void set_facet_vertices()
 {
   /* have to make expandable v list for quadratic mode */
 }
+
 /****************************************************************
 *
 *  function: begin_normal_motion()
 *
 *  purpose: calculates vertex normals as volume gradients, normalized to 
 *           unit length.
-*
 */
 
 void begin_normal_motion()
@@ -1689,14 +1715,13 @@ void begin_normal_motion()
       (*vn)[i] = normals[0][i]/mag;
   }
   normal_motion_flag = 1;
-}
+} // end begin_normal_motion()
 
 /*****************************************************************
 *
 * function: end_normal_motion()
 *
 * purpose: free memory used in normal motion mode
-*
 */
 
 void end_normal_motion()
@@ -1704,7 +1729,7 @@ void end_normal_motion()
   if ( vertex_normals != NULL ) myfree((char*)vertex_normals);
   vertex_normals = NULL;
   normal_motion_flag = 0;
-}
+} // end end_normal_motion()
 
 
 
@@ -1724,9 +1749,9 @@ void end_normal_motion()
 *  Return value: Length of original normal, i.e. volume gradient.
 */
 
-REAL vertex_total_vol_grad(v_id,norm)
-vertex_id v_id;
-REAL *norm;
+REAL vertex_total_vol_grad(
+  vertex_id v_id,
+  REAL *norm)
 {
   int i,j;
   REAL y[MAXCOORD],z[MAXCOORD];
@@ -1794,13 +1819,13 @@ REAL *norm;
     {
       conmap_t * conmap = get_v_constraint_map(v_id);
       int oncount = 0,hitcount;
-      struct constraint *con[MAXCONPER];
-      int conlist[MAXCONPER];
+      struct constraint *con[MAXCONHIT];
+      int conlist[MAXCONHIT];
       REAL perp[MAXCOORD];
 
       for ( j = 1 ; j <= (int)conmap[0] ; j++ )
         { 
-          if ( conmap[j] & CON_HIT_BIT )
+          if ( (conmap[j] & CON_HIT_BIT) && (oncount < web.sdim) )
           { conlist[oncount] = conmap[j];
             con[oncount++] = get_constraint(conmap[j]);
           }
@@ -1821,7 +1846,7 @@ REAL *norm;
   if ( size <= 0.0 ) return 0.0; 
   for ( i = 0 ; i < SDIM ; i++ ) norm[i] /= size;
   return size/web.simplex_factorial;
-}
+} // end vertex_total_vol_grad()
 
 
 /***********************************************************
@@ -1843,10 +1868,11 @@ REAL *norm;
 *  Return value: Length of original normal, i.e. volume gradient.
 */
 
-REAL calc_vertex_normal(v_id,fe,norm)
-vertex_id v_id;
-facetedge_id fe;
-REAL *norm;
+REAL calc_vertex_normal(
+  vertex_id v_id,
+  facetedge_id fe,
+  REAL *norm
+)
 {
   int i,j;
   REAL y[MAXCOORD],z[MAXCOORD];
@@ -1924,13 +1950,13 @@ REAL *norm;
     {
       conmap_t * conmap = get_v_constraint_map(v_id);
       int oncount = 0,hitcount;
-      struct constraint *con[MAXCONPER];
-      int conlist[MAXCONPER];
+      struct constraint *con[MAXCONHIT];
+      int conlist[MAXCONHIT];
       REAL perp[MAXCOORD];
 
       for ( j = 1 ; j <= (int)conmap[0] ; j++ )
         { 
-          if ( conmap[j] & CON_HIT_BIT )
+          if ( (conmap[j] & CON_HIT_BIT) && (oncount < web.sdim) )
           { conlist[oncount] = conmap[j];
             con[oncount++] = get_constraint(conmap[j]);
           }
@@ -1951,7 +1977,7 @@ REAL *norm;
   if ( size <= 0.0 ) return 0.0; 
   for ( i = 0 ; i < SDIM ; i++ ) norm[i] /= size;
   return size/web.simplex_factorial;
-}
+} // end calc_vertex_normal()
 
 /***********************************************************
 *
@@ -1974,10 +2000,11 @@ REAL *norm;
 *  Return value: none.
 */
 
-void calc_vertex_smooth_normal(v_id,fe,norm)
-vertex_id v_id;
-facetedge_id fe;
-REAL *norm;
+void calc_vertex_smooth_normal(
+  vertex_id v_id,
+  facetedge_id fe,
+  REAL *norm
+)
 {
   int i;
   REAL y[MAXCOORD],z[MAXCOORD];
@@ -2046,7 +2073,7 @@ REAL *norm;
   size = sqrt(SDIM_dot(norm,norm));
   if ( size <= 0.0 ) return; 
   for ( i = 0 ; i < SDIM ; i++ ) norm[i] /= size;
-}
+} // end calc_vertex_smooth_normal()
 
 /***************************************************************************
 *
@@ -2054,11 +2081,12 @@ REAL *norm;
 *
 * purpose: compute geometric normal space at a lagrange point of an edge.
 */
-int lagrange_edge_normal ARGS((vertex_id,edge_id,REAL**));
-int lagrange_edge_normal(v_id,e_id,norm)
-vertex_id v_id;
-edge_id e_id;
-REAL **norm;
+
+int lagrange_edge_normal(
+  vertex_id v_id,
+  edge_id e_id,
+  REAL **norm
+)
 {
   MAT2D(vx,MAXVCOUNT,MAXCOORD);
   struct gauss_lag *gl = &gauss_lagrange[1][web.gauss1D_order];
@@ -2092,7 +2120,7 @@ REAL **norm;
     }
     return kernel_basis_rows(&t,norm,1,SDIM);
 #endif
-}
+} // end lagrange_edge_normal()
 
 /***************************************************************************
 *
@@ -2100,11 +2128,12 @@ REAL **norm;
 *
 * purpose: compute geometric normal at a lagrange point of a facet.
 */
-int lagrange_facet_normal ARGS((vertex_id,facet_id,REAL**));
-int lagrange_facet_normal(v_id,f_id, norm)
-vertex_id v_id;
-facet_id f_id;
-REAL **norm;
+
+int lagrange_facet_normal(
+  vertex_id v_id,
+  facet_id f_id,
+  REAL **norm
+)
 { 
   vertex_id *v = get_facet_vertices(f_id);
   struct gauss_lag *gl = &gauss_lagrange[web.dimension][web.gauss2D_order];
@@ -2130,7 +2159,7 @@ REAL **norm;
   if ( inverted(f_id) ) 
      for ( j = 0 ; j < SDIM ; j++ ) sides[1][j] = -sides[1][j];
   return kernel_basis_rows(sides+1,norm,web.dimension,SDIM);
-}
+} // end lagrange_facet_normal()
 
 /***************************************************************************
 *
@@ -2141,11 +2170,12 @@ REAL **norm;
 
 REAL quad_tang_coeffs[3][3] = { { -1.5,2.0,-0.5},
        {-0.5,0.0,0.5},{ 0.5,-2.0,1.5}};
-int quadratic_edge_normal ARGS((vertex_id,edge_id,REAL**));
-int quadratic_edge_normal(v_id,e_id,norm)
-vertex_id v_id;
-edge_id e_id;
-REAL **norm;
+
+int quadratic_edge_normal(
+  vertex_id v_id,
+  edge_id e_id,
+  REAL **norm
+)
 {
   MAT2D(vx,MAXVCOUNT,MAXCOORD);
   vertex_id *v = get_edge_vertices(e_id);
@@ -2167,7 +2197,7 @@ REAL **norm;
   }
   return kernel_basis_rows(&t,norm,1,SDIM);
 
-}
+} // end quadratic_edge_normal()
 
 /***************************************************************************
 *
@@ -2177,11 +2207,12 @@ REAL **norm;
 */
 int qlconvert[6] = { 0, 1, 2, 4, 5, 3}; /* index conversion */
 int lqconvert[6] = { 0, 1, 2, 5, 3, 4}; /* index conversion */
-int quadratic_facet_normal ARGS((vertex_id,facet_id,REAL**));
-int quadratic_facet_normal(v_id,f_id, norm)
-vertex_id v_id;
-facet_id f_id;
-REAL **norm;
+
+int quadratic_facet_normal(
+  vertex_id v_id,
+  facet_id f_id,
+  REAL **norm
+)
 {
   vertex_id v[6];
   struct gauss_lag *gl = &gauss_lagrange[web.dimension][web.gauss2D_order];
@@ -2211,7 +2242,7 @@ REAL **norm;
       for ( kk = 0, sides[i][j] = 0.0 ; kk < ctrl ; kk++ )
         sides[i][j] += gl->lpolypart[k][i-1][kk]*vx[lqconvert[kk]][j];
   return kernel_basis_rows(sides+1,norm,web.dimension,SDIM);
-}
+} // end quadratic_facet_normal()
 
 /***********************************************************
 *
@@ -2231,21 +2262,22 @@ REAL **norm;
 *  Return value: Dimension of normal
 */
 
-int new_calc_vertex_normal(v_id,norm)
-vertex_id v_id;
-REAL **norm; /* returned basis */
+int new_calc_vertex_normal(
+  vertex_id v_id,
+  REAL **norm /* returned basis */
+)
 {
   int i,j,kk;
   REAL y[MAXCOORD],z[MAXCOORD];
   MAT2D(fnorm,MAXCOORD,MAXCOORD);
-  MAT2D(a,2,MAXCOORD);
   facetedge_id sidea,sideb,ffe;
-  struct boundary *bdry;  /* to check staying on same boundary */
+ // struct boundary *bdry;  /* to check staying on same boundary */
   REAL size;
   int retval = 0;
-  facetedge_id fe;
+  facetedge_id fe,start_fe;
+  facet_id f_id;
   int valence,bares=0,singles=0,doubles=0,triples=0,bareflag=0;
-  int vattr;
+  ATTR vattr;
 
   if (web.representation == SIMPLEX ) return simplex_vertex_normal(v_id,norm);
 
@@ -2338,9 +2370,9 @@ REAL **norm; /* returned basis */
     } while ( !equal_id(e_id,start_e) );
 
     if ( triples >= SDIM ) goto full_dim;
-    if ( singles >= SDIM ) goto full_dim;
-    if ( bares >= SDIM ) goto full_dim;
-    if ( bares && (singles+doubles+triples) ) goto full_dim;
+//    if ( singles >= SDIM ) goto full_dim;
+//    if ( bares >= SDIM ) goto full_dim;
+//    if ( bares && (singles+doubles+triples) ) goto full_dim;
     if ( triples >= 1 )
     { if ( vattr & (Q_MIDPOINT|Q_MIDEDGE) ) bareflag = 1; /* effectively */
       else goto tripletest;
@@ -2400,11 +2432,11 @@ REAL **norm; /* returned basis */
     goto ncn_exit;    
   }
 
-  /* now have 2D facet */
+  /* now have 2D facets */
   fe = get_vertex_fe(v_id);
   if ( !valid_id(fe) ) 
      goto full_dim; 
-  bdry = get_facet_boundary(get_fe_facet(fe));  /* original boundary */
+ // bdry = get_facet_boundary(get_fe_facet(fe));  /* original boundary */
 
   sidea = fe;
   if ( vattr & Q_MIDPOINT )
@@ -2447,109 +2479,47 @@ REAL **norm; /* returned basis */
   }
   /* usual case of facet in N dim */
   /* if get here, know no triple lines */
-  { for ( j = 0 ; j < SDIM ; j++ )
-       for ( i = 0 ; i < SDIM ; i++ ) norm[j][i] = 0.0;
+  retval = 1; // dimension of normal
+  for ( j = 0 ; j < SDIM ; j++ )
+     for ( i = 0 ; i < SDIM ; i++ ) norm[j][i] = 0.0;
 
-    /* go around one way to edge of face */
+    fe = start_fe = get_vertex_first_facet(v_id);
     do
-     { 
+    {  f_id = get_fe_facet(fe);
        if ( vattr & AXIAL_POINT )
        { get_fe_side(sidea,z);
          get_fe_side(get_next_edge(sidea),y);
-         cross_prod(y,z,fnorm[1]);
+         cross_prod(y,z,fnorm[0]);
          retval = 1;
        }
        else
        { 
          switch ( web.modeltype )
          { case LINEAR: 
-              get_fe_side(sidea,a[0]);
-              get_fe_side(inverse_id(get_prev_edge(sidea)),a[1]);
-              if ( SDIM == 3 )
-              { cross_prod(a[0],a[1],fnorm[0]);
-                retval = 1;
-              } 
-              else
-                retval = kernel_basis_rows(a,fnorm,2,SDIM);
+              get_facet_normal(f_id,fnorm[0]);
               break;
            case QUADRATIC: 
-             retval = quadratic_facet_normal(v_id,get_fe_facet(sidea),fnorm);
+             retval = quadratic_facet_normal(v_id,f_id,fnorm);
              break;
            case LAGRANGE: 
-             retval = lagrange_facet_normal(v_id,get_fe_facet(sidea),fnorm);  
+             retval = lagrange_facet_normal(v_id,f_id,fnorm);  
              break;
          }
        }
-       for ( j = 0 ; j < retval ; j++ )
-        for ( i = 0 ; i < SDIM ; i++ ) 
-         norm[j][i] += fnorm[j][i];
+       if ( !equal_element(start_fe,fe) && SDIM_dot(norm[0],fnorm[0]) < 0 )
+       { // orientation reversed relative to normal so far
+         for ( i = 0 ; i < SDIM ; i++ ) 
+           norm[0][i] -= fnorm[0][i];
+       }
+       else
+       { for ( i = 0 ; i < SDIM ; i++ ) 
+           norm[0][i] += fnorm[0][i];
+       }
 
        /* go to next facet */
-       sidea = get_prev_edge(sidea);
-       if ( equal_id(sidea,get_next_facet(sidea)) ) break;  /* edge */
-       sidea = fe_inverse(get_next_facet(sidea));
-       if ( bdry != get_facet_boundary(get_fe_facet(sidea)) ) break;
-       if ( equal_id(sidea,fe) )
-       { if ( inverted(get_fe_facet(sidea)) )
-            for ( i = 0 ; i < SDIM ; i++ ) norm[0][i] = -norm[0][i];
-         goto ncn_exit; /* went all the way around */
-       }
-     }
-     while ( equal_id(get_next_facet(sidea),get_prev_facet(sidea)) );
-  }
-  /* go around the other way */
-  sidea = fe;
-  while ( equal_id(get_next_facet(sidea),get_prev_facet(sidea)) )
-  {
-    if ( equal_id(sidea,get_next_facet(sidea)) ) break;  /* edge */
-    sidea = fe_inverse(get_next_facet(sidea));
-    sidea = get_next_edge(sidea);
-    if ( bdry != get_facet_boundary(get_fe_facet(sidea)) ) break;
-
-    get_fe_side(sidea,z);
-    if ( get_vattr(v_id) & AXIAL_POINT )
-    { REAL *u = fnorm[0];       
-      switch ( web.modeltype )
-      { case LINEAR: get_fe_side(get_next_edge(sidea),y);
-                       cross_prod(y,z,fnorm[0]); break;
-        case QUADRATIC: 
-          quadratic_facet_normal(v_id,get_fe_facet(sidea),&u);
-          break;
-        case LAGRANGE: 
-          lagrange_facet_normal(v_id,get_fe_facet(sidea),&u);  
-          break;
-      }
-    }
-    else
-    { 
-         switch ( web.modeltype )
-         { case LINEAR: 
-              get_fe_side(sidea,a[0]);
-              get_fe_side(inverse_id(get_prev_edge(sidea)),a[1]);
-              if ( SDIM == 3 )
-              { cross_prod(a[0],a[1],fnorm[0]);
-                retval = 1;
-              } 
-              else
-                retval = kernel_basis_rows(a,fnorm,2,SDIM);
-              break;
-           case QUADRATIC: 
-             retval = quadratic_facet_normal(v_id,get_fe_facet(sidea),fnorm);
-             break;
-           case LAGRANGE: 
-             retval = lagrange_facet_normal(v_id,get_fe_facet(sidea),fnorm);  
-             break;
-         }
-    }
-    for ( j = 0 ; j < retval ; j++ )
-      for ( i = 0 ; i < SDIM ; i++ ) 
-        norm[j][i] += fnorm[j][i];
-  }
-
-  if ( !equal_id(get_next_facet(sidea),get_prev_facet(sidea)) )
-     goto tripletest;
-      if( inverted(get_fe_facet(sidea)) )
-         for ( i = 0 ; i < SDIM ; i++ ) norm[0][i] = -norm[0][i];
+       fe = get_next_vertex_facet(v_id,fe);
+     } while ( !equal_element(fe,start_fe) );   
+ 
 
   goto ncn_exit;
 
@@ -2606,7 +2576,7 @@ full_dim:
     norm[i][i] = 1.0;
   }
   return SDIM;
-}
+} // end new_calc_vertex_normal()
 
 /*************************************************************************
 *
@@ -2620,10 +2590,11 @@ full_dim:
 *         Basis vectors altered in place.
 */
 
-int project_vertex_normals(v_id,normals,normcount)
-vertex_id v_id;
-REAL **normals;
-int normcount;
+int project_vertex_normals(
+  vertex_id v_id,
+  REAL **normals,
+  int normcount
+)
 { conmap_t *conmap;
   int oncount;
   MAT2D(grads,MAXCOORD,MAXCOORD);
@@ -2679,7 +2650,7 @@ int normcount;
     }
   }
   return normcount; 
-}
+} // end project_vertex_normals()
 
 
 
@@ -2689,12 +2660,12 @@ int normcount;
 *
 *  Purpose: find facet normal (length = area).
 *          3D only
-*
 */
 
-void get_facet_normal(f_id,normal)
-facet_id f_id;
-REAL *normal;
+void get_facet_normal(
+  facet_id f_id,
+  REAL *normal
+)
 { facetedge_id fe;
   REAL side1[MAXCOORD],side2[MAXCOORD];
   int i;
@@ -2720,7 +2691,7 @@ REAL *normal;
   cross_prod(side1,side2,normal);
   for ( i = 0 ; i < SDIM ; i++ )
      normal[i] /= 2;  /* triangle factor */
-}
+} // end get_facet_normal()
   
 #ifdef NEWFACETNORMAL
 attempt to do normal at arbitrary point in facet.  Incomplete
@@ -2734,10 +2705,11 @@ attempt to do normal at arbitrary point in facet.  Incomplete
 *
 */
 
-void new_get_facet_normal(f_id,normal,b)
-facet_id f_id;
-REAL *normal;
-REAL *b; /* barycentric coords */
+void new_get_facet_normal(
+  facet_id f_id,
+  REAL *normal,
+  REAL *b /* barycentric coords */
+)
 { facetedge_id fe;
   MAT2D(x,MAXCOORD+1,MAXCOORD);
   int i;
@@ -2775,7 +2747,7 @@ REAL *b; /* barycentric coords */
      kernel_basis_rows(sides,&normal,web.dimension,SDIM);
   }
 
-}
+} // end new_get_facet_normal()
 #endif  
   
 /***************************************************************
@@ -2788,10 +2760,11 @@ REAL *b; /* barycentric coords */
 *
 */
 
-void get_edge_verts(e_id,verts,wraps)
-edge_id e_id;
-REAL **verts;    /* third spot NULL if don't want midpts in quadratic */
-WRAPTYPE *wraps;  /* wraps of vertices; NULL if not wanted */
+void get_edge_verts(
+  edge_id e_id,
+  REAL **verts,    /* third spot NULL if don't want midpts in quadratic */
+  WRAPTYPE *wraps  /* wraps of vertices; NULL if not wanted */
+)
 {
   int j,k;
   WRAPTYPE wrap = 0;
@@ -2855,7 +2828,7 @@ WRAPTYPE *wraps;  /* wraps of vertices; NULL if not wanted */
       else
        for ( j = 0 ; j < SDIM ; j++ ) verts[1][j] = x[j];
     }
-}
+} // end get_edge_verts()
   
 /***************************************************************
 *
@@ -2866,10 +2839,11 @@ WRAPTYPE *wraps;  /* wraps of vertices; NULL if not wanted */
 *
 */
 
-void get_facet_verts(f_id,verts,wraps)
-facet_id f_id;
-REAL **verts;    /* fourth spot NULL if don't want midpts in quadratic */
-WRAPTYPE *wraps;  /* wraps of vertices; NULL if not wanted */
+void get_facet_verts(
+  facet_id f_id,
+  REAL **verts,    /* fourth spot NULL if don't want midpts in quadratic */
+  WRAPTYPE *wraps  /* wraps of vertices; NULL if not wanted */
+)
 {
   facetedge_id fe;
   int i,j;
@@ -2983,9 +2957,8 @@ WRAPTYPE *wraps;  /* wraps of vertices; NULL if not wanted */
     for ( j = 0 ; j < SDIM ; j++ )
       verts[i][j] = x[j];
     fe = get_next_edge(fe);
-
   }
-}
+} // end get_facet_verts(0
   
 /***************************************************************
 *
@@ -2994,13 +2967,13 @@ WRAPTYPE *wraps;  /* wraps of vertices; NULL if not wanted */
 *  Purpose: to get all three vertices of a facet, nicely 
 *          displaced to fundamental cell in case of symmetry group.
 *          Extra work to get them to come out close to origin.
-*
 */
 
-void get_facet_verts_special(f_id,verts,wraps)
-facet_id f_id;
-REAL **verts;    /* fourth spot NULL if don't want midpts in quadratic */
-WRAPTYPE *wraps;  /* wraps of vertices; NULL if not wanted */
+void get_facet_verts_special(
+  facet_id f_id,
+  REAL **verts,    /* fourth spot NULL if don't want midpts in quadratic */
+  WRAPTYPE *wraps  /* wraps of vertices; NULL if not wanted */
+)
 {
   facetedge_id fe;
   int i,j,ii;
@@ -3066,7 +3039,7 @@ WRAPTYPE *wraps;  /* wraps of vertices; NULL if not wanted */
         verts[i][j] = x[j];
       fe = get_next_edge(fe);
     }
-}
+} // end get_facet_verts_special()
   
 /***************************************************************
 *
@@ -3078,10 +3051,11 @@ WRAPTYPE *wraps;  /* wraps of vertices; NULL if not wanted */
 *
 */
 
-void get_facet_verts_q(f_id,verts,wraps)
-facet_id f_id;
-REAL **verts;
-WRAPTYPE *wraps;  /* NULL if not wanted */
+void get_facet_verts_q(
+  facet_id f_id,
+  REAL **verts,
+  WRAPTYPE *wraps  /* NULL if not wanted */
+)
 {
   facetedge_id fe;
   int i,j,ii;
@@ -3131,7 +3105,7 @@ WRAPTYPE *wraps;  /* NULL if not wanted */
         verts[2*i+1][j] = x[j];
       fe = get_next_edge(fe);
     }
-}
+} // end get_facet_verts_q()
 
 /*****************************************************************
 *
@@ -3140,13 +3114,10 @@ WRAPTYPE *wraps;  /* NULL if not wanted */
 *  Purpose: Open file for reading on EVOLVERPATH
 */
 
-#ifdef __WIN32__
-FILE *path_open(char *name,int mode)    /* else TC++ has conniptions */
-#else
-FILE *path_open(name,mode)
-char *name;
-int mode; /* NOTDATAFILENAME or SETDATAFILENAME */
-#endif
+FILE *path_open(
+  char *name,
+  int mode /* NOTDATAFILENAME or SETDATAFILENAME */
+)
 {
   char path[PATHSIZE];
   size_t len;
@@ -3176,7 +3147,11 @@ int mode; /* NOTDATAFILENAME or SETDATAFILENAME */
     if ( ret != -1 )
     { /* finddata.name only has filename, not path stuff */
       char *slash = strrchr(path,'/');
-      if ( !slash ) slash = strrchr(path,'\\');
+	  char *slashb = strrchr(path,'\\');
+      if ( slashb > slash )
+		slash = slashb;
+      if ( !slash && path[1] == ':' ) 
+         slash = path+1;
       if ( slash ) slash++;
       else slash = path;
       strncpy(slash,finddata.name,sizeof(path)-(slash-path));
@@ -3209,7 +3184,11 @@ int mode; /* NOTDATAFILENAME or SETDATAFILENAME */
       ret = _findfirst(path,&finddata);
       if ( ret != -1 )
       { char *slash = strrchr(path,'/');
-        if ( !slash ) slash = strrchr(path,'\\');
+	    char *slashb = strrchr(path,'\\');
+		if ( slashb > slash )
+			slash = slashb;
+        if ( !slash && path[1] == ':' ) 
+         slash = path+1;
         if ( slash ) slash++;
         else slash = path;
         strncpy(slash,finddata.name,sizeof(path)-(slash-path));
@@ -3350,8 +3329,11 @@ int mode; /* NOTDATAFILENAME or SETDATAFILENAME */
     strncpy(datafilename,found+1,PATHSIZE);
   }
 
+  if ( fd )
+    setvbuf(fd,NULL,_IOFBF,BUFSIZ*100);
+
   return fd;
-}
+} // end path_open()
 
 /**************************************************************************
 *
@@ -3377,8 +3359,9 @@ int calc_view_transform_gens()
           change = 1;
         }
       } 
+ set_view_transform_generators_global();
  return change;
-}
+} // end calc_view_transform_gens()
 
 /*******************************************************************
 *
@@ -3387,8 +3370,7 @@ int calc_view_transform_gens()
 *  purpose: calculate torus periods from expressions
 */
 
-void calc_periods(mode)
-int mode;  /* NO_ADJUST_VOLUMES or ADJUST_VOLUMES */
+void calc_periods(int mode  /* NO_ADJUST_VOLUMES or ADJUST_VOLUMES */)
 { int i,j;
   REAL value;
   REAL old_torusv = web.torusv;
@@ -3408,7 +3390,9 @@ int mode;  /* NO_ADJUST_VOLUMES or ADJUST_VOLUMES */
       kb_error(1377,"Degenerate torus unit cell.\n",RECOVERABLE);
     for ( i = 0 ; i < SDIM ; i++ )
      for ( j = 0 ; j < SDIM ; j++ )
-       web.inverse_periods[i][j] = invper[i][j]/web.torusv;
+     { web.inverse_periods[i][j] = invper[i][j]/web.torusv;
+       web.inverse_periods_tr[j][i] = invper[i][j]/web.torusv;
+     }
   }
 
   if ( web.torus_display_period )
@@ -3424,7 +3408,8 @@ int mode;  /* NO_ADJUST_VOLUMES or ADJUST_VOLUMES */
       kb_error(3377,"Degenerate display periods.\n",RECOVERABLE);
     for ( i = 0 ; i < SDIM ; i++ )
      for ( j = 0 ; j < SDIM ; j++ )
-       web.inverse_display_periods[i][j] = invper[i][j]/det;
+     { web.inverse_display_periods[i][j] = invper[i][j]/det;
+    }
   }
 
 
@@ -3466,7 +3451,7 @@ int mode;  /* NO_ADJUST_VOLUMES or ADJUST_VOLUMES */
       if ( calc_view_transform_gens() )  /*  see if changed */
         transform_gen_expr(transform_expr);
   }
-}
+} // end calc_periods()
   
 /***************************************************
 * 
@@ -3494,8 +3479,10 @@ void bad_function()
 *  Purpose: Finds distance between two vertices.
 */
 
-REAL distance(v1,v2)
-vertex_id v1,v2;
+REAL distance(
+  vertex_id v1,
+  vertex_id v2
+)
 {
   REAL *c1,*c2;
   REAL sum;
@@ -3507,7 +3494,7 @@ vertex_id v1,v2;
   for ( i = 0 ; i < SDIM ; i++ )
      sum += (c1[i] - c2[i])*(c1[i] - c2[i]);
   return sqrt(sum);
-}
+} // end distance()
 
 /***************************************************************************
 *
@@ -3519,10 +3506,11 @@ vertex_id v1,v2;
 * Adapted from a FORTRAN routine GRULE in a book on numerical integration 
 */
 
-void grule(n,x,w)
-int n;  /* number of points */
-REAL *x;    /* for abscissas  x[0] ... x[n-1] */
-REAL *w;    /* for weights     w[0] ... w[n-1] */
+void grule(
+  int n,       /* number of points */
+  REAL *x,     /* for abscissas  x[0] ... x[n-1] */
+  REAL *w      /* for weights     w[0] ... w[n-1] */
+)
 {
   REAL pkm1,pk,t,t1,pkp1,den,d1,dpn,d2pn,d3pn,d4pn,u,v,h,p,dp,fx,x0;
   int m,e1,i,k;
@@ -3571,7 +3559,7 @@ REAL *w;    /* for weights     w[0] ... w[n-1] */
     x[n-i] =  1 - x[i-1];
   }
   if ( 2*m > n ) x[m-1] = 0.5;
-}
+} // end grule()
 
 
 /****************************************************************
@@ -3582,8 +3570,7 @@ REAL *w;    /* for weights     w[0] ... w[n-1] */
 *
 */
 
-int binom_coeff(n,k)
-int n,k;
+int binom_coeff(int n, int k)
 { int i, c;
 
   if ( n < k ) return 0;
@@ -3591,7 +3578,7 @@ int n,k;
   for ( i = 0, c = 1 ; i < k ; i++ )
   { c *= n - i; c /= i+1; }
   return c;
-}
+}  // end binom_coeff()
 
 /**********************************************************************
 *
@@ -3599,13 +3586,12 @@ int n,k;
 *
 *  purpose: calculate edge density from phases of neighboring facets.
 */
-void set_e_phase_density(e_id)
-edge_id e_id;
+void set_e_phase_density(edge_id e_id)
 { facetedge_id fe = get_edge_fe(e_id);
   int i = get_f_phase(get_fe_facet(fe));      
   int j = get_f_phase(get_fe_facet(get_next_facet(fe)));      
       set_edge_density(e_id,phase_data[i][j]);
-}
+} // end set_e_phase_density()
 
 /**********************************************************************
 *
@@ -3613,14 +3599,13 @@ edge_id e_id;
 *
 *  purpose: calculate facet density from phases of neighboring bodies.
 */
-void set_f_phase_density(f_id)
-facet_id f_id;
+void set_f_phase_density(facet_id f_id)
 { 
   int i = get_b_phase(get_facet_body(f_id));     
   int j = get_b_phase(get_facet_body(inverse_id(f_id)));      
   set_attr(f_id,DENSITY);
   set_facet_density(f_id,phase_data[i][j]);
-}
+} // end set_f_phase_density()
 
 /**********************************************************************
 *
@@ -3653,7 +3638,7 @@ void make_vedge_lists()
     insert_vertex_edge(get_edge_headv(e_id),inverse_id(e_id));
   }
   vedge_timestamp = top_timestamp; 
-}
+} // end make_vedge_lists()
 
 
 /**********************************************************************
@@ -3679,17 +3664,18 @@ void make_vfacet_lists()
   expand_attribute(FACET,F_NEXT_VFACET_ATTR,&facet_verts);
   if ( web.representation == SOAPFILM ) /* set up facet vertex lists */
   { if ( web.modeltype != LAGRANGE )
-    FOR_ALL_FACETS(f_id)
-    { facetedge_id fe = get_facet_fe(f_id);
-      vertex_id *fv = get_facet_vertices(f_id);
-
-      for ( i = 0 ; i < FACET_VERTS ; i++ )
-      { 
-        v_id = get_fe_tailv(fe);
-        fv[i] = v_id;
-        fe = get_next_edge(fe);
-        if ( web.modeltype == QUADRATIC )
-           fv[i+FACET_VERTS] = get_edge_midv(get_fe_edge(fe));
+    { FOR_ALL_FACETS(f_id)
+      { facetedge_id fe = get_facet_fe(f_id);
+        vertex_id *fv = get_facet_vertices(f_id);
+  
+        for ( i = 0 ; i < FACET_VERTS ; i++ )
+        { 
+          v_id = get_fe_tailv(fe);
+          fv[i] = v_id;
+          fe = get_next_edge(fe);
+          if ( web.modeltype == QUADRATIC )
+             fv[i+FACET_VERTS] = get_edge_midv(get_fe_edge(fe));
+        }
       }
     }
   }
@@ -3707,14 +3693,15 @@ void make_vfacet_lists()
     }
   }
   else if ( web.representation == SIMPLEX )
-    FOR_ALL_FACETS(f_id) /* simplex vertex to facet links */
+  { FOR_ALL_FACETS(f_id) /* simplex vertex to facet links */
     { vertex_id *fv = get_facet_vertices(f_id);
       for ( i = 0 ; i < facet_verts ; i++ )
       { 
         set_vertex_facet(fv[i],f_id);
       }
     }
-  
+  }
+ 
   /* start by making one-element loops on facets */
   FOR_ALL_VERTICES(v_id)
   {
@@ -3750,7 +3737,7 @@ void make_vfacet_lists()
     }
   }
   vfacet_timestamp = top_timestamp; 
-}
+} // end make_vfacet_lists()
 
 /**********************************************************************
 *
@@ -3824,7 +3811,7 @@ void make_bfacet_lists()
       }
   }
   bfacet_timestamp = top_timestamp; 
-}
+} // end make_bfacet_lists()
 
 /*******************************************************************
 *
@@ -3834,9 +3821,10 @@ void make_bfacet_lists()
 *
 */
 
-void insert_vertex_edge(v_id,e_id)
-vertex_id v_id;
-edge_id    e_id;
+void insert_vertex_edge(
+  vertex_id v_id,
+  edge_id    e_id
+)
 { edge_id ee_id,eee_id; 
   int n;
   
@@ -3873,6 +3861,7 @@ edge_id    e_id;
   ee_id = get_next_tail_edge(eee_id);
   set_next_tail_edge(eee_id,e_id);
   set_next_tail_edge(e_id,ee_id);
+
 } /* end insert_vertex_edge */
 
 /*******************************************************************
@@ -3883,9 +3872,10 @@ edge_id    e_id;
 *
 */
 
-void remove_vertex_edge(v_id,e_id)
-vertex_id v_id;
-edge_id    e_id;  /* tail is v_id */
+void remove_vertex_edge(
+  vertex_id v_id,
+  edge_id    e_id  /* tail is v_id */
+)
 { edge_id ee_id,eee_id,eeee_id; 
   vertex_id vv_id = get_edge_tailv(e_id);
   int n = 0;
@@ -3915,7 +3905,9 @@ edge_id    e_id;  /* tail is v_id */
     if ( equal_id(eee_id,e_id) ) break;
     eee_id = get_next_tail_edge(eee_id);
     if ( ++n > 2*web.skel[EDGE].count ) /* sanity check */ 
-    { kb_error(1375,"Internal error: Vertex edge loop not closed.\n",WARNING);
+    { 
+      sprintf(errmsg,"Internal error: Vertex %s edge loop not closed.\n",ELNAME(v_id));
+      kb_error(1375,errmsg,WARNING);
       break;
     }
   } while ( !equal_id(eee_id,ee_id) );
@@ -3988,10 +3980,8 @@ edge_id    e_id;  /* tail is v_id */
 *  Returns facetedge_id if possible, otherwise facet_id
 */
 
-element_id get_vertex_first_facet(v_id)
-vertex_id v_id;
+element_id get_vertex_first_facet(vertex_id v_id)
 { 
-
   /* special cases */
   if ( web.representation == SIMPLEX )
   { if ( vfacet_timestamp < top_timestamp )
@@ -4014,10 +4004,11 @@ vertex_id v_id;
 *
 * Returns facetedge_id if possible, otherwise facet_id
 */
-element_id get_next_vertex_facet(v_id,prev_id)
-vertex_id v_id;
-element_id prev_id; /* either facet_id or facetedge_id;
+element_id get_next_vertex_facet(
+  vertex_id v_id,
+  element_id prev_id /* either facet_id or facetedge_id;
                        if null, gets first one */
+)
 { 
   edge_id start_e,ee_id;
   facetedge_id fe_id,start_fe, first_fe = NULLID;
@@ -4073,7 +4064,7 @@ element_id prev_id; /* either facet_id or facetedge_id;
     return first_fe; /* looped all the way around */
 
   return NULLID;
-}
+} // end get_next_vertex_facet()
 
 /***********************************************************************
 
@@ -4089,10 +4080,11 @@ element_id prev_id; /* either facet_id or facetedge_id;
 *
 */
 
-void insert_vertex_facet(v_id,f_id)
-vertex_id v_id;
-facet_id    f_id;
-{ facet_id ff_id,fff_id; 
+void insert_vertex_facet(
+  vertex_id v_id,
+  facet_id    f_id
+)
+{ facet_id ff_id,fff_id;
   int n;
 
   ff_id = get_vertex_facet(v_id);
@@ -4117,19 +4109,19 @@ facet_id    f_id;
   ff_id = get_next_vertex_facet(v_id,fff_id);
   set_next_vertex_facet(v_id,fff_id,f_id);
   set_next_vertex_facet(v_id,f_id,ff_id);
-}
+} // end insert_vertex_facet()
 
 /*******************************************************************
 *
 * function: remove_vertex_facet(v_id,f_id)
 *
 * purpose: fix up facet links around vertex when facet removed
-*
 */
 
-void remove_vertex_facet(v_id,f_id)
-vertex_id v_id;
-facet_id    f_id;
+void remove_vertex_facet(
+  vertex_id v_id,
+  facet_id    f_id
+)
 { facet_id ff_id,fff_id,ffff_id; 
   int n = 0;
 
@@ -4168,11 +4160,18 @@ facet_id    f_id;
   set_vertex_facet(v_id,ff_id);
   if ( web.representation==SIMPLEX )
      set_vertex_facet(v_id,ff_id);
-}
+} // end remove_vertex_facet()
 
-facet_id get_simplex_next_vertex_facet(v_id,f_id) 
-vertex_id v_id; 
-facet_id f_id;
+/*******************************************************************
+*
+* function: get_simplex_next_vertex_facet()
+*
+* purpose: get next facet around a vertex, simplex model
+*/
+facet_id get_simplex_next_vertex_facet(
+  vertex_id v_id,
+  facet_id f_id
+)
 { int i;
   vertex_id *v = get_facet_vertices(f_id);
   facet_id *f = F_ELID(f_id,F_NEXT_VFACET_ATTR);
@@ -4185,8 +4184,14 @@ facet_id f_id;
   kb_error(1306,errmsg,RECOVERABLE);
 
   return NULLID;
-}
+} // end get_simplex_next_vertex_facet()
 
+/*******************************************************************
+*
+* function: set_simplex_next_vertex_facet()
+*
+* purpose: set next facet around a vertex, simplex model
+*/
 void set_next_vertex_facet(v_id,f_id,ff_id)
       vertex_id v_id; facet_id f_id,ff_id;
 {
@@ -4200,7 +4205,9 @@ void set_next_vertex_facet(v_id,f_id,ff_id)
        break;
      }
    }
-}
+} // end set_next_vertex_facet()
+
+
 /* end vertex facet list stuff for simplex model
 ***********************************************************************/
 
@@ -4220,15 +4227,17 @@ int count_fixed_vol()
   struct gen_quant *gq;
 
   if ( !everything_quantities_flag && !web.pressure_flag )
-    FOR_ALL_BODIES(bi_id)
-    if ( get_battr(bi_id) & (FIXEDVOL) ) retval++;
+  { FOR_ALL_BODIES(bi_id)
+       if ( get_battr(bi_id) & (FIXEDVOL) ) retval++;
+  }
   for (  n = 0 ; n < gen_quant_count ; n++ )
   { gq = GEN_QUANT(n);
+    if ( gq->flags & Q_DELETED ) continue;
     if ( gq->flags & (Q_FIXED|Q_CONSERVED) )
         retval++;
   }
   return retval;
-}
+} // end  count_fixed_vol()
 
 /*****************************************************************
 *
@@ -4284,9 +4293,11 @@ static int k = N;
 static int kr = NR;
 void sgenrand(unsigned long);
 
-void
-sgenrand(seed)
-unsigned long seed; /* seed should not be 0 */
+/**********************************************************************
+* function: sgenrand()
+* purpose:  seed random number generator state vector
+*/
+void sgenrand(unsigned long seed /* seed should not be 0 */)
 {
   int k;
   
@@ -4298,10 +4309,13 @@ unsigned long seed; /* seed should not be 0 */
   ptgfsr[0]= seed & 0xffffffff;
   for (k=1; k<N; k++)
     ptgfsr[k] = (69069 * ptgfsr[k-1]) & 0xffffffff;
-}
+} // end sgenrand()
 
-void kb_initr(ind)
-int ind;
+/**********************************************************************
+* function: kb_initr()
+* purpose:  initialize random number generator 
+*/
+void kb_initr(int ind)
 { sgenrand((unsigned long)ind); 
   rfactor = 1.0/( (REAL)0xffffffff + 1.0) ;
   initflag = 1;
@@ -4309,6 +4323,11 @@ int ind;
 }
 
 static unsigned long mag01[2]={0x0, MATRIX_A};
+
+/***********************************************************************
+* function: kb_drand()
+* purpose: main random number function, returns value between 0 and 1.
+*/
 REAL kb_drand()
 {
   unsigned long y;
@@ -4346,7 +4365,7 @@ REAL kb_drand()
   }
   
   return drands[kr++];
-}
+} // end kb_drand()
 
 #ifdef MSC
 /* for METIS and other third parties */
@@ -4362,19 +4381,18 @@ void srand48(int seed)
 *
 * purpose: Adjust vertex position by given wrap.
 *          Volconst adjustments taken care of in volume calculation.
-*
 */
 
-void wrap_vertex(v_id,wrap)
-vertex_id v_id;
-int wrap;
+void wrap_vertex(
+  vertex_id v_id,
+  int wrap)
 { int i;
   REAL newx[MAXCOORD];
   REAL *x = get_coord(v_id);
   edge_id e_id,start_e;
 
   if ( (web.modeltype != LINEAR) && (web.modeltype != QUADRATIC) )
-    kb_error(4323,
+    kb_error(6016,
       "Can only do vertex wrap in LINEAR and QUADRATIC models so far.\n",
          RECOVERABLE);
 
@@ -4395,7 +4413,7 @@ int wrap;
     e_id = get_next_tail_edge(e_id);
   } while ( !equal_id(start_e,e_id) );
   LEAVE_GRAPH_MUTEX;
-}
+} // end void wrap_vertex()
 
 
 

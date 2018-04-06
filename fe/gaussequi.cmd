@@ -10,6 +10,8 @@
 
 gaussequi := {
    local ax,ay,az,bx,by,bz,ffnum,cx,cy,cz,dx,dy,dz,aa,bb,cc,dd,ee;
+   local swapcount,vvnum;
+
    swapcount := 0;
    foreach edge eee where not fixed and valence == 2 do
    { ax := eee.vertex[1].vertexnormal[1];
@@ -48,4 +50,10 @@ gaussequi := {
    };
    printf "Edges gaussequi swapped: %d\n",swapcount;
 }
+
+// End gaussequi.cmd
+
+// Usage: gaussequi
+
+
 

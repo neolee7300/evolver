@@ -1,3 +1,9 @@
+/*************************************************************
+*  This file is part of the Surface Evolver source code.     *
+*  Programmer:  Ken Brakke, brakke@susqu.edu                 *
+*************************************************************/
+
+
 /********************************************************************
 *
 *  File:  glutgraph.c
@@ -66,13 +72,22 @@ Or memory caching?  But at least set-up is fast.
 
 #include "include.h"
 
+char *gl_errors[6] = {
+    "GL_INVALID_ENUM: Given when an enumeration parameter is not a legal enumeration for that function. This is given only for local problems; if the spec allows the enumeration in certain circumstances, and other parameters or state dictate those circumstances, then GL_INVALID_OPERATION is the result instead.",
+    "GL_INVALID_VALUE1: Given when a value parameter is not a legal value for that function. This is only given for local problems; if the spec allows the value in certain circumstances, and other parameters or state dictate those circumstances, then GL_INVALID_OPERATION is the result instead. ",
+    "GL_INVALID_OPERATION: Given when the set of state for a command is not legal for the parameters given to that command. It is also given for commands where combinations of parameters define what the legal parameters are. ",
+    "GL_OUT_OF_MEMORY: Given when performing an operation that can allocate memory, but the memory cannot be allocated. The results of OpenGL functions that return this error are undefined; it is allowable for partial operations to happen. ",
+    "GL_INVALID_FRAMEBUFFER_OPERATION: Given when doing anything that would attempt to read from or write/render to a framebuffer that is not complete, as defined here. ",
+    "Unknown error."
+};
+
 #ifdef _DEBUG
 #define GL_ERROR_CHECK \
 { int err = glGetError(); \
   if ( err ) \
     fprintf(stderr,\
-     "OpenGL error %08X window %d at line %d\n",err,glutGetWindow(),\
-         __LINE__);\
+     "OpenGL error %08X window %d at line %d: %s\n",err,glutGetWindow(),\
+         __LINE__,gl_errors[(err==0x500 ? 0 : (err==0x501 ? 1 : (err==0x502 ? 2 : (err==0x503 ? 3 : (err==0x506 ? 4 : 5)))))]);\
 }
 #else
 #define GL_ERROR_CHECK
@@ -105,9 +120,8 @@ sigset_t newset;   /* mask SIGKICK from main thread */
 #endif
 int dup_window;  /* window for new window to duplicate */
 #define GET_DATA (gthread_data + glutGetWindow())
-#define MAXGRAPHWINDOWS 10
-#define WINTITLESIZE 120
-struct thread_data glutgraph_thread_data; /* for eval() */
+
+
 struct graph_thread_data {
    int in_use;
    int new_title_flag;
@@ -131,11 +145,12 @@ struct graph_thread_data {
    REAL viewspace[MAXCOORD+1][MAXCOORD+1];
    int view_initialized;
    vertex_id focus_vertex_id;    /* rotate and zoom focus */
+   REAL focus_coord[MAXCOORD+1];  /* world coordinates of focus point */
    REAL *to_focus[MAXCOORD+1];
    REAL to_focus_space[MAXCOORD+1][MAXCOORD+1];
    REAL *from_focus[MAXCOORD+1];
    REAL from_focus_space[MAXCOORD+1][MAXCOORD+1];
-   float kb_norm[3]; /* state of normal vector */
+   float kb_norm[4]; /* state of normal vector */
    int projmode;    /* kind of projection to do */
    float projmat[16];  /* for saving projection matrix */
    int stereomode;
@@ -155,6 +170,16 @@ struct graph_thread_data {
    int aspect_flag; /* whether pending reshape due to aspect fixing */
 
    int dlistflag;  /* whether to use display list */
+
+   int multi_dlist_flag; /* for using multiple display lists so arrays don't get big */
+#define MAXDLISTS 1000
+   GLuint edge_dlists[MAXDLISTS];
+   int edge_dlist_alloc;
+   int edge_dlist_count;
+   GLuint facet_dlists[MAXDLISTS];
+   int facet_dlist_alloc;
+   int facet_dlist_count;
+
    int arraysflag; /* whether to use OpenGL 1.1 arrays */
    struct vercol *fullarray;
    int fullarray_original;  /* if this thread allocated fullarray */
@@ -176,9 +201,20 @@ struct graph_thread_data {
    int *stripdata;
    int doing_lazy;  /* whether glutgraph should do transforms itself */
    int q_flag;  /* whether to print drawing stats */
+   int opacity_flag;  /* whether to do opacity */
+   int opacity_alloc; // number of facets space allocated for
+   int *opacity_indexes; // for depth sorted vertion
+   struct depth_s *opacity_list; // for sorting facets by depth
    int mpi_graph_task;  /* for MPI Evolver */
  
  } gthread_data[MAXGRAPHWINDOWS];
+
+void set_graphics_title(int which, char *title)
+{ if ( which < 0 || which >= MAXGRAPHWINDOWS ) return;
+  strncpy(gthread_data[which].wintitle,title,WINTITLESIZE);
+  gthread_data[which].new_title_flag = 1;
+  update_display();
+}
 
 /* end multiple graphing windows stuff */
 
@@ -187,40 +223,94 @@ static  int mainmenu, submenu;  /* menu identifiers */
 static  int mpi_taskmenu;  /* for task-picking menu */
 static char opengl_version[20]; /* from glGetString */
 int close_flag = 0; /* whether close_show has been done */
-void Ogl_close ARGS((void));
-void Ogl_close_show ARGS((void));
-void idle_func ARGS((void));
+void Ogl_close (void);
+void Ogl_close_show (void);
+void idle_func (void);
 void make_strips(void);
 void make_indexlists(void);
-void set_title ARGS((struct graph_thread_data*));
+void set_title(struct graph_thread_data*);
 #ifdef PTHREADS
-void * draw_thread ARGS((void *));
+void * draw_thread(void *);
 #else
-void __cdecl draw_thread ARGS((void *));
+void __cdecl draw_thread(void *);
 #endif
 static int glutInit_called; /* so don't call again if close and reopen */
 static REAL gleps = 1e-5; /* tolerance for identifying vertices */
 static REAL imagescale = 1.0;  /* scaling factor for image */
 static float rgba[16][4]; 
-void declare_arrays ARGS((void));
-void draw_one_image ARGS((void));
-void enlarge_edge_array ARGS((struct graph_thread_data*));
-void enlarge_facet_array ARGS((struct graph_thread_data*));
-void pick_func ARGS((int,int));
-element_id name_to_id ARGS((GLuint));
-void myMenuInit ARGS((void));
-void my_glLoadName ARGS(( element_id ));
-void e_glColor ARGS(( struct graph_thread_data *,int ));
-void f_glColor ARGS(( struct graph_thread_data *,int ));
-void e_glVertex3dv ARGS(( struct graph_thread_data *,REAL * ));
-void f_glVertex3dv ARGS(( struct graph_thread_data *,REAL * ));
-int hashfunc ARGS (( struct vercol *));
-int vercolcomp ARGS(( struct vercol *, struct vercol *));
-int eecomp ARGS(( int *, int *));
-int build_arrays ARGS((void));
-void mpi_get_task_graphics ARGS((int));
-static int initz_flag = 0;  /* z buffer */
+void declare_arrays(void);
+void draw_one_image (void);
+void enlarge_edge_array(struct graph_thread_data*);
+void enlarge_facet_array (struct graph_thread_data*);
+void pick_func (int,int);
+element_id name_to_id(GLuint);
+void myMenuInit(void);
+void my_glLoadName( element_id );
+void e_glColor( struct graph_thread_data *,int );
+void f_glColor( struct graph_thread_data *,int );
+void e_glVertex3dv( struct graph_thread_data *,REAL * );
+void f_glVertex3dv( struct graph_thread_data *,REAL * );
+int hashfunc( struct vercol *);
+int vercolcomp( struct vercol *, struct vercol *);
+int eecomp( int *, int *);
+int build_arrays(void);
+void mpi_get_task_graphics(int);
+static int initz_flag = 0; 
 int no_graphthread_flag = 0; /* kludge for mpi task graphics */
+
+static int nvidia_gpu_flag = 0; // whether we can query Nvidia gpu state
+static int ati_gpu_flag = 0; // whether we can query ATI gpu state
+
+/*****************************************************************************
+*
+* function query_gpu_memory()
+*
+* Purpose: See what the state of gpu memory is.
+* Ref: http://developer.download.nvidia.com/opengl/specs/GL_NVX_gpu_memory_info.txt
+* Ref: http://www.opengl.org/registry/specs/ATI/meminfo.txt
+*/
+
+// NVIDIA defines, for glGetIntegerv.  Memory in KB.
+#define GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX          0x9047
+#define GPU_MEMORY_INFO_TOTAL_AVAILABLE_MEMORY_NVX    0x9048
+#define GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX  0x9049
+#define GPU_MEMORY_INFO_EVICTION_COUNT_NVX            0x904A
+#define GPU_MEMORY_INFO_EVICTED_MEMORY_NVX            0x904B
+// ATI defines
+#define VBO_FREE_MEMORY_ATI                     0x87FB
+#define TEXTURE_FREE_MEMORY_ATI                 0x87FC
+#define RENDERBUFFER_FREE_MEMORY_ATI            0x87FD
+
+void gpu_memory_report()
+{
+  if ( ati_gpu_flag )
+  { GLint v[4];
+    erroutstring("ATI GPU vertex buffer object free memory:\n");
+    glGetIntegerv(VBO_FREE_MEMORY_ATI,v);
+    sprintf(errmsg,"Total, KB: %d  Largest, KB: %d\n",v[0],v[1]);
+    erroutstring(errmsg);
+    erroutstring("ATI GPU render buffer free memory:\n");
+    glGetIntegerv(VBO_FREE_MEMORY_ATI,v);
+    sprintf(errmsg,"Total, KB: %d  Largest, KB: %d\n",v[0],v[1]);
+    erroutstring(errmsg);
+  }
+  else if ( nvidia_gpu_flag )
+  { GLint v[4];
+    glGetIntegerv(GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX,v);
+    sprintf(errmsg,"NVIDIA GPU video total memory, KB: %d\n",v[1]);
+    erroutstring(errmsg);
+    glGetIntegerv(GPU_MEMORY_INFO_TOTAL_AVAILABLE_MEMORY_NVX,v);
+    sprintf(errmsg,"NVIDIA GPU total memory, KB: %d\n",v[1]);
+    erroutstring(errmsg);
+    glGetIntegerv(GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX,v);
+    sprintf(errmsg,"NVIDIA GPU total videao memory, KB: %d\n",v[1]);
+    erroutstring(errmsg);
+  }
+  else
+  { erroutstring("GPU memory report not available.\n");
+  }
+  erroutstring(current_prompt);
+}
 
 /*****************************************************************************
 *
@@ -233,7 +323,9 @@ void glut_text_display()
 { char *c;
   int i;
   struct graph_thread_data *td = GET_DATA;
- 
+  void *font;
+  double pixheight;
+
   /* set up window coords */
   glMatrixMode(GL_PROJECTION);
   glPushMatrix();
@@ -241,29 +333,60 @@ void glut_text_display()
   glOrtho(0.0,1.0,0.0,1.0,0.0,1.0);
   glMatrixMode(GL_MODELVIEW);
   glPushMatrix();
-  glLoadIdentity();
+
   
   for ( i = 0 ; i < MAXTEXTS ; i++ )
   { REAL yspot;
+    int lcount = 0;
     if ( text_chunks[i].text == NULL )
       continue;
     yspot = text_chunks[i].start_y;
     glColor3f(0.0,0.0,0.0); /* black */
-    glRasterPos3d(text_chunks[i].start_x,text_chunks[i].start_y,0.0);
-    for ( c = text_chunks[i].text ; *c ; c++ )
-    { if ( *c == '\n' )
-      { yspot -= 18.0/td->ysize;
-        glRasterPos3d(text_chunks[i].start_x,yspot,0.0);
-      }
-      glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18,*c);
+    pixheight = text_chunks[i].vsize*td->ysize;
+    if ( pixheight < 8 || pixheight > 25 )
+    { // do stroke text
+       glLoadIdentity();
+       glTranslatef(text_chunks[i].start_x,text_chunks[i].start_y,0.0);
+       glScalef(.0005*td->aspect*text_chunks[i].vsize/.05,.0005*text_chunks[i].vsize/.05,1.);  // stroke characters are big, 120 units high
+       glLineWidth(0.10*text_chunks[i].vsize*td->ysize);  // line width in pixels
+       for ( c = text_chunks[i].text ; *c ; c++ )
+       {
+         if ( *c == '\n' )
+         { lcount++;
+           glLoadIdentity();
+           glTranslatef(text_chunks[i].start_x,text_chunks[i].start_y - lcount*1.3*text_chunks[i].vsize,0.0);
+           glScalef(.0005*td->aspect*text_chunks[i].vsize/.05,.0005*text_chunks[i].vsize/.05,1.);  // stroke characters are big, 120 units high
+         }
+         glutStrokeCharacter(GLUT_STROKE_ROMAN,*c);
+       }
+       glLineWidth(td->linewidth);
     }
-  }
+    else // pick close bitmap font
+    { if ( pixheight < 11 )
+        font = GLUT_BITMAP_HELVETICA_10;
+      else if ( pixheight < 13 )
+        font = GLUT_BITMAP_HELVETICA_12;
+      else if ( pixheight < 20 )
+        font = GLUT_BITMAP_HELVETICA_18;
+      else
+        font = GLUT_BITMAP_TIMES_ROMAN_24;
+      glLoadIdentity();
+      glRasterPos2d(text_chunks[i].start_x,text_chunks[i].start_y);
+      for ( c = text_chunks[i].text ; *c ; c++ )
+      {  if ( *c == '\n' )
+        { yspot -= 18.0/td->ysize;
+          glRasterPos2d(text_chunks[i].start_x,yspot);
+        }
+        glutBitmapCharacter(font,*c);
+      }
+    }
+  }  // end for
  
   glPopMatrix();  
   glMatrixMode(GL_PROJECTION);
   glPopMatrix();
  
-}
+} // end glut_text_display()
 
 /*****************************************************************************
 *
@@ -282,8 +405,7 @@ void glut_text_display()
 #define NAMETYPE_MASK  (3 << NAMETYPESHIFT)
 #define NAMETASKMASK (((1 << NAMETASKBITS) - 1) << NAMEOFFSETBITS)
 
-void my_glLoadName ARGS1((id),
-element_id id)
+void my_glLoadName(element_id id)
 { GLuint name;
   name = id_type(id) << NAMETYPESHIFT;
 #ifdef MPI_EVOLVER
@@ -295,7 +417,7 @@ element_id id)
     name |= NAMEOFFSETMASK;
   glLoadName(name);
 
-}
+} // end my_glLoadName()
 
 /***************************************************************************
 *
@@ -303,8 +425,7 @@ element_id id)
 *
 * purpose: unravel picked name to element id.
 */
-element_id name_to_id ARGS1((name),
-GLuint name)
+element_id name_to_id(GLuint name)
 { element_id id;
   id = (element_id)((name & NAMETYPE_MASK) >> NAMETYPESHIFT) << TYPESHIFT;
   if ( (name & NAMEOFFSETMASK) != NAMEOFFSETMASK )
@@ -313,7 +434,8 @@ GLuint name)
   id |= (element_id)((name & NAMETASKMASK) >> NAMEOFFSETBITS) << TASK_ID_SHIFT;
 #endif
   return id;
-}
+
+} // end name_to_id()
 
 /********************************************************************
 *
@@ -322,14 +444,60 @@ GLuint name)
 * purpose: Expand the space for the edge list
 */
 
-void enlarge_edge_array(td)
-struct graph_thread_data *td;
+void enlarge_edge_array(struct graph_thread_data *td)
 { int more = td->edgemax + 10;
+  struct vercol *old_array = td->edgearray;
+
+  if ( td->multi_dlist_flag )
+  { // dump current contents to display list
+    if ( td->edge_dlist_count >= td->edge_dlist_alloc )
+    { td->edge_dlists[td->edge_dlist_count] = glGenLists(1);
+      td->edge_dlist_alloc = td->edge_dlist_count + 1;
+    };
+
+    /* declare arrays to OpenGL */
+    glEnableClientState(GL_COLOR_ARRAY);
+    glEnableClientState(GL_NORMAL_ARRAY);
+    glEnableClientState(GL_VERTEX_ARRAY);
+
+    // glInterleavedArrays(GL_C4F_N3F_V3F,sizeof(struct vercol),(void*)td->edgearray);
+    glColorPointer(4,GL_FLOAT,sizeof(struct vercol),td->edgearray);      
+    glNormalPointer(GL_FLOAT,sizeof(struct vercol),td->edgearray->n);
+    glVertexPointer(3,GL_FLOAT,sizeof(struct vercol),td->edgearray->x);
+ 
+    glFlush();
+
+    // start display list
+    glNewList(td->edge_dlists[td->edge_dlist_count],GL_COMPILE);
+    glDrawArrays(GL_LINES,0,td->edgecount);
+    glEndList();
+    glFlush();
+    td->edge_dlist_count++;
+    td->edgecount = 0;
+    return;
+  }
 
   td->edgearray = (struct vercol*)realloc((char*)td->edgearray,
                 (td->edgemax+more)*sizeof(struct vercol));
+
+  if ( td->edgearray == NULL )
+  { kb_error(5694,"Graphics too complicated for arrays.  Switching to non-array graphics.\n",
+       WARNING);
+    sprintf(errmsg,"Trying to allocate %d edge structures of size %d\n.",
+         td->edgemax+more,(int)sizeof(struct vercol));
+    erroutstring(errmsg);
+    td->arraysflag = 0;
+    td->edgemax = 0;
+    free(old_array); 
+    free(td->facetarray); td->facetarray = NULL;
+    td->doing_lazy = 0;
+    glutPostRedisplay();
+    return;
+  }
+
   td->edgemax += more;
-}
+
+} // end enlarge_edge_array()
 
 /********************************************************************
 *
@@ -338,14 +506,57 @@ struct graph_thread_data *td;
 * purpose: Expand the space for the facet list
 */
 
-void enlarge_facet_array(td)
-struct graph_thread_data *td;
+void enlarge_facet_array(struct graph_thread_data *td)
 { int more = 3*web.skel[FACET].count + 10;
+  struct vercol *old_array = td->facetarray;
+
+  if ( td->multi_dlist_flag )
+  { // dump current contents to display list
+    if ( td->facet_dlist_count >= td->facet_dlist_alloc )
+    { td->facet_dlists[td->facet_dlist_count] = glGenLists(1);
+      td->facet_dlist_alloc = td->facet_dlist_count + 1;
+    };
+
+    /* declare arrays to OpenGL */
+    glEnableClientState(GL_COLOR_ARRAY);
+    glEnableClientState(GL_NORMAL_ARRAY);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    //glInterleavedArrays(GL_C4F_N3F_V3F,sizeof(struct vercol),(void*)td->facetarray);
+    glColorPointer(4,GL_FLOAT,sizeof(struct vercol),td->facetarray);      
+    glNormalPointer(GL_FLOAT,sizeof(struct vercol),td->facetarray->n);
+    glVertexPointer(3,GL_FLOAT,sizeof(struct vercol),td->facetarray->x);
+    glFlush();
+
+    // start display list
+    glNewList(td->facet_dlists[td->facet_dlist_count],GL_COMPILE);
+    glDrawArrays(GL_TRIANGLES,0,td->facetcount);
+    glEndList();
+    glFlush();
+    td->facet_dlist_count++;
+    td->facetcount = 0;
+    return;
+  }
 
   td->facetarray = (struct vercol*)realloc((char*)td->facetarray,
                      (td->facetmax+more)*sizeof(struct vercol));
+  if ( td->facetarray == NULL )
+  { kb_error(5695,"Graphics too complicated for arrays.  Switching to non-array graphics.\n",
+       WARNING);
+    sprintf(errmsg,"Trying to allocate %d facet structures of size %d\n.",
+         td->facetmax+more,(int)sizeof(struct vercol));
+    erroutstring(errmsg);
+
+    td->arraysflag = 0;
+    td->facetmax = 0;
+    free(old_array);
+    free(td->edgearray); td->edgearray = NULL;
+    td->doing_lazy = 0;
+    glutPostRedisplay();
+    return;
+  }
   td->facetmax += more;
-}
+
+} // end enlarge_facet_array()
 
 /***********************************************************************
 *
@@ -377,8 +588,7 @@ void kb_glAntiNormal3dv(struct graph_thread_data *td,REAL *v) /* save for edges 
 *          or pass it on to gl.
 */
 static float er,eg,eb,ea; /* current edge color */
-void e_glColor ARGS2((td,c),struct graph_thread_data *td,
-int c)
+void e_glColor(struct graph_thread_data *td,int c)
 { 
   if ( edge_rgb_color_attr > 0 )
   {
@@ -395,7 +605,7 @@ int c)
     else 
     { er = rgba[c][0]; eg = rgba[c][1]; eb = rgba[c][2]; ea = rgba[c][3]; }
   }
-}
+} // end e_glColor()
 
 /*********************************************************************
 *
@@ -403,8 +613,7 @@ int c)
 *
 * purpose: Either save current edge data in edge list, or pass on to gl.
 */
-void e_glVertex3dv ARGS2((td,x),struct graph_thread_data *td,
-REAL *x)
+void e_glVertex3dv(struct graph_thread_data *td,REAL *x)
 { if ( !td->arraysflag ) 
   { glVertex3d((GLdouble)x[0],(GLdouble)x[1],(GLdouble)x[2]); return; }
   if ( !td->edgearray ) 
@@ -422,7 +631,9 @@ REAL *x)
   td->edgearray[td->edgecount].n[1] = td->kb_norm[1];
   td->edgearray[td->edgecount].n[2] = td->kb_norm[2];
   td->edgecount++;
-}
+
+} // end e_glVertex3dv()
+
 /***********************************************************************
 *
 * function: f_glColor()
@@ -431,8 +642,7 @@ REAL *x)
 *          or pass it on to gl.
 */
 static float fr,fg,fb,fa; /* current facet color */
-void f_glColor ARGS2((td,c),struct graph_thread_data *td,
-int c)
+void f_glColor(struct graph_thread_data *td,int c)
 { 
   if ( facet_rgb_color_attr > 0 )
   {
@@ -440,26 +650,27 @@ int c)
        glColor4ubv((const GLubyte*)&c);
     else 
     { fr=(float)(((c>>24)&0xFF)/255.); fg=(float)(((c>>16)&0xFF)/255.);
-      fb=(float)(((c>>8)&0xFF)/255.); fa=(float)(((c)&0xFF)/255.); 
+      fb=(float)(((c>>8)&0xFF)/255.); 
     }
   }
   else 
   { if ( !td->arraysflag ) 
       glColor4fv(rgba[c]);
     else 
-    { fr = rgba[c][0]; fg = rgba[c][1]; fb = rgba[c][2]; fa = rgba[c][3]; }
+    { fr = rgba[c][0]; fg = rgba[c][1]; fb = rgba[c][2];  }
   }
  
-}
+} // end f_glColor()
+
 /*********************************************************************
 *
 * function: f_glVertex3dv()
 *
 * purpose: Either save current facet data in facet list, or pass on to gl.
 */
-void f_glVertex3dv ARGS2((td,x),struct graph_thread_data *td,
-REAL *x)
-{ if ( !td->arraysflag )
+void f_glVertex3dv(struct graph_thread_data *td,REAL *x)
+{
+  if ( !td->arraysflag )
   { glVertex3f((float)x[0],(float)x[1],(float)x[2]); return; }
   if ( !td->facetarray ) 
     td->facetmax = 0;
@@ -476,7 +687,8 @@ REAL *x)
   td->facetarray[td->facetcount].n[1] = td->kb_norm[1];
   td->facetarray[td->facetcount].n[2] = td->kb_norm[2];
   td->facetcount++;
-}
+
+} // end f_glVertex3dv()
 
 /* gl matrices have vector on left! */
 typedef double Matrix[4][4];
@@ -519,14 +731,14 @@ static long prev_timestamp; /* for remembering surface version */
 #define MM_SLICE_SPIN  6
 static int dindex = 1;  /* display list object index */
 
-void draw_screen ARGS((void));
+void draw_screen(void);
 
 
-void Ogl_init ARGS((void))
+void Ogl_init(void)
 { 
 }
 
-void Ogl_finish ARGS((void))
+void Ogl_finish(void)
 {                
 }
 
@@ -551,6 +763,7 @@ void graph_new_surface()
   { int win_id = td->win_id;
     td->interleaved_flag = 1; /* whether to do arrays as interleaved */
     td->indexing_flag = 1; /* whether to use indexed arrays (smaller,but random access) */
+    td->opacity_flag = 1;
     td->kb_norm[3] = 1.0;
     td->win_id = win_id;
     td->view_initialized = 0;
@@ -564,18 +777,19 @@ void graph_new_surface()
     }
   }
   LEAVE_GRAPH_MUTEX; 
-}
+
+} // end graph_new_surface()
 
 /***********************************************************************************
 *
 * Function: set_title()
 *
-* Purpose: Set title of graphics window.
+* Purpose: Set default title of graphics window.
 */
-void set_title(td)
-struct graph_thread_data *td;
-{ int titlespot = (strlen(datafilename) > 60) ? (strlen(datafilename)-60):0;
-  int k = td - gthread_data;
+void set_title(struct graph_thread_data *td)
+{ 
+  size_t titlespot = ((int)strlen(datafilename) > 60) ? (strlen(datafilename)-60):0;
+  size_t k = td - gthread_data;
 
 #ifdef MPI_EVOLVER
 
@@ -601,13 +815,18 @@ struct graph_thread_data *td;
     if ( k == 1 )
       sprintf(td->wintitle," %1.*s",WINTITLESIZE-10,datafilename+titlespot);
     else  sprintf(td->wintitle,"  %1.*s - Camera %d",WINTITLESIZE-20,
-      datafilename+titlespot,k);
+      datafilename+titlespot,(int)k);
 #endif
     td->new_title_flag = 1;
+    switch (k)
+    { case 1: strcpy(graphics_title,td->wintitle); break;
+      case 2: strcpy(graphics_title2,td->wintitle); break;
+      case 3: strcpy(graphics_title3,td->wintitle); break;
+    }
   
 } /* end set_title() */
 
-void init_Oglz ARGS((void));
+void init_Oglz (void);
  
 /************************************************************************
 *
@@ -620,9 +839,9 @@ void init_Oglz ARGS((void));
 GLuint pickbuf[PICKBUFLENGTH];
 int pick_flag;
 
-void pick_func ARGS2((x,y),
-int x, int y)
-{ struct graph_thread_data *td = GET_DATA;
+void pick_func(int x, int y)
+{ 
+  struct graph_thread_data *td = GET_DATA;
   GLint hits, viewport[4];
   int i,n;
   unsigned int enearz = 0xFFFFFFFF;
@@ -632,7 +851,6 @@ int x, int y)
   edge_id e_id = NULLID;
   vertex_id v_id = NULLID;
   int count;
-
 
   glSelectBuffer(PICKBUFLENGTH,pickbuf);
   glGetIntegerv(GL_VIEWPORT,viewport);
@@ -784,12 +1002,11 @@ static facet_id my_own_pick_facet;
 static REAL my_own_pick_vertex_depth;
 static REAL my_own_pick_edge_depth;
 static REAL my_own_pick_facet_depth;
-static REAL mopt[4][4];
+static REAL mopt[4][MAXCOORD+1];  // space for my_own_pick_transmat
 static REAL *my_own_pick_transmat[4] = {mopt[0],mopt[1],mopt[2],mopt[3]};
 static REAL my_own_pick_x,my_own_pick_y;
 
-void my_own_pick_func ARGS2((x,y),
-int x, int y) /* pixel coordinates of pick spot */
+void my_own_pick_func(int x, int y) /* pixel coordinates of pick spot */
 { 
   int i,j,k;
   float projmat[4][4];
@@ -808,12 +1025,37 @@ int x, int y) /* pixel coordinates of pick spot */
 
   /* get product */
   for ( i = 0 ; i < 4 ; i++ )
-    for ( j = 0 ; j < 4 ; j++ )
+  { for ( j = 0 ; j < 4 ; j++ )
     { REAL sum = 0;
       for ( k = 0 ; k < 4 ; k++ )
       sum += projmat[k][i]*modelmat[j][k]; 
       my_own_pick_transmat[i][j] = sum;
     }
+    for ( ; j < SDIM ; j++ )
+      my_own_pick_transmat[i][j] = 0.0;
+    my_own_pick_transmat[i][SDIM] = my_own_pick_transmat[i][3];
+  }
+  if ( SDIM == 2 )
+  { // not using z coordinate
+    for ( i = 0 ; i < 4 ; i++ )
+      my_own_pick_transmat[i][2] = my_own_pick_transmat[i][3];
+   // and have to undo baffling factor of 2 from vt2[]
+   for ( i = 0 ; i < 3 ; i++ )
+     for ( j = 0 ; j < 3 ; j++ )
+       my_own_pick_transmat[i][j] /= 2;
+
+  }
+  
+  else if ( SDIM > 3 )
+  {
+    for ( i = 0 ; i < 4 ; i++ )
+    {  my_own_pick_transmat[i][SDIM] = my_own_pick_transmat[i][3];
+       for ( j = 3; j < SDIM ; j++ )
+        my_own_pick_transmat[i][j] = 0.0;
+    }
+  }
+  
+   
 
   my_own_pick_vertex = NULLID;
   my_own_pick_edge = NULLID;
@@ -855,10 +1097,12 @@ int x, int y) /* pixel coordinates of pick spot */
 * purpose: See if an edge intersects pick window.
 */
 
-void my_own_edge_pick(gtail,ghead,e_id)
-struct graphdata *gtail,*ghead;
-edge_id e_id;
-{
+void my_own_edge_pick(
+  struct graphdata *gtail,
+  struct graphdata *ghead,
+  edge_id e_id
+)
+{ int i;
   REAL tailx[4],headx[4];
   REAL px,py,qx,qy,ex,ey,lensq,dotprod,lambda,this_z,distsq;
 
@@ -866,9 +1110,12 @@ edge_id e_id;
      return;
 
   /* get endpoint pixel coordinates */
-  matvec_mul(my_own_pick_transmat,gtail->x,tailx,4,4);
-  matvec_mul(my_own_pick_transmat,ghead->x,headx,4,4);
-
+  matvec_mul(my_own_pick_transmat,gtail->x,tailx,4,SDIM+1);
+  matvec_mul(my_own_pick_transmat,ghead->x,headx,4,SDIM+1);
+  for ( i = 0 ; i < 3 ; i++ ) // apply homogeneous coordinate
+  { tailx[i] /= tailx[3];
+    headx[i] /= headx[3];
+  }
 
   px = my_own_pick_x - tailx[0];
   py = my_own_pick_y - tailx[1];
@@ -908,7 +1155,7 @@ edge_id e_id;
   { my_own_pick_edge = e_id;
     my_own_pick_edge_depth = this_z;
   }
-} /* end my_own_edge_pick() */
+} /* end my_own_edge_pick() */ 
 
 /************************************************************************** 
 *
@@ -917,10 +1164,11 @@ edge_id e_id;
 * purpose: See if an edge intersects pick window.
 */
 
-void my_own_facet_pick(g,f_id)
-struct graphdata *g;
-edge_id f_id;
-{
+void my_own_facet_pick(
+  struct graphdata *g,
+  edge_id f_id
+)
+{ int i;
   REAL base[4],head1[4],head2[4];
   REAL px,py,ax,ay,bx,by;
   REAL det,alpha,beta;
@@ -930,9 +1178,14 @@ edge_id f_id;
      return;
 
   /* get vertex pixel coordinates */
-  matvec_mul(my_own_pick_transmat,g[0].x,base,4,4);
-  matvec_mul(my_own_pick_transmat,g[1].x,head1,4,4);
-  matvec_mul(my_own_pick_transmat,g[2].x,head2,4,4);
+  matvec_mul(my_own_pick_transmat,g[0].x,base,4,SDIM+1);
+  matvec_mul(my_own_pick_transmat,g[1].x,head1,4,SDIM+1);
+  matvec_mul(my_own_pick_transmat,g[2].x,head2,4,SDIM+1);
+  for ( i = 0 ; i < 3 ; i++ ) // apply homogeneous coordinate
+  { base[i] /= base[3];
+    head1[i] /= head1[3];
+    head2[i] /= head2[3];
+  }
 
 
   px = my_own_pick_x - base[0];
@@ -955,8 +1208,7 @@ edge_id f_id;
   if ( this_z < my_own_pick_facet_depth )
   { my_own_pick_facet = f_id;
     my_own_pick_facet_depth = this_z;
-  }
-} /* end my_own_facet_pick() */
+  }} /* end my_own_facet_pick() */
 
 
 /****************************************************************************/
@@ -969,10 +1221,14 @@ edge_id f_id;
 * purpose: Called on mouse button events, records position.
 */
 
-void mouse_func ARGS((int,int,int,int));
+void mouse_func(int,int,int,int);
 
-void mouse_func ARGS4((button,state,x,y),
-int button, int state, int x, int y)
+void mouse_func(
+  int button, 
+  int state, 
+  int x, 
+  int y
+)
 { struct graph_thread_data *td = GET_DATA;
   switch ( button )
   { case GLUT_LEFT_BUTTON:
@@ -1002,7 +1258,7 @@ int button, int state, int x, int y)
       }
       break;
   }
-}
+} // end mouse_func()
 
 /*******************************************************************
 *
@@ -1011,25 +1267,26 @@ int button, int state, int x, int y)
 * purpose: Called as mouse moves with left button down, this
 *          moves surface according to current mouse_mode.
 */
-void mouse_loc_func ARGS((int,int));
-
-void mouse_loc_func ARGS2((x,y),
-int x, int y)
+void mouse_loc_func(int x, int y)
 { struct graph_thread_data *td = GET_DATA;
   int i,j;
+  int update_global_view_flag = 0;
 
   td->newx = x;
   td->newy = y; 
   if ( td->mouse_left_state == GLUT_DOWN )
+
   { switch ( td->mouse_mode )
     {  case MM_SLICE:
          if ( slice_view_flag )
           { slice_coeff[SDIM] += (td->newx-td->oldx)*td->xscale/view[0][0];
+            slice_coeff_set_flag = 1;
             td->newarraysflag = 1;
             break;
           }
           else if ( clip_view_flag )
           { clip_coeff[0][SDIM] += (td->newx-td->oldx)*td->xscale/view[0][0];
+            clip_coeff_set_flag = 1;
             td->newarraysflag = 1;
             break;
           }
@@ -1042,6 +1299,7 @@ int x, int y)
        fix_ctm(td->view,(REAL)( td->newx - td->oldx),
                        -(REAL)(td->newy - td->oldy));
        mat_mult(td->from_focus,td->view,td->view,HOMDIM,HOMDIM,HOMDIM);
+       update_global_view_flag = 1;
        break;
 
       case MM_SCALE:
@@ -1050,6 +1308,7 @@ int x, int y)
             for ( j = 0 ; j < HOMDIM ; j++ )
                 td->view[i][j] *= 1.0 +0.002*(td->newx-td->oldx);
         mat_mult(td->from_focus,td->view,td->view,HOMDIM,HOMDIM,HOMDIM);
+        update_global_view_flag = 1;
         break;
 
       case MM_TRANSLATE:
@@ -1069,6 +1328,7 @@ int x, int y)
           td->from_focus[1][HOMDIM-1] += (td->newx-td->oldx)*td->xscale;
           td->from_focus[2][HOMDIM-1] -= (td->newy-td->oldy)*td->yscale;
         };
+        update_global_view_flag = 1;
         break;
 
       case MM_SPIN: /* about z axis */
@@ -1092,7 +1352,8 @@ int x, int y)
           mat_mult(td->to_focus,td->view,td->view,HOMDIM,HOMDIM,HOMDIM);
           mat_mult(rot,td->view,td->view,HOMDIM,HOMDIM,HOMDIM);
           mat_mult(td->from_focus,td->view,td->view,HOMDIM,HOMDIM,HOMDIM);
-          }
+          update_global_view_flag = 1;
+        }
         break;
 
       case MM_SLICE_SPIN:
@@ -1101,10 +1362,12 @@ int x, int y)
           REAL dang; 
           REAL temp1[3];
           REAL temp2[3];
+          REAL cfudge; 
 
           dang = (td->newx - td->oldx)/300.0*M_PI;
           dth = (td->newy - td->oldy)/300.0*M_PI;
 
+          cfudge = SDIM_dot(td->focus_coord,clip_coeff[0]);
           matvec_mul(td->from_focus,clip_coeff[0],temp1,3,3);
           temp2[0] = cos(dth)*temp1[0] - sin(dth)*temp1[2];
           temp2[1] = temp1[1];
@@ -1113,16 +1376,29 @@ int x, int y)
           temp1[0] = cos(dang)*temp2[0] - sin(dang)*temp2[1];
           temp1[1] = sin(dang)*temp2[0] + cos(dang)*temp2[1];
           matvec_mul(td->to_focus,temp1,clip_coeff[0],3,3);
+          cfudge -= SDIM_dot(td->focus_coord,clip_coeff[0]);
+          clip_coeff[0][3] -= cfudge;
+          clip_coeff_set_flag = 1;
           td->newarraysflag = 1;
           break;
         }
       }
       if ( td->idle_flag )
          glutPostRedisplay();
+
+      if ( update_global_view_flag )
+      { if ( td->win_id == 1 )
+        { 
+          for ( i = 0 ; i < HOMDIM ; i++ )
+           for ( j = 0 ; j < HOMDIM ; j++ )
+            view[i][j] = td->view[i][j];
+        }
+      }
     }
 
   td->oldx = td->newx; td->oldy = td->newy;
-}
+
+} // end mouse_loc_func()
 
 /************************************************************************
 *
@@ -1130,10 +1406,8 @@ int x, int y)
 *
 * purpose: handle window resize messages.
 */
-void reshape_func ARGS(( int, int ));
 
-void reshape_func ARGS2(( x, y ),
-int x, int y)
+void reshape_func(int x, int y)
 { struct graph_thread_data *td = GET_DATA;
 
   if ( window_aspect_ratio != 0.0 )
@@ -1216,7 +1490,8 @@ int x, int y)
   td->resize_flag = 1; /* So Mac OS X won't try too much redrawing */
   glutIdleFunc(idle_func);
 #endif
-}
+
+} // end reshape_func()
 
 
 /***********************************************************************
@@ -1226,10 +1501,7 @@ int x, int y)
 * purpose: handle special keystrokes in graphics window.
 */
 
-void specialkey_func ARGS((int,int,int));
-
-void specialkey_func ARGS3((key,x,y),
-int key, int x, int y)
+void specialkey_func(int key, int x, int y)
 { struct graph_thread_data *td = GET_DATA;
   switch ( key )
   { 
@@ -1243,7 +1515,7 @@ int key, int x, int y)
       td->view[SDIM>2?2:1][HOMDIM-1] -= .25; break;
   }
   glutPostRedisplay();  /* generate redraw message */
-}
+} // end specialkey_func()
 
 /***********************************************************************
 *
@@ -1252,11 +1524,11 @@ int key, int x, int y)
 * purpose: handle ASCII keystrokes in graphics window.
 */
 
-void key_func ARGS((unsigned char,int,int));
-
-void key_func ARGS3((key,x,y),
-unsigned char key,
-int x, int y)
+void key_func(
+  unsigned char key,
+  int x, 
+  int y
+)
 { struct graph_thread_data *td = GET_DATA;
   int i,j;
 
@@ -1292,26 +1564,44 @@ int x, int y)
               graph_timestamp = ++global_timestamp; 
               break;
 
+    case 'O': td->opacity_flag = !td->opacity_flag;
+              graph_timestamp = ++global_timestamp;
+              break;
+
     case 'b':
         td->edge_bias -= 0.001; 
-        sprintf(msg,"\nEdge front bias now %f\n",td->edge_bias); erroutstring(msg);
+        sprintf(msg,"\nEdge front bias now %f\n", (DOUBLE)(td->edge_bias)); 
+        erroutstring(msg);
         erroutstring(current_prompt);
         break;
 
     case 'B':
         td->edge_bias += 0.001; 
-        sprintf(msg,"\nEdge front bias now %f\n",td->edge_bias); erroutstring(msg);
+        sprintf(msg,"\nEdge front bias now %f\n",(DOUBLE)(td->edge_bias)); 
+        erroutstring(msg);
         erroutstring(current_prompt);
         break;
 
     case 'R':
-        resize(); 
+       
+        //  reset clipping and slicing
+        memset(slice_coeff,0,sizeof(slice_coeff));
+        memset(clip_coeff,0,sizeof(clip_coeff));
+        clip_coeff[0][0] = 1.0;
+        slice_view_flag = 0;
+        clip_view_flag = 0;
+        slice_coeff_set_flag = 0;
+        clip_coeff_set_flag = 0;
+          
+        resize();  // also sets up clip coeff
+
         for ( i = 0 ; i < HOMDIM ; i++ )
           for ( j = 0 ; j < HOMDIM ; j++ )
             td->view[i][j] = view[i][j];
         matcopy(td->to_focus,identmat,HOMDIM,HOMDIM);
         matcopy(td->from_focus,identmat,HOMDIM,HOMDIM);
-        break;
+        td->newarraysflag = 1; // force recalc of all facets
+    break;
  
     case '-':
         if ( td->linewidth > 0.6 )
@@ -1374,17 +1664,18 @@ int x, int y)
         td->strips_flag = !td->strips_flag;
         erroutstring(td->strips_flag?"Element strips ON.\n":"Element strips OFF.\n"); 
         erroutstring(current_prompt);
-        td->normflag = 1; /* gourard shading */
+ //       td->normflag = 1; /* gourard shading */
         td->indexing_flag = 1;
         td->newarraysflag = 1;
         break;
  
     case 'Y': /* colored strips */
-      { int *fcolors;
-        int i;
-        fcolors = (int*)temp_calloc(web.skel[FACET].maxcount,sizeof(int));
-        for ( i = 0 ; i < web.skel[FACET].maxcount ; i++ )
-           fcolors[i] = get_facet_color(i);
+      { int *fcolors;  // to save old colors of facets
+        facet_id f_id;
+
+        fcolors = (int*)mycalloc(web.skel[FACET].maxcount,sizeof(int));  // drawscreen frees temps
+        FOR_ALL_FACETS(f_id)
+          fcolors[loc_ordinal(f_id)] = get_facet_color(f_id);
         if ( !td->strips_flag ) 
            key_func('S',0,0);  /* make sure strips on */
         td->strip_color_flag = 1;
@@ -1393,31 +1684,39 @@ int x, int y)
         td->newarraysflag = 1;
         draw_screen();  /* draw colored facets */
         td->strip_color_flag = 0;
-        for ( i = 0 ; i < web.skel[FACET].maxcount ; i++ )
-           set_facet_color(i,fcolors[i]);
-        temp_free((char*)fcolors);
+        FOR_ALL_FACETS(f_id)
+          set_facet_color(f_id,fcolors[loc_ordinal(f_id)]);
+        myfree((char*)fcolors);
       }
       break;
 
     case 'F': /* use last pick to set rotation center */
         if ( pickvnum > 0 )
         { int i,m;
-          REAL *x,xx[MAXCOORD];
+          REAL *x;
           REAL focus[MAXCOORD];
+          vertex_id v_id;
 
-          td->focus_vertex_id = get_ordinal_id(VERTEX,pickvnum-1);
+          v_id = get_ordinal_id(VERTEX,pickvnum-1);
+          if ( !valid_element(v_id) )
+          { sprintf(errmsg,"\n\nSet Focus: pickvnum %d is invalid.\n\n",pickvnum);
+            erroutstring(errmsg);
+            erroutstring(current_prompt);
+            break;
+          }
+          td->focus_vertex_id = v_id;
           x = get_coord(td->focus_vertex_id);  
-          for ( m = 0 ; m < SDIM ; m++ ) xx[m] = x[m];
-          if ( torus_display_mode == TORUS_CLIPPED_MODE )
+          for ( m = 0 ; m < SDIM ; m++ ) td->focus_coord[m] = x[m];
+          if ( web.torus_flag && (torus_display_mode == TORUS_CLIPPED_MODE) )
           { 
             for ( m = 0 ; m < SDIM ; m++ )
             { int wrap = (int)floor(SDIM_dot(web.inverse_periods[m],x));
               for ( i = 0 ; i < SDIM ; i++ )
-                xx[i] -= wrap*web.torus_period[m][i];
+                td->focus_coord[i] -= wrap*web.torus_period[m][i];
             }
           }
 
-          matvec_mul(td->view,xx,focus,HOMDIM-1,HOMDIM-1);
+          matvec_mul(td->view,td->focus_coord,focus,HOMDIM-1,HOMDIM-1);
           for ( i = 0 ; i < SDIM ; i++ ) 
           { td->to_focus[i][HOMDIM-1] = -focus[i] - td->view[i][HOMDIM-1];
             td->from_focus[i][HOMDIM-1] = focus[i] + td->view[i][HOMDIM-1];
@@ -1441,6 +1740,19 @@ int x, int y)
         erroutstring(current_prompt);
         graph_timestamp = ++global_timestamp; /* force recalculate arrays */
         break;
+
+    case 'Z': /* toggle multi-display-lists */
+        td->multi_dlist_flag = !td->multi_dlist_flag;
+        if ( td->multi_dlist_flag )
+        { td->indexing_flag = 0;
+          td->interleaved_flag = 1;
+          td->dlistflag = 0;
+          erroutstring("\nOpenGL multiple display lists ON.\n");
+        }
+        else erroutstring("\nOpenGL multiple display lists OFF.\n");
+        erroutstring(current_prompt);
+        td->newarraysflag = 1;
+        break;
   
     case 'a': /* toggle vertex arrays */
         if ( strcmp(opengl_version,"1.1") < 0 )
@@ -1455,7 +1767,14 @@ int x, int y)
         { /* Workaround really bizarre line-drawing bug */
           if ( td->linewidth == 1.0 ) { td->linewidth = 0.5; glLineWidth(0.5);}
           erroutstring("\nOpenGL vertex arrays now ON.\n");
-          glInterleavedArrays(GL_C4F_N3F_V3F,0,(void*)td->fullarray);
+          glEnableClientState(GL_COLOR_ARRAY);
+          glEnableClientState(GL_NORMAL_ARRAY);
+          glEnableClientState(GL_VERTEX_ARRAY);
+          //glInterleavedArrays(GL_C4F_N3F_V3F,0,(void*)td->fullarray);
+          glColorPointer(4,GL_FLOAT,sizeof(struct vercol),td->fullarray);      
+          glNormalPointer(GL_FLOAT,sizeof(struct vercol),td->fullarray->n);
+          glVertexPointer(3,GL_FLOAT,sizeof(struct vercol),td->fullarray->x);
+
           td->newarraysflag = 1;
           td->dlistflag = 0;
         }
@@ -1507,6 +1826,10 @@ int x, int y)
       erroutstring(current_prompt);
       break;
 
+   case 'q': gpu_memory_report();
+      break;
+
+
    #ifdef MPI_EVOLVER
    case 'y': /* MPI version only */
       mpi_show_corona_flag = ! mpi_show_corona_flag;
@@ -1520,6 +1843,13 @@ int x, int y)
    case 'x': 
       Ogl_close();
       return;
+   case 'X': 
+#ifdef WIN32
+     ExitProcess(0);
+#else
+     my_exit(0);
+#endif
+     return;
 
    case 'h': case '?':
       erroutstring("\nGraphics window help:\n");
@@ -1592,18 +1922,16 @@ int x, int y)
 } /* end of key_func() */
 
 
- void mainmenu_func ARGS((int));
- void submenu_func ARGS((int));
- void mpi_taskmenu_func ARGS((int));
+ void mainmenu_func (int);
+ void submenu_func (int);
+ void mpi_taskmenu_func (int);
 
- void mainmenu_func ARGS1((choice),
- int choice)
+ void mainmenu_func(int choice)
  { 
    key_func(choice,0,0); 
  }
  
- void submenu_func ARGS1((choice),
- int choice)
+ void submenu_func(int choice)
  { 
    key_func(choice,0,0);
  }
@@ -1640,6 +1968,7 @@ int x, int y)
    glutAddMenuEntry("Center object (m)",'m');
    glutAddMenuEntry("Toggle edges (e)",'e');
    glutAddMenuEntry("Toggle faces (f)",'f');
+   glutAddMenuEntry("Toggle opacity (O)",'O');
    glutAddMenuEntry("Focus on picked vertex (F)",'F');
    glutAddMenuEntry("Bounding box (o)",'o');
    glutAddMenuEntry("Reset graphics (R)",'R');
@@ -1679,16 +2008,17 @@ int x, int y)
    #endif
 
    glutAddMenuEntry("Close graphics (x)",'x');
+   glutAddMenuEntry("Exit Evolver (X)",'X');
    glutAttachMenu(GLUT_MIDDLE_BUTTON);
- }
+ } // end myMenuInit()
  
 
  /* lighting info for surface */
- static GLfloat mat_specular[] = {.5f,.5f,.5f,1.0f};
- static GLfloat mat_shininess[] = {10.0f};
- static GLfloat mat_diffuse[] = {1.0f,1.0f,1.0f,1.0f}; 
+ //static GLfloat mat_specular[] = {.5f,.5f,.5f,1.0f};
+ //static GLfloat mat_shininess[] = {10.0f};
+ //static GLfloat mat_diffuse[] = {1.0f,1.0f,1.0f,1.0f}; 
  static GLfloat mat_white[] = {1.0f,1.0f,1.0f,1.0f};
- static GLfloat mat_emission[] = {0.3f,0.3f,0.3f,1.0f};
+ //static GLfloat mat_emission[] = {0.3f,0.3f,0.3f,1.0f};
 #define INTENSITY1  0.5f
  static GLfloat light0_position[] = {1.0f,0.0f,1.0f,0.0f};  /* front */
  static GLfloat light0_diffuse[] = {INTENSITY1,INTENSITY1,INTENSITY1,1.0f};
@@ -1731,8 +2061,7 @@ BOOL __stdcall handle_func(HWND hwnd, LPARAM lParam)
  * purpose: catch signals meant to wake up thread.
  */
 
- void glut_catcher ARGS1((x),
- int x)
+ void glut_catcher(int x)
  {
    signal(SIGKICK,glut_catcher);
  }
@@ -1746,11 +2075,9 @@ BOOL __stdcall handle_func(HWND hwnd, LPARAM lParam)
  * purpose: Create OpenGL display thread and window.
  */
 #ifdef PTHREADS
-void * draw_thread ARGS1((arglist),
-void *arglist)
+void * draw_thread(void *arglist)
 #else
-void __cdecl draw_thread ARGS1((arglist),
-void *arglist)
+void __cdecl draw_thread(void *arglist)
 #endif
 { int i,j;
   int argc = 1; /* to keep glutInit happy */
@@ -1766,7 +2093,9 @@ void *arglist)
   draw_thread_id = GetCurrentThreadId();
   /* set per-thread data */
   TlsSetValue(thread_data_key,(void*)&glutgraph_thread_data);
- 
+  if ( graphics_affinity_mask )
+	  SetThreadAffinityMask(GetCurrentThread(),graphics_affinity_mask);
+  
 #else
   draw_thread_id = pthread_self();  /* get thread id */
   draw_pid = getpid();
@@ -1806,6 +2135,26 @@ void *arglist)
   glutCreateWindow(datafilename);
 #endif
 
+
+
+  // Test for some OpenGL extensions
+  { const GLubyte *s = glGetString(GL_VERSION);
+    //s = glGetString(GL_EXTENSIONS);
+    const GLubyte *end = s + strlen((char*)s);
+    size_t nvlen = strlen("GL_NVX_gpu_memory_info");
+    size_t atilen = strlen("GL_ATI_meminfo");
+    while ( s < end )
+    { size_t n = strcspn((char*)s," ");
+      if ( strncmp((char*)s,"GL_NVX_gpu_memory_info",nvlen) == 0 )
+      { nvidia_gpu_flag = 1;
+      }
+      if ( strncmp((char*)s,"GL_ATI_meminfo",atilen) == 0 )
+      { ati_gpu_flag = 1;
+      }
+      s += n + 1;
+    }
+  }       
+
   glutMouseFunc(mouse_func); 
   glutMotionFunc(mouse_loc_func); 
   glutKeyboardFunc(key_func);
@@ -1817,7 +2166,13 @@ void *arglist)
 
   glut_id = glutGetWindow(); /* window identifier */
   if ( glut_id >= 10 )
-     kb_error(2596,"glut window id too high.\n",RECOVERABLE);
+  { kb_error(2596,"glut window id too high.\n",WARNING);
+#ifdef PTHREADS
+    return NULL;
+#else 
+    return;
+#endif
+  }
   else td = gthread_data + glut_id;
 
 #ifdef WIN32
@@ -1838,7 +2193,8 @@ void *arglist)
   td->aspect = 1;
   td->xscale=2.8/xpixels;
   td->yscale=2.8/ypixels;
-  background_color = LIGHTBLUE;
+  if ( background_color == -1 )
+     background_color = LIGHTBLUE;
   td->xsize = xpixels; 
   td->ysize = ypixels;
   td->projmode = P_ORTHO;    /* kind of projection to do */
@@ -1860,31 +2216,31 @@ void *arglist)
     glutSetWindowTitle(wintitle);
   }
 
- 
-
   ENTER_GRAPH_MUTEX; /* due to view[][] */
   if ( dup_window )
   { struct graph_thread_data *tdd = gthread_data+dup_window;
-    for ( i = 0 ; i < HOMDIM ; i++ )
+    for ( i = 0 ; i < MAXCOORD ; i++ )
     { td->view[i] = td->viewspace[i];
       td->to_focus[i] = td->to_focus_space[i];
       td->from_focus[i] = td->from_focus_space[i];
-      for ( j = 0 ; j < HOMDIM ; j++ )
+      for ( j = 0 ; j < MAXCOORD ; j++ )
       { td->view[i][j] = tdd->view[i][j]; 
         td->to_focus[i][j] = tdd->to_focus[i][j];
         td->from_focus[i][j] = tdd->from_focus[i][j];
       }
     }
     dup_window = 0; 
-  }
+  } 
   else
-  { for ( i = 0 ; i < HOMDIM ; i++ )
+  { for ( i = 0 ; i < MAXCOORD ; i++ )
     { td->view[i] = td->viewspace[i];
       td->to_focus[i] = td->to_focus_space[i];
       td->from_focus[i] = td->from_focus_space[i];
+    }
+    for ( i = 0 ; i < HOMDIM ; i++ )
       for ( j = 0 ; j < HOMDIM ; j++ )
         td->view[i][j] = view[i][j];  /* initialize to global view */
-    }
+    
     matcopy(td->to_focus,identmat,HOMDIM,HOMDIM);
     matcopy(td->from_focus,identmat,HOMDIM,HOMDIM);
   }
@@ -1938,7 +2294,7 @@ void *arglist)
 #ifdef PTHREADS
   return NULL;
 #endif
-}
+} // end draw_thread()
  
 /************************************************************************
 *
@@ -1956,6 +2312,25 @@ void init_Oglz()
     {
 #ifdef WIN32
      _beginthread(draw_thread,0,0);
+     if ( cpu_affinity_flag )
+       SetThreadAffinityMask(GetCurrentThread(),1);
+     if ( cpu_affinity_flag )
+     {  DWORD_PTR  proc_affinity_mask,system_affinity_mask;
+        int want_cpu = threadflag ? (nprocs+1) : 1;  // 0-based cpu numbering
+        GetProcessAffinityMask(GetCurrentProcess(),&proc_affinity_mask,
+            &system_affinity_mask);
+        if ( proc_affinity_mask & (((size_t)1)<<want_cpu) )
+        { SetThreadAffinityMask(GetCurrentThread(),((size_t)1)<<want_cpu);
+          sprintf(msg,"Set affinity of graphics thread to cpu %d.\n",want_cpu);
+          outstring(msg);
+        }
+        else
+        { sprintf(errmsg,"Cannot set affinity of graphics thread to cpu %d; process affinity mask is %X.\n",
+                  want_cpu,proc_affinity_mask);
+          kb_error(1930,errmsg,WARNING);
+        }
+     }
+
 #elif defined(PTHREADS)
    { pthread_t th;
     /*
@@ -1980,7 +2355,7 @@ void init_Oglz()
 #endif
     }
   }
-}
+} // end init_Oglz()
 
 /****************************************************************
 *
@@ -1988,12 +2363,12 @@ void init_Oglz()
 *
 *  purpose: To be called at the start of each Evolver-initiated redraw.
 */
-void Oglz_start ARGS((void));
+
 void Oglz_start(void)
 {
   if ( initz_flag == 0 ) init_Oglz();
 
-}    
+}  // end Oglz_start() 
 
   
 /******************************************************************
@@ -2002,25 +2377,27 @@ void Oglz_start(void)
 *
 * purpose:  graph one edge.
 */
-void Oglz_edge ARGS((struct graphdata *,edge_id));
 
-void Oglz_edge ARGS2((g,e_id),
-struct graphdata *g,
-edge_id e_id)
+void Oglz_edge(
+  struct graphdata *g,
+  edge_id e_id
+)
 { struct graph_thread_data *td = GET_DATA;
   int k;
   int e_color;
-
-  e_color = g[0].ecolor;
-  if ( e_color == CLEAR ) return;
 
   if ( my_own_pick_flag )
   { my_own_edge_pick(g,g+1,e_id);
     return;
   }
 
-  if ( (e_color < 0) || (e_color >= IRIS_COLOR_MAX) )
-    e_color = DEFAULT_EDGE_COLOR;
+  e_color = g[0].ecolor;
+  if ( e_color == CLEAR ) return;
+  if ( !rgb_colors_flag )
+  {
+    if ( (e_color < 0) || (e_color >= IRIS_COLOR_MAX) )
+      e_color = DEFAULT_EDGE_COLOR;
+  }
 
   if ( pick_flag )
     my_glLoadName(e_id); /* for picking */
@@ -2039,13 +2416,12 @@ edge_id e_id)
   { for ( k = 0 ; k < 2 ; k++ )
     { my_glLoadName(g[k].v_id); /* for picking */
       glBegin(GL_POINTS);
-        glVertex3dv(g[k].x);
+        glVertex3d((GLdouble)g[k].x[0],(GLdouble)g[k].x[1],(GLdouble)g[k].x[2]);
       glEnd();
     }
   }
 
- 
-}
+} // end Oglz_edge()
 
 /******************************************************************
 *
@@ -2055,11 +2431,10 @@ edge_id e_id)
 */
 
 
-void Oglz_facet ARGS((struct graphdata *,facet_id));
-
-void Oglz_facet ARGS2((g,f_id),
-struct graphdata *g,
-facet_id f_id)
+void Oglz_facet(
+  struct graphdata *g,
+  facet_id f_id
+)
 {  
   int i,k;
   REAL len;
@@ -2068,28 +2443,37 @@ facet_id f_id)
   float norm[3];
   float backnorm[3];
 
-
   /* need normal for lighting */
-  for ( i = 0 ; i < 3 ; i++ )
-  { int ii = (i+1)%3;
-    int iii = (i+2)%3;
-    norm[i] = (float)((g[1].x[ii]-g[0].x[ii])*(g[2].x[iii]-g[0].x[iii])
-             -  (g[1].x[iii]-g[0].x[iii])*(g[2].x[ii]-g[0].x[ii]));
+  if ( web.sdim == 2 )
+  { norm[0] = norm[1] = 0.0;
+    norm[2] = 1.0;
   }
-  len = sqrt(dotf(norm,norm,3));
-  if ( len <= 0.0 ) return;
-  for ( i = 0 ; i < 3 ; i++ ) norm[i]= (float)(norm[i]/len);
+  else
+  {
+    for ( i = 0 ; i < 3 ; i++ )
+    { int ii = (i+1)%3;
+      int iii = (i+2)%3;
+      norm[i] = (float)((g[1].x[ii]-g[0].x[ii])*(g[2].x[iii]-g[0].x[iii])
+               -  (g[1].x[iii]-g[0].x[iii])*(g[2].x[ii]-g[0].x[ii]));
+    }
+    len = sqrt(dotf(norm,norm,3));
+    if ( len <= 0.0 ) goto do_the_edges;
+    for ( i = 0 ; i < 3 ; i++ ) 
+      norm[i]= (float)(norm[i]/len);
+  }
 
-  if ( web.hide_flag && (g[0].color != UNSHOWN) 
-           && td->facetshow_flag )
+  if ( (g[0].color != UNSHOWN) && td->facetshow_flag )
   { if ( pick_flag ) my_glLoadName(f_id); /* for picking */
     if ( g[0].color != CLEAR )
     { if ( my_own_pick_flag )
         my_own_facet_pick(g,f_id);
       else
       {
-        if ( color_flag ) f_glColor(td,g->color);
-        else f_glColor(td,INDEX_TO_RGBA(WHITE));
+        if ( color_flag ) 
+          f_glColor(td,g->color);
+        else 
+          f_glColor(td,INDEX_TO_RGBA(WHITE));
+        fa = g[0].opacity;
         kb_glNormal3fv(td,norm);
         if ( !td->arraysflag )
           glBegin(GL_TRIANGLES);
@@ -2102,7 +2486,7 @@ facet_id f_id)
           glEnd();
       }
     }
-    if ( my_own_pick_flag && g->backcolor != g->color && g->backcolor != CLEAR )
+    if ( my_own_pick_flag && (g->backcolor != g->color) && (g->backcolor != CLEAR) )
       my_own_facet_pick(g,f_id);
     else
     if ( (g->color != g->backcolor) && (g->backcolor != CLEAR) )
@@ -2124,18 +2508,19 @@ facet_id f_id)
         glEnd();
     }
   }
-  
+ 
+do_the_edges:
   fe = valid_id(f_id) ? get_facet_fe(f_id) : NULLID;          
   for ( k = 0 ; k < 3 ; k++, fe = valid_id(fe)?get_next_edge(fe):NULLID )
-  { if ( g[k].ecolor == CLEAR ) continue;
+  { int kk = (k+1)%3;
+    if ( g[k].ecolor == CLEAR ) continue;
     if ( !edgeshow_flag || (g[0].color == UNSHOWN) )
     { if ( (g[k].etype & EBITS) == INVISIBLE_EDGE ) continue;      
     }
     if ( my_own_pick_flag )
-    { my_own_edge_pick(g+k,g+((k+1)%3),g[k].id);
+    { my_own_edge_pick(g+k,g+kk,g[k].id);
         continue;
     }
-
 
     if ( pick_flag ) 
 	    my_glLoadName(g[k].id); /* for picking */
@@ -2147,18 +2532,19 @@ facet_id f_id)
         kb_glNormal3dv(td,g[k].norm);
       e_glVertex3dv(td,g[k].x);
       if ( td->normflag ) 
-        kb_glNormal3dv(td,g[(k+1)%3].norm);
-      e_glVertex3dv(td,g[(k+1)%3].x);
+        kb_glNormal3dv(td,g[kk].norm);
+      e_glVertex3dv(td,g[kk].x);
     if ( !td->arraysflag )
         glEnd();
-	if ( pick_flag )
-	{ my_glLoadName(g[k].v_id);
+	if ( pick_flag ) 
+	{ 
+      my_glLoadName(g[k].v_id);
 	  glBegin(GL_POINTS);
-        glVertex3dv(g[k].x);
+        glVertex3d((GLdouble)g[k].x[0],(GLdouble)g[k].x[1],(GLdouble)g[k].x[2]);
       glEnd();
-	  my_glLoadName(g[(k+1)%3].v_id);
+	  my_glLoadName(g[kk].v_id);
 	  glBegin(GL_POINTS);
-        glVertex3dv(g[(k+1)%3].x);
+        glVertex3d((GLdouble)g[kk].x[0],(GLdouble)g[kk].x[1],(GLdouble)g[kk].x[2]);
       glEnd();
 	}
    }
@@ -2173,13 +2559,20 @@ facet_id f_id)
 * purpose: to be called at end of presenting data.
 */
 
-void Oglz_end ARGS((void))
+void Oglz_end(void)
 {
   prev_timestamp = graph_timestamp;
 }
 
-void Ogl_close ARGS((void))
-{ int i;
+/**********************************************************************
+*
+* function: Oglz_close()
+*
+* purpose: close current graphics window
+*/
+
+void Ogl_close(void)
+{ 
   struct graph_thread_data *td = GET_DATA;
 
   glutDestroyWindow(td->win_id);
@@ -2188,6 +2581,7 @@ void Ogl_close ARGS((void))
 #ifndef MAC_OS_X
  /* Mac objects to closing graphics thread */
 
+ { int i;
   for ( i = 0 ; i < MAXGRAPHWINDOWS ; i++ )
   { if ( gthread_data[i].in_use != 0 ) break;
   }
@@ -2206,9 +2600,10 @@ void Ogl_close ARGS((void))
   pthread_exit(NULL);
 #endif
   }
+}
 #endif
 
-}
+} // end Ogl_close()
 
 /***********************************************************************
 *
@@ -2229,8 +2624,7 @@ void Ogl_close_show(void)
 *
 */
 
-int vercolcomp ARGS2((a,b),
-struct vercol *a, struct vercol *b)
+int vercolcomp(struct vercol *a, struct vercol *b)
 { 
   int i;
   for ( i = 0 ; i < 10 ; i++ )
@@ -2239,6 +2633,84 @@ struct vercol *a, struct vercol *b)
     if ( diff > gleps ) return 1;
   }
   return 0;
+} // end vercolcomp()
+
+/***************************************************************************
+* Function: depth_comp
+* Purpose: Comparison function for depth sorting facets for opacity option.
+*/
+struct depth_s { int index;
+                 int type;  // EDGE or FACET
+                 double depth; 
+} *depth_sort;
+
+int depth_comp(const void *a, const void *b)
+{ if ( ((struct depth_s*)a)->depth < ((struct depth_s*)b)->depth ) return -1;
+  if ( ((struct depth_s*)a)->depth > ((struct depth_s*)b)->depth ) return  1;
+  return 0;
+}
+
+/***************************************************************************
+* Function: opacity_sort
+* Purpose: Create facet display index list in depth order.
+*/
+void opacity_sort()
+{ struct graph_thread_data *td = GET_DATA;
+  int *vspot;
+  int i;
+  struct depth_s *ds;
+  int fcount = td->facetcount/3;
+  int ecount = td->edgecount/2;
+
+  if ( td->opacity_alloc < fcount+ecount )
+  { 
+    td->opacity_list = (struct depth_s*)realloc(td->opacity_list,(fcount+ecount)*sizeof(struct depth_s));
+    td->opacity_alloc = fcount+ecount;
+  }
+  // set up depth sort, just using first vertex of facet
+  vspot =  td->indexarray+td->edgestart;
+  for ( i = 0, ds = td->opacity_list ; i < ecount ; i++,ds++ )
+  { struct vercol *xspot;
+    REAL depth1,depth2;
+
+    ds->index = 2*i;
+    ds->type = EDGE;
+    // using deepest vertex with bias, so appears in front of adjacent facets
+    xspot = td->fullarray + vspot[2*i];
+    depth1 =  td->view[0][0]*xspot->x[0]
+               + td->view[0][1]*xspot->x[1]
+               + td->view[0][2]*xspot->x[2];
+    xspot = td->fullarray + vspot[2*i+1];
+    depth2 =  td->view[0][0]*xspot->x[0]
+               + td->view[0][1]*xspot->x[1]
+               + td->view[0][2]*xspot->x[2];
+    ds->depth = (depth1 < depth2) ? depth1 : depth2;
+    ds->depth += td->edge_bias*imagescale;
+  }
+  vspot =  td->indexarray+td->facetstart;
+  for ( i = 0 ; i < fcount ; i++,ds++ )
+  { struct vercol *xspot = td->fullarray + vspot[3*i];
+    REAL depth1,depth2,depth3;
+    
+    ds->index = td->facetstart+3*i;
+    ds->type = FACET;
+    xspot = td->fullarray + vspot[3*i];
+    depth1 =  td->view[0][0]*xspot->x[0]
+               + td->view[0][1]*xspot->x[1]
+               + td->view[0][2]*xspot->x[2];
+    xspot = td->fullarray + vspot[3*i+1];
+    depth2 =  td->view[0][0]*xspot->x[0]
+               + td->view[0][1]*xspot->x[1]
+               + td->view[0][2]*xspot->x[2];
+    xspot = td->fullarray + vspot[3*i+2];
+    depth3 =  td->view[0][0]*xspot->x[0]
+               + td->view[0][1]*xspot->x[1]
+               + td->view[0][2]*xspot->x[2];
+    ds->depth = (depth1 < depth2) ? depth1 : depth2;
+    if ( depth3 < ds->depth ) ds->depth = depth3;
+    ds->depth += td->edge_bias/10.0*(depth1+depth2+depth3); // bias towards front facets drawn later, but less than edge bias
+  }
+  qsort(td->opacity_list,fcount+ecount,sizeof(struct depth_s),depth_comp);
 }
 
 /***********************************************************************
@@ -2248,14 +2720,13 @@ struct vercol *a, struct vercol *b)
 * purpose: comparison function for sorting indexed edges 
 */
 
-int eecomp ARGS2((a,b),
-int *a, int *b)
+int eecomp(int *a, int *b)
 { if ( *a < *b ) return -1;
   if ( *a > *b ) return 1;
   if ( a[1] > b[1] ) return 1;
   if ( a[1] < b[1] ) return -1;
   return 0;
-}
+} // end eecomp()
 
 /******************************************************************************
 *
@@ -2272,21 +2743,29 @@ void declare_arrays()
 
   if ( td->arraysflag )
   {
+    glEnableClientState(GL_COLOR_ARRAY);
+    glEnableClientState(GL_NORMAL_ARRAY);
+    glEnableClientState(GL_VERTEX_ARRAY);
+
     /* declare arrays to OpenGL */
     if ( td->interleaved_flag )
     {
-     glInterleavedArrays(GL_C4F_N3F_V3F,sizeof(struct vercol),(void*)td->fullarray);
+      //glInterleavedArrays(GL_C4F_N3F_V3F,sizeof(struct vercol),(void*)td->fullarray);
+      glColorPointer(4,GL_FLOAT,sizeof(struct vercol),td->fullarray);      
+      glNormalPointer(GL_FLOAT,sizeof(struct vercol),td->fullarray->n);
+      glVertexPointer(3,GL_FLOAT,sizeof(struct vercol),td->fullarray->x);
+
     }
     else /* indexed */
     { 
-      glColorPointer(4,GL_FLOAT,0,td->colorarray);     
+      glColorPointer(4,GL_FLOAT,0,td->colorarray);      
       glNormalPointer(GL_FLOAT,sizeof(struct vercol),td->fullarray->n);
       glVertexPointer(3,GL_FLOAT,sizeof(struct vercol),td->fullarray->x);
     }
   }
   td->declared_timestamp = td->arrays_timestamp;
   GL_ERROR_CHECK
-}
+} // end declare_arrays()
 
 /**************************************************************************
 *
@@ -2300,10 +2779,23 @@ void draw_one_image()
 
   if ( td->dlistflag )
     glCallList(dindex);    
+  else if ( td->multi_dlist_flag )
+  { int i;
+    for ( i = 0 ; i < td->facet_dlist_count ; i++ )
+      glCallList(td->facet_dlists[i]);
+    glMatrixMode(GL_PROJECTION);
+    glTranslated(td->edge_bias*imagescale,0.0,0.0);    /* edges in front */
+    for ( i = 0 ; i < td->edge_dlist_count ; i++ )
+      glCallList(td->edge_dlists[i]);
+    glTranslated(-td->edge_bias*imagescale,0.0,0.0);
+    glMatrixMode(GL_MODELVIEW);
+  }
   else if ( td->arraysflag )
   { int i,j,m;
 
   GL_ERROR_CHECK
+
+    ENTER_GRAPH_MUTEX;
 
     for ( m = 0 ; (m < transform_count) || (m < 1) ; m++ )
     { float tmat[4][4];  /* transform matrix in proper form */
@@ -2356,14 +2848,51 @@ void draw_one_image()
       }     
       else if ( td->indexing_flag )
       {
-        glDrawElements(GL_TRIANGLES,td->facetcount,GL_UNSIGNED_INT,
-           td->indexarray+td->facetstart);
-        glMatrixMode(GL_PROJECTION);
-        glTranslated(td->edge_bias*imagescale,0.0,0.0);
-glDisable(GL_LIGHTING);
-        glDrawElements(GL_LINES,td->edgecount,GL_UNSIGNED_INT,td->indexarray+td->edgestart);
-glEnable(GL_LIGHTING);
-        glTranslated(-td->edge_bias*imagescale,0.0,0.0);
+        if ( web.sdim == 2 ) // strange things with transforms
+           glDisable(GL_LIGHTING);
+        if ( opacity_attr && td->opacity_flag )
+        { // have to depth-sort facets to get proper display order
+          struct depth_s *ds;
+          int to_do;
+          opacity_sort();  
+          glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+          glEnable(GL_BLEND);
+          glDisable(GL_DEPTH_TEST);  // otherwise very patchy
+          to_do = td->edgecount/2 + td->facetcount/3;
+//printf("Opacity list\n");
+          for ( i = 0, ds = td->opacity_list ; i < to_do ; i++,ds++ )
+          { if ( ds->type == EDGE ) 
+            { glBegin(GL_LINES);
+//printf("%f %f %f      %f %f %f\n",
+//    td->fullarray[ds->index].x[0], td->fullarray[ds->index].x[1], td->fullarray[ds->index].x[2],
+//     td->fullarray[ds->index+1].x[0], td->fullarray[ds->index+1].x[1], td->fullarray[ds->index+1].x[2]);
+              glArrayElement(td->indexarray[ds->index]);
+              glArrayElement(td->indexarray[ds->index+1]);
+              glEnd();
+            }
+            else
+            { glBegin(GL_TRIANGLES);
+              glArrayElement(td->indexarray[ds->index]);
+              glArrayElement(td->indexarray[ds->index+1]);
+              glArrayElement(td->indexarray[ds->index+2]);
+              glEnd();
+            }
+          }          
+          glDisable(GL_BLEND);
+          glEnable(GL_DEPTH_TEST);  // otherwise very patchy
+        }
+        else 
+        {
+          glDrawElements(GL_TRIANGLES,td->facetcount,GL_UNSIGNED_INT,
+             td->indexarray+td->facetstart);
+        
+          glMatrixMode(GL_PROJECTION);
+          glTranslated(td->edge_bias*imagescale,0.0,0.0);
+  glDisable(GL_LIGHTING);
+          glDrawElements(GL_LINES,td->edgecount,GL_UNSIGNED_INT,td->indexarray+td->edgestart);
+  glEnable(GL_LIGHTING);
+          glTranslated(-td->edge_bias*imagescale,0.0,0.0);
+        }
       }
       else
       {
@@ -2386,6 +2915,7 @@ glEnable(GL_LIGHTING);
 
       if ( !td->doing_lazy  || !transforms_flag || !view_transforms ) break;
     } /* end transform loop */
+    LEAVE_GRAPH_MUTEX
   } /* end arraysflag */
   else /* not using display list or arrays */
   {
@@ -2394,6 +2924,44 @@ glEnable(GL_LIGHTING);
     graphgen();
     LEAVE_GRAPH_MUTEX
   }
+
+  /* Bounding box, if using lazy_transforms */
+  if ( box_flag && td->arraysflag && td->doing_lazy && !web.torus_flag )
+  { int k,m,a[MAXCOORD];
+    GLdouble tail[3],head[3];
+    glColor4fv(rgba[bounding_box_color]);
+    if ( SDIM == 2 )
+    { for ( a[0] = 0 ; a[0] <= 1 ; a[0]++ )
+      for ( a[1] = 0 ; a[1] <= 1 ; a[1]++ )
+       for ( k = 0 ; k < 2 ; k++ )
+         if ( a[k] == 0 )
+         { for ( m = 0 ; m < SDIM ; m++ )
+           { tail[m] = bounding_box[m][a[m]];
+             head[m] = bounding_box[m][m==k?1:a[m]];
+           }
+           glBegin(GL_LINES);
+             glVertex3dv(tail);
+             glVertex3dv(head);
+           glEnd();
+         }
+    }
+    else
+    for ( a[0] = 0 ; a[0] <= 1 ; a[0]++ )
+     for ( a[1] = 0 ; a[1] <= 1 ; a[1]++ )
+      for ( a[2] = 0 ; a[2] <= 1 ; a[2]++ )
+       for ( k = 0 ; k < 3 ; k++ )
+        if ( a[k] == 0 )
+        { for ( m = 0 ; m < SDIM ; m++ )
+          { tail[m] = bounding_box[m][a[m]];
+            head[m] = bounding_box[m][m==k?1:a[m]];
+          }
+          glBegin(GL_LINES);
+             glVertex3dv(tail);
+             glVertex3dv(head);
+          glEnd();      
+        }
+  } // end bounding box
+
   GL_ERROR_CHECK
 } /* end draw_one_image() */
 
@@ -2423,6 +2991,43 @@ void draw_screen()
 
   td->idle_flag = 0;
 
+  if ( slice_view_flag || clip_view_flag )
+    lazy_transforms_flag =0;
+
+#ifdef ASADS
+  // this almost works; clip plane seems to move twice as much as it should
+  if ( clip_view_flag )
+  { // use OpenGL clipping
+    REAL viewclip[MAXCOORD+1];
+    REAL *viewclip_ptr = viewclip;
+    REAL *clip_coeff_ptr;
+    GLdouble glclip[4];
+    MAT2D(invview,MAXCOORD+1,MAXCOORD+1);
+    matcopy(invview,td->view,SDIM+1,SDIM+1);
+    mat_inv(invview,SDIM+1);
+
+    clip_coeff[0][SDIM] = -clip_coeff[0][SDIM]; // for OpenGL sign convention
+    clip_coeff_ptr = clip_coeff[0];
+    mat_mult(&clip_coeff_ptr,invview,&viewclip_ptr,1,SDIM+1,SDIM+1);
+    clip_coeff[0][SDIM] = -clip_coeff[0][SDIM]; // restore
+    glclip[0] = viewclip[0];
+    glclip[1] = viewclip[1];
+    glclip[2] = viewclip[2];
+    glclip[3] = viewclip[SDIM];
+
+/* this doesn't work at all
+    glclip[0] = -clip_coeff[0][0];
+    glclip[1] = -clip_coeff[0][1];
+    glclip[2] = -clip_coeff[0][2];
+    glclip[3] = clip_coeff[0][SDIM];
+*/
+    glClipPlane(GL_CLIP_PLANE0,glclip);
+    glEnable(GL_CLIP_PLANE0);
+  }
+  else
+    glDisable(GL_CLIP_PLANE0);
+#endif  
+
   if ( td->new_title_flag )
     glutSetWindowTitle(td->wintitle);
   td->new_title_flag = 0;
@@ -2436,22 +3041,13 @@ void draw_screen()
   { return; }
 #endif
 
-  GL_ERROR_CHECK
-  
+
+
   /* New view loading point to try to eliminate problem with first load
      of very small surfaces. Works.  It needs to have view matrix loaded
      before setting arrays so it knows the proper rounding scale.
   */
   
-  /* make sure global view matrix is same as first window */
-  if ( td->win_id == 1 )
-  { 
-    for ( i = 0 ; i < HOMDIM ; i++ )
-      for ( j = 0 ; j < HOMDIM ; j++ )
-        view[i][j] = td->view[i][j];
-  }
-
-
   glMatrixMode(GL_MODELVIEW);
   for ( i = 0 ; i < 4 ; i++ )
     for ( j = 0 ; j < 4 ; j++ )
@@ -2470,16 +3066,32 @@ void draw_screen()
 
   glLoadMatrixd(viewf[0]); 
   /* end new view load */
-  
+
+  if ( rotate_lights_flag )
+  {
+    glLightfv(GL_LIGHT0, GL_POSITION, light0_position);   
+    glLightfv(GL_LIGHT1, GL_POSITION, light1_position); 
+  }
+
   /* build arrays if needed */
   if ( td->arraysflag && (
       ((graph_timestamp != td->arrays_timestamp) && go_display_flag )
          || td->newarraysflag || (td->dlistflag == RESETLIST))
      )
-  { /* if long time since last build, block and wait */
+  {
+    if ( td->multi_dlist_flag )
+    { int i;
+      for ( i = 0 ; i < td->edge_dlist_alloc ; i++ )
+        glDeleteLists(td->edge_dlists[i],1);
+      for ( i = 0 ; i < td->edge_dlist_alloc ; i++ )
+        glDeleteLists(td->facet_dlists[i],1);
+      td->edge_dlist_alloc = 0;
+      td->edge_dlist_count = 0;
+      td->facet_dlist_alloc = 0;
+      td->facet_dlist_count = 0;
+    }
 
-
-   
+    td->newarraysflag = 1;
     if ( build_arrays() )
     {
       declare_arrays();
@@ -2510,7 +3122,16 @@ void draw_screen()
       if ( !td->interleaved_flag )
       { /* kludge for broken nVidia Detonater 2.08 driver */
         if ( td->colorarray ) free((char*)td->colorarray);
-        td->colorarray = (float*)calloc(td->edgecount+td->facetcount,4*sizeof(float));
+        td->colorarray = (float*)calloc(td->edgecount+td->facetcount+5,4*sizeof(float));
+        if ( td->colorarray == NULL )
+        { kb_error(5696,"Graphics too complicated for arrays.  Switching to non-array graphics.\n",
+            WARNING);
+          td->arraysflag = 0;
+          td->doing_lazy = 0;
+          glutPostRedisplay();
+          return;
+        }
+
         for ( i = 0 ; i < td->edgecount+td->facetcount ; i++ )
           for ( j = 0 ; j < 4 ; j++ )
             td->colorarray[4*i+j] = td->fullarray[i].c[j];
@@ -2521,6 +3142,7 @@ void draw_screen()
   
   
       td->newarraysflag = 0;
+
       if ( td->dlistflag )
       {
         declare_arrays();
@@ -2657,7 +3279,7 @@ original loading of view matrix
 
   }
 
-  if ( td->arraysflag )
+  if ( td->arraysflag && !td->multi_dlist_flag )
     if ( td->declared_timestamp < td->arrays_timestamp )
       declare_arrays();
 
@@ -2734,7 +3356,7 @@ void idle_func()
     }
 #endif
   }
-}
+} // end idle_func()
 
 /***********************************************************************
 *
@@ -2745,6 +3367,9 @@ void idle_func()
 void display()
 { struct graph_thread_data *td;
   int i,j;
+
+  if ( torus_display_mode == TORUS_DEFAULT_MODE ) 
+    ask_wrap_display();
 
   close_flag = 0;
   Oglz_start();
@@ -2783,7 +3408,7 @@ void display()
 #endif
     }
 
-}
+}  // end display()
 
 
 
@@ -2798,22 +3423,20 @@ void display()
 * Output:  striparray
 */ 
 
-int ecomp ARGS2((a,b),
-char *a, int *b)
+int ecomp(char *a, int *b)
 { struct graph_thread_data *td = GET_DATA;
   int ai = td->indexarray[td->edgestart+*(int*)a]; 
   int bi = td->indexarray[td->edgestart+*(int*)b]; 
   if ( ai < bi ) return -1;
   if ( bi < ai ) return 1;
   return 0;
-}
+} // end ecomp()
 
 struct festruct { int v[3];  /* head and tail and opposite vertices */
                   int f;     /* facet on left */
                 };
 
-int fecomp  ARGS2(( aa,bb),
-void *aa, void*bb)
+int fecomp(void *aa, void*bb)
 {
   struct festruct *a = (struct festruct *)aa;
   struct festruct *b = (struct festruct *)bb;
@@ -2822,7 +3445,7 @@ void *aa, void*bb)
   if ( a->v[1] < b->v[1] ) return -1;
   if ( a->v[1] > b->v[1] ) return  1;
   return 0;
-}
+} // end fecomp()
 
 
 void make_strips()
@@ -2848,8 +3471,28 @@ void make_strips()
   if ( td->stripdata ) free((char*)td->stripdata);
   if ( td->striparray ) free((char*)td->striparray);
   td->stripdata = (int*)calloc(td->edgecount+td->facetcount+5,sizeof(int));
+  if ( td->stripdata == NULL )
+  { kb_error(5697,"Graphics too complicated for arrays.  Switching to non-array graphics.\n",
+       WARNING);
+    td->arraysflag = 0;
+    td->doing_lazy = 0;
+    glutPostRedisplay();
+    return;
+  }
   td->striparray = (struct stripstruct *)calloc(td->edgecount/2+td->facetcount/3 + 10,
                                          sizeof(struct stripstruct));
+  if ( td->striparray == NULL )
+  { kb_error(5698,"Graphics too complicated for arrays.  Switching to non-array graphics.\n",
+       WARNING);
+    td->arraysflag = 0;
+    free(td->stripdata);
+    td->stripdata = NULL;
+    td->doing_lazy = 0;
+    glutPostRedisplay();
+    return;
+  }
+
+  
   dataspot = 0; stripnum = 0;
 
   /* edges */
@@ -3071,7 +3714,7 @@ void make_strips()
               td->estripcount,td->fstripcount);
     outstring(msg);
   }
-}
+} // end make_strips()
 
 /***************************************************************************
 *
@@ -3080,8 +3723,7 @@ void make_strips()
 * purpose: Compute hash value for vertex.
 */
 int hashsize; /* size of hashtable */
-int hashfunc ARGS1((a),
-struct vercol *a)
+int hashfunc(struct vercol *a)
 {
   int h;
   int scale = 100000;
@@ -3098,7 +3740,8 @@ struct vercol *a)
   h = h % hashsize;
   if ( h < 0 ) h += hashsize;
   return h;
-}
+} // end hashfunc()
+
 /***************************************************************************
 *
 * function: make_indexlists()
@@ -3123,9 +3766,29 @@ void make_indexlists()
   /* qsort here is a time hog */
   if ( td->indexarray ) free((char*)td->indexarray);
   td->indexarray = (int*)calloc(rawcount+10,sizeof(int));
+  if ( td->indexarray == NULL )
+  { kb_error(5699,"Graphics too complicated for arrays.  Switching to non-array graphics.\n",
+       WARNING);
+    td->arraysflag = 0;
+    td->doing_lazy = 0;
+    glutPostRedisplay();
+    return;
+  }
+
   if ( !td->fullarray ) return;
   hashsize = 2*rawcount + 10;
   hashlist = (struct vercol**)calloc(hashsize,sizeof(struct vercol *));
+  if ( hashlist == NULL )
+  { kb_error(5700,"Graphics too complicated for arrays.  Switching to non-array graphics.\n",
+       WARNING);
+    td->arraysflag = 0;
+    free(td->indexarray);
+    td->indexarray = NULL;
+    td->doing_lazy = 0;
+    glutPostRedisplay();
+    return;
+  }
+
   hashlist[hashfunc(td->fullarray)] = td->fullarray;
   td->indexarray[0] = 0;
   for ( i = 1, j = 1 ; i < rawcount ; i++ )
@@ -3163,8 +3826,9 @@ void make_indexlists()
        }
      }
    }
-   if ( td->edgecount ) td->
-     edgecount = j+2;
+   if ( td->edgecount ) 
+     td->edgecount = j+2;
+
 } /* end make_indexlists() */
 
 /******************************************************************************
@@ -3220,14 +3884,35 @@ int build_arrays()
       td->edgecount = 0; 
       td->edgemax = (web.representation==SIMPLEX) ? SDIM*web.skel[FACET].count + 100 :
            4*web.skel[EDGE].count+10;   /* 2 vertices per edge, each edge twice */
+      if ( (td->multi_dlist_flag || !edgeshow_flag) && td->edgemax > 1000000 )
+          td->edgemax = 1000000;
       td->edgearray = (struct vercol *)calloc(td->edgemax,sizeof(struct vercol));
-      td->facetcount = 0; td->facetmax = 3*web.skel[FACET].count+10; /* 3 vertices per facet */
-      td->facetarray = (struct vercol *)calloc(td->facetmax,sizeof(struct vercol));
-      if ( !td->edgearray || !td->facetarray )
-      { erroutstring("Cannot allocate memory for graphics.\n");
+      if ( td->edgearray == NULL )
+      { kb_error(5701,"Graphics too complicated for arrays (try turning off auto edge display with 'e' in graphics window or  show_trans \"e\" at main prompt before displaying).  Switching to non-array graphics.\n",
+          WARNING);
+        td->arraysflag = 0;
+        td->doing_lazy = 0;
+        glutPostRedisplay();
         return 0;
       }
-  
+
+      td->facetcount = 0; 
+      td->facetmax = 3*web.skel[FACET].count+10; /* 3 vertices per facet */
+      if ( td->multi_dlist_flag && (td->edgemax > 1000000) )
+          td->facetmax = 1000000;
+
+      td->facetarray = (struct vercol *)calloc(td->facetmax,sizeof(struct vercol));
+      if ( td->facetarray == NULL )
+      { kb_error(5702,"Graphics too complicated for arrays (try turning off auto edge display with 'e' in graphics window or  show_trans \"e\" at main prompt before displaying).  Switching to non-array graphics.\n",
+          WARNING);
+        td->arraysflag = 0;
+        free(td->edgearray);
+        td->edgearray = NULL;
+        td->doing_lazy = 0;
+        glutPostRedisplay();
+        return 0;
+      }
+
       graph_start = Oglz_start;
       graph_facet = Oglz_facet;
       graph_edge  = Oglz_edge;
@@ -3242,15 +3927,18 @@ int build_arrays()
       
       oldflag = markedgedrawflag;
       markedgedrawflag = 1;
-      if ( (td->mouse_mode != MM_SLICE) && !transform_colors_flag && (SDIM <= 3)) 
+      if ( (td->mouse_mode != MM_SLICE) && !transform_colors_flag && (SDIM <= 3)
+             && !clip_view_flag && !slice_view_flag && !some_no_transforms_flag ) 
          lazy_transforms_flag = 1;   /* for graphgen use */
       td->doing_lazy = lazy_transforms_flag;  /* for glutgraph use */
       td->arrays_timestamp = graph_timestamp = ++global_timestamp; /* prevent stale data */ 
       normflag = td->normflag;
       graphgen();   /* fill in arrays */
-      td->doing_lazy = lazy_transforms_flag;  /* for glutgraph use, in case graphgen() changed */
       END_TRY_GRAPH_MUTEX
-  
+      if ( td->arraysflag == 0 ) // things got too big
+        return 0;
+      td->doing_lazy = lazy_transforms_flag;  /* for glutgraph use, in case graphgen() changed */
+    
       lazy_transforms_flag = 0;
       markedgedrawflag = oldflag;
       if ( td->q_flag )
@@ -3258,17 +3946,36 @@ int build_arrays()
         outstring(msg);
       }
  
-  
-      /* unify lists */
-  
-      td->fullarray = (struct vercol *)realloc((char*)td->edgearray,
-                 (td->edgecount+td->facetcount)*sizeof(struct vercol));       
-      td->fullarray_original = 1;
-      
-      memcpy((char*)(td->fullarray+td->edgecount),(char*)td->facetarray,
+      if ( td->multi_dlist_flag )
+      { // get last edges and facets into display lists
+        enlarge_edge_array(td);
+        enlarge_facet_array(td);
+        free((char*)td->edgearray);  td->edgearray = NULL;
+        free((char*)td->facetarray);  td->facetarray = NULL;
+        glFlush();
+      }
+      else
+      {
+        /* unify lists */  
+        td->fullarray = (struct vercol *)realloc((char*)td->edgearray,
+                 (td->edgecount+td->facetcount+5)*sizeof(struct vercol));       
+        td->fullarray_original = 1;
+        if ( td->fullarray == NULL )
+        { kb_error(5703,"Graphics too complicated for arrays.  Switching to non-array graphics.\n",
+            WARNING);
+          td->arraysflag = 0;
+          td->doing_lazy = 0;
+          free((char*)td->facetarray);  td->facetarray = NULL; 
+          free((char*)td->edgearray); td->edgearray = NULL;
+          glutPostRedisplay();
+          return 0;
+        }
+
+        memcpy((char*)(td->fullarray+td->edgecount),(char*)td->facetarray,
            td->facetcount*sizeof(struct vercol));
-      free((char*)td->facetarray);  td->facetarray = NULL; td->edgearray = NULL;
-      td->edgestart = 0; td->facetstart = td->edgecount;      
+        free((char*)td->facetarray);  td->facetarray = NULL; td->edgearray = NULL;
+        td->edgestart = 0; td->facetstart = td->edgecount;    
+      }
      
       return 1; /* success */
    }
@@ -3287,13 +3994,13 @@ int build_arrays()
 *
 */
 
-void mpi_get_task_graphics(task)
-int task;  /* which task to get from  */
+void mpi_get_task_graphics(int task  /* which task to get from  */)
 { struct mpi_command message;
   MPI_Status status;
   struct graph_metadata metadata; 
   struct graph_thread_data *td = GET_DATA;
   int i,j;
+  struct vercol *old_array;
 
   ENTER_MPI_MUTEX;
 
@@ -3325,8 +4032,17 @@ int task;  /* which task to get from  */
   td->view_initialized = 1;
   
   /* allocate room for graphics data */
-  td->fullarray = realloc(td->fullarray,(td->facetstart+td->facetcount)*sizeof(struct vercol)); 
-
+  old_array = td->fullarray;
+  td->fullarray = realloc(td->fullarray,(td->facetstart+td->facetcount+5)*sizeof(struct vercol)); 
+  if ( td->fullarray == NULL )
+      { kb_error(5704,"Graphics too complicated for arrays.  Switching to non-array graphics.\n",
+          WARNING);
+        td->arraysflag = 0;
+        td->doing_lazy = 0;
+        free((char*)old_array); 
+        return;
+      }
+ 
   MPI_Recv(td->fullarray,(td->facetstart+td->facetcount)*sizeof(struct vercol),
      MPI_BYTE,task,GRAPHICS_TAG,MPI_COMM_WORLD,&status); 
   if ( mpi_debug )
@@ -3337,8 +4053,8 @@ int task;  /* which task to get from  */
   MPI_Barrier(MPI_COMM_WORLD);
 
   LEAVE_MPI_MUTEX;
-}
-
+} // end mpi_get_task_graphics()
+  
 /**********************************************************************
 *
 * Function: mpi_task_send_graphics()
@@ -3370,8 +4086,8 @@ void mpi_task_send_graphics()
   metadata.edgestart = td->edgestart;
   metadata.facetcount = td->facetcount;
   metadata.facetstart = td->facetstart;
-  for ( i = 0 ; i < 4 ; i++ )
-    for ( j = 0 ; j < 4 ; j++ )
+  for ( i = 0 ; i <= SDIM ; i++ )
+    for ( j = 0 ; j <= SDIM ; j++ )
       metadata.view[i][j] = view[i][j];
 
   if ( mpi_debug )

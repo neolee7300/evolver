@@ -37,9 +37,14 @@ REAL ssimp[EDGE_CTRL][EDGE_INTERP];
 REAL gauss2pt[EDGE_INTERP] = { 0.225403330758517, 1.0, 1.774596669241483 };
 REAL gauss2wt[EDGE_INTERP] = { 5.0/9, 8.0/9, 5.0/9 };
 
-REAL interpoly(k,u)
-int  k;
-REAL u;
+/********************************************************************
+* function: interpoly()
+* purpose:  degree 2 spline polynomials
+*/
+REAL interpoly(
+  int  k, // node number 
+  REAL u  // coordinate, 0 <= u <= 2
+)
 {
   switch ( k )
     {
@@ -49,11 +54,16 @@ REAL u;
     }
 
   return  0.0;  /* error return */
-}
+} // end interpoly()
 
-REAL interpolyderiv(k,u)
-int  k;
-REAL u;
+/********************************************************************
+* function: interpolyderiv()
+* purpose:  degree 2 spline polynomial derivatives
+*/
+REAL interpolyderiv(
+  int  k, // node number
+  REAL u // coordinate, 0 <= u <= 2
+)
 {
   switch ( k )
     {
@@ -63,8 +73,12 @@ REAL u;
     }
 
   return  0.0;  /* error return */
-}
+} // end interpolyderiv()
 
+/********************************************************************
+* function: scoeff_init()
+* purpose:  initialize gaussian coefficient arrays
+*/
 void scoeff_init()
 {
     int i,j;
@@ -76,7 +90,7 @@ void scoeff_init()
             sdip[i][j] = interpolyderiv(i,gauss2pt[j]);
             ssimp[i][j] = gauss2wt[j]*sdip[i][j];
          }
-}
+} // end scoeff_init()
 
 /************************************************************************
 *
@@ -85,8 +99,7 @@ void scoeff_init()
 *  Quadratic version.
 */
 
-void edge_force_q(e_id)
-edge_id e_id;
+void edge_force_q(edge_id e_id)
 {
   REAL *x[EDGE_CTRL],*force[EDGE_CTRL],etang[EDGE_INTERP][MAXCOORD];
   REAL norm[MAXCOORD];
@@ -133,11 +146,6 @@ edge_id e_id;
      len += gauss2wt[i]*norm[i];
 
   set_edge_length(e_id,len);
-  if ( web.area_norm_flag )
-  { add_vertex_star(hv,len);
-    add_vertex_star(mv,len);
-    add_vertex_star(tv,len);
-  }
 
   /* calculate gravitational forces */
   if ( web.gravflag && !( get_eattr(e_id) & NONCONTENT) )
@@ -157,7 +165,7 @@ edge_id e_id;
     }
   }                    
 
-}
+} // end edge_force_q()
 
 /************************************************************************
 *
@@ -166,8 +174,7 @@ edge_id e_id;
 *  Quadratic version.
 */
 
-void edge_energy_q(e_id)
-edge_id e_id;
+void edge_energy_q(edge_id e_id)
 {
   REAL *x[EDGE_CTRL];
   REAL etang[MAXCOORD];
@@ -212,15 +219,10 @@ edge_id e_id;
   }
   set_edge_length(e_id,len);
 
-  /* following three lines for area normalization option */
-  add_vertex_star(v[0],len);
-  add_vertex_star(v[1],len);
-  add_vertex_star(v[2],len);
-     
   binary_tree_add(web.total_energy_addends,len*get_edge_density(e_id));
   if ( web.representation == STRING ) /* don't count triple junction as area */
       web.total_area    += len;
-}
+} // end edge_energy_q()
  
 /**********************************************************************
 *
@@ -229,8 +231,7 @@ edge_id e_id;
 *
 */
 
-void edge_area_q(fe_id)
-facetedge_id fe_id;
+void edge_area_q(facetedge_id fe_id)
 {
   body_id b_id1,b_id2;
   facet_id f_id1,f_id2;
@@ -285,7 +286,7 @@ facetedge_id fe_id;
   
   if ( valid_id(b_id2 ) )
      add_body_volume(b_id2, -area);
-}
+} // end edge_area_q()
 
 /*****************************************************************
 *
@@ -384,4 +385,4 @@ void string_grad_q()
       }
     }
   }
-}
+} // end string_grad_q()

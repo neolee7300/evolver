@@ -38,10 +38,23 @@
 
 #include "include.h"
 
-static int count;      /* number of facets */
-static int maxcount;  /* number allocated */
+static size_t count;      /* number of facets */
+static size_t maxcount;  /* number allocated */
 struct tsort *trilist; /* list for depth sorting triangles */
 static int gdim = 3;      /* dimension doing graphics in */
+static int painter_multiple_sweep_flag;  // for really big surfaces
+#define MULTIPLE_SWEEP_PREP 2
+#define MULTIPLE_SWEEP_GO   3
+#define MULTIPLE_SWEEP_DONE 4
+#define SWEEPBINS 1000
+static size_t sweep_mins[SWEEPBINS], sweep_maxs[SWEEPBINS];
+static REAL sweep_low = -10.0;
+static REAL sweep_high = 10.0;
+static REAL sweep_delta;
+static REAL sweep_top; //  current cutoff min
+static REAL sweep_bottom; // previous cutoff
+static size_t sweep_k;  // keeping track in sweep_mins[]
+static size_t sweep_total,sweep_done; // for reporting progress
 
 /* results of comparing depth of facets */
 #define  DISJOINT      1
@@ -53,20 +66,26 @@ static int gdim = 3;      /* dimension doing graphics in */
 #define  COPLANAR     64
 
 #define TEXTRA 100
+static  struct tsort textra[TEXTRA]; /* for triangle fragments */
+
+/* for debugging; just displays list as is after given number of facets */
+size_t debug_k = 0x7FFFFFFF;
 
 REAL tableau[7][3];  /* simplex tableau */
-void pivot ARGS((int ,int ));
-int newell_split ARGS((struct tsort *,struct tsort *,struct tsort *,struct tsort *));
+void pivot(int ,int );
+int newell_split(struct tsort *,struct tsort *,struct tsort *,struct tsort *);
 int backstamp;   /* for timestamping being at back of list */
 
-int plane_test ARGS((struct tsort *,struct tsort *));
-int setquadcode ARGS((struct tsort *));
-void find_bbox ARGS((struct tsort *));
-int separating_line ARGS((struct tsort*,struct tsort*));
-int separating_plane ARGS((struct tsort*,struct tsort*,int));
+int plane_test(struct tsort *,struct tsort *);
+int setquadcode(struct tsort *);
+void find_bbox(struct tsort *);
+int separating_line(struct tsort*,struct tsort*);
+int separating_plane(struct tsort*,struct tsort*,int);
 
-static int ttcompare(t1,t2)  /* depth comparison for sort */
-struct tsort **t1,**t2;
+static int ttcompare(  /* depth comparison for sort */
+  struct tsort **t1,
+  struct tsort **t2
+)
 {
   /* First, compare back z */
   if ( t1[0]->mins[2] > t2[0]->mins[2] ) return 1;
@@ -80,22 +99,22 @@ struct tsort **t1,**t2;
   if ( t1[0]->f_id < t2[0]->f_id ) return -1;
   return 0;
 
-}
+} // end ttcompare()
 
 /* quadtree of depth lists */
 struct qtree_t { struct tsort *depthhead;
                  float maxdepth; /* of all in subtree */
 } *qtree;
 int maxquaddepth = 8; /* maximum depth of quadtree */
-int get_quadindex ARGS((unsigned int));
-void qdepth_insert ARGS((struct tsort *));
-struct tsort *search_subtree ARGS((int,struct tsort *,int *));
+int get_quadindex(unsigned int);
+void qdepth_insert(struct tsort *);
+struct tsort *search_subtree(int,struct tsort *,int *);
 
 /* visibility stuff */
-void visibility_stage ARGS((struct tsort *));
-void visibility_end ARGS((void));
-int vis_count;  /* used structures */
-int vis_max;   /* allocated structures */
+void visibility_stage(struct tsort *);
+void visibility_end(void);
+size_t vis_count;  /* used structures */
+size_t vis_max;   /* allocated structures */
 struct tsort *vis_list;  /* storage */
 
 
@@ -107,8 +126,7 @@ struct tsort *vis_list;  /* storage */
 *
 */
 
-void find_bbox(t)
-struct tsort *t;
+void find_bbox(struct tsort *t)
 { int n;
   REAL dx,dy,len;
 
@@ -217,15 +235,17 @@ struct tsort *t;
       }
     }
   }
-}
+} // end find_bbox()
 
-/* For setting quadtree code and checking if in bounding box. */
-/* Coded for 32 bit ints. */
+/*************************************************************************
+* Function: setquadcode()
+* Purpose:  For setting quadtree code and checking if in bounding box. 
+* Coded for 32 bit ints. 
+*/
 #define OUTOFBOX 0
 #define INTHEBOX 1
 
-int setquadcode(t)
-struct tsort *t;
+int setquadcode(struct tsort *t)
 { unsigned int q = 0;  /* the quadcode */
   unsigned int bit = 1;  /* for shifting to quad bit position */
   int n;
@@ -255,11 +275,138 @@ struct tsort *t;
 
   t->quadcode = q;
   return INTHEBOX;
-}
+} // end setquadcode()
 
+/*************************************************************************
+* Function: multiple_sweep_prep()
+*
+* Purpose: Generate graphics items once to count and find bins.
+*/
+void multiple_sweep_prep()
+{ size_t total;
+  int k;
+
+  bbox_minx = bbox_miny = 1e20;
+  bbox_maxx = bbox_maxy = -1e20;
+
+  memset((void*)sweep_mins,0,sizeof(sweep_mins));
+  memset((void*)sweep_maxs,0,sizeof(sweep_maxs));
+  sweep_delta = (sweep_high - sweep_low)/SWEEPBINS;
+  painter_multiple_sweep_flag = MULTIPLE_SWEEP_PREP;
+  raw_generate();
+
+  // see if we are ever going to have more than maxcount
+  // items in a sweep
+  for ( total = 0, k = 0 ; k < SWEEPBINS ; k++ )
+  { total += sweep_mins[k] - (k ? sweep_maxs[k-1] : 0);
+    if ( total > maxcount )
+      kb_error(5532,"depth sort: too many items in sweep.\n",
+         RECOVERABLE);
+    sweep_total += sweep_mins[k];
+  }
+
+  // Now set up for first sweep
+  count = 0;
+  sweep_done = 0;
+  for ( total = 0, k = 0 ; k < SWEEPBINS ; k++ )
+  { if ( total + sweep_mins[k] > maxcount )
+       break;
+    total += sweep_mins[k];
+  }
+  sweep_k = k;
+  sweep_done = total;
+  sweep_top = sweep_low + (k-1)*sweep_delta;
+  sweep_bottom = -1e30;
+
+  painter_multiple_sweep_flag = MULTIPLE_SWEEP_GO;
+  (*init_graphics)();  // print out postscript header
+  erroutstring("Starting first sweep.\n");
+
+} // end multiple_sweep_prep()
+
+/*************************************************************************
+* Function: sweep_prep_one()
+*
+* Purpose: tally one tsort structure in initial sweep
+*/
+void sweep_prep_one(struct tsort *t)
+{
+    int bin = (int)((t->mins[SDIM-1] - sweep_low)/sweep_delta);
+    if ( bin < 0 ) 
+      bin = 0;
+    if ( bin >= SWEEPBINS )
+      bin = SWEEPBINS - 1;
+    sweep_mins[bin]++;
+    bin = (int)((t->maxs[SDIM-1] - sweep_low)/sweep_delta);
+    if ( bin < 0 ) 
+      bin = 0;
+    if ( bin >= SWEEPBINS )
+      bin = SWEEPBINS - 1;
+    sweep_maxs[bin]++;
+
+  /* find bounding box */
+  if ( need_bounding_box )
+  { 
+    { if ( t->mins[0] < bbox_minx ) bbox_minx = (REAL)t->mins[0];
+      if ( t->mins[1] < bbox_miny ) bbox_miny = (REAL)t->mins[1];
+      if ( t->maxs[0] > bbox_maxx ) bbox_maxx = (REAL)t->maxs[0];
+      if ( t->maxs[1] > bbox_maxy ) bbox_maxy = (REAL)t->maxs[1];
+    }
+  }
+
+} // end sweep_prep_one()
+
+/*************************************************************************
+* Function: reset_multiple_sweep()
+*
+* Purpose: reset trilist in preparation for next sweep of multiple sweep
+*/
+void reset_multiple_sweep()
+{ size_t k,j,total;
+
+  sprintf(msg,"Sweep completed. Done %lld of %lld items.\n",(long long)sweep_done,
+      (long long)sweep_total);
+  erroutstring(msg);
+
+  if ( sweep_k >= SWEEPBINS )
+  { painter_multiple_sweep_flag = MULTIPLE_SWEEP_DONE;
+    return;
+  }
+
+  // compactify left-over trilist, with extra ones tacked on at end
+  for ( k = 0, j = 0 ; k < count ; k++ )
+    if ( trilist[k].flag )
+      trilist[j++] = trilist[k];
+  for ( k = 0 ; k < TEXTRA ; k++ )
+    if ( textra[k].flag )
+      trilist[j++] = textra[k];
+  memset((void*)(trilist+j),0,(maxcount-j)*sizeof(struct tsort));
+  memset((void*)(textra),0,TEXTRA*sizeof(struct tsort));
+  count = j-TEXTRA;
+
+  // Now get bounds for next sweep
+  for ( total = count, k = sweep_k ; k < SWEEPBINS ; k++ )
+  { if ( total + sweep_mins[k] > maxcount )
+       break;
+    total += sweep_mins[k];
+    sweep_done += sweep_mins[k];
+  }
+  sweep_k = k;
+  sweep_bottom = sweep_top;
+  if ( sweep_k >= SWEEPBINS )
+    sweep_top = 1e30;
+  else 
+    sweep_top = sweep_low + (k-1)*sweep_delta;
+
+} // end reset_multiple_sweep()
+
+/*************************************************************************
+* Function: painter_start()
+* Purpose:  Start routine called by graphgen()
+*/
 void painter_start()
 { int dummy;
-  long allocsize;
+  size_t allocsize;
 
   gdim = (SDIM <= 3) ? SDIM : 3;
 
@@ -280,21 +427,53 @@ void painter_start()
   if ( web.dimension > 2 )
      maxcount *= web.dimension+1; /* each simplex face becomes facet */
   allocsize = (long)maxcount*sizeof(struct tsort);
-  if ( allocsize >= MAXALLOC  )
-     maxcount = MAXALLOC/sizeof(struct tsort);
+  painter_multiple_sweep_flag = 0;
+#ifdef WIN32
+  { MEMORYSTATUSEX statex;
+    statex.dwLength = sizeof (statex);
+    GlobalMemoryStatusEx (&statex);
+    if ( allocsize > statex.ullAvailPhys/4 )
+    { painter_multiple_sweep_flag = 1;
+      maxcount = (size_t)(statex.ullAvailPhys/4/sizeof(struct tsort));
+    }
+  }
+#elif defined(LINUX) && !defined(MAC_OS_X)
+  { struct sysinfo s;
+    sysinfo(&s);
+    if ( allocsize > (size_t)(s.freeram)*s.mem_unit/4 )
+    { painter_multiple_sweep_flag = 1;
+      maxcount = (size_t)(s.freeram)*s.mem_unit/4;
+    }
+  }
+#else
+  if ( maxcount >= 1000000  )
+  { painter_multiple_sweep_flag = 1;
+    maxcount = 1000000;
+  }
+#endif
   trilist = (struct tsort *)temp_calloc(maxcount,sizeof(struct tsort));
   count = 0;
+  if ( painter_multiple_sweep_flag )
+  { erroutstring("Very big surface, so painter algorithm doing multiple sweeps.\n");
+    multiple_sweep_prep();
+  }
   vis_count = 0;
   vis_list = NULL;
   vis_max = 0;
   backstamp = 0;
   ps_widthattr = find_extra(PS_WIDTHNAME,&dummy);
-}
+} // end painter_start()
 
-
-void painter_edge(gdata,e_id)
-struct graphdata *gdata;
-edge_id e_id; 
+/****************************************************************************
+*
+* Function: painter_edge()
+*
+* Purpose: Per-edge function called by graphgen()
+*/
+void painter_edge(
+  struct graphdata *gdata,
+  edge_id e_id
+)
 {
   struct tsort *t;
   int i,j;
@@ -343,6 +522,15 @@ edge_id e_id;
   /* find extents */
   find_bbox(t);
 
+  if ( painter_multiple_sweep_flag == MULTIPLE_SWEEP_PREP )
+  { sweep_prep_one(t);
+    return;
+  }
+  else if ( painter_multiple_sweep_flag == MULTIPLE_SWEEP_GO )
+  { if ( t->mins[SDIM-1] > sweep_top || t->mins[SDIM-1] <= sweep_bottom ) 
+      return;
+  }
+
   /* normal vector, closest to z axis */
   dx = t->x[1][0] - t->x[0][0];
   dy = t->x[1][1] - t->x[0][1];
@@ -356,12 +544,18 @@ edge_id e_id;
 
   if ( setquadcode(t) == OUTOFBOX ) return;
   count++;
-}
+} // end painter_edge()
 
-
-void painter_facet(gdata,f_id)
-struct graphdata *gdata;
-facet_id f_id;
+/********************************************************************
+*
+* Function: painter_facet()
+*
+* Purpose: Per-facet function called by graphgen()
+*/
+void painter_facet(
+  struct graphdata *gdata,
+  facet_id f_id
+)
 {
   int i,j;
   REAL a[MAXCOORD+1],b[FACET_VERTS][MAXCOORD+1];
@@ -469,10 +663,21 @@ facet_id f_id;
 
   /* find extents */
   find_bbox(t);
+
+  if ( painter_multiple_sweep_flag == MULTIPLE_SWEEP_PREP )
+  { sweep_prep_one(t);
+    return;
+  }
+  else if ( painter_multiple_sweep_flag == MULTIPLE_SWEEP_GO )
+  { if ( t->mins[SDIM-1] > sweep_top || t->mins[SDIM-1] <= sweep_bottom ) 
+      return;
+  }
+
   if ( setquadcode(t) == OUTOFBOX ) return;
 
   count++;
-}
+} // end painter_facet()
+
  /* stats for analyzing performance; REAL to handle large counts */
  REAL in_back_calls;
  REAL box_overlaps;
@@ -498,10 +703,11 @@ facet_id f_id;
 * return: pointer to obscured element, or NULL if none found.
 *         also retval to indicate type of relationship
 */
-struct tsort *search_subtree(qinx,tk,retval)
-int qinx; /* index of node in quadtree */
-struct tsort *tk;  /* given element */
-int *retval;
+struct tsort *search_subtree(
+  int qinx, /* index of node in quadtree */
+  struct tsort *tk,  /* given element */
+  int *retval
+)
 { struct tsort *tj;
  
   *retval = 0;
@@ -527,89 +733,28 @@ int *retval;
   
   /* other child */
   return search_subtree(2*qinx+1,tk,retval);
-}
-
-#ifdef XXXXX
-/* for debugging */
-void loopchecker()
-{ int counter;
-  int qinx;
-
-  int i;
-  for ( i = 0 ; i < count+TEXTRA ; i++ )
-    if ( tlist[i]->spot != i ) 
-       kb_error(2893,"Bad spot\n",RECOVERABLE);
-
-  for ( qinx = 0 ; qinx < 0x40000 ; qinx++ )
-  { struct tsort *tj;
-    int q;
-    struct tsort *slowboat = qtree[qinx].depthhead; /* likewise */
-    struct tsort *prev = NULL;
-    if ( slowboat == NULL ) continue;
-      counter = 0; q = slowboat->quadcode;
-      if ( qinx != get_quadindex(q) )
-        kb_error(2585,"Bad qinx.\n",RECOVERABLE);
-      for ( tj = qtree[qinx].depthhead ; tj != NULL ; prev=tj,tj = tj->next )
-        { /* loop detection */
-          if ( tj->prev != prev ) 
-            kb_error(2892,"bad prev\n",RECOVERABLE);
-          if ( tj->quadcode != q )
-             kb_error(2891,"Bad qinx.\n",RECOVERABLE);
-          if ( counter & 1) slowboat = slowboat->next;
-          if ( (slowboat == tj) && (counter > 1) ) 
-             kb_error(2591,"Internal error: loop in loopchecker()\n",
-               RECOVERABLE);
-          counter++;
-        }
-  }
-}
-#endif
+} // end search_subtree()
 
 /**************************************************************************
 *
-* function: painter_end()
+* Function: painter_process_trilist()
 *
-* purpose: sort and display facets and edges from trilist.
+* Purpose: depth-sort and display trilist.  Separated out for benefit
+*          of large surfaces that re-populate trilist in stages.
 */
 
-/* for debugging; just displays list as is after given number of facets */
-int debug_k = 0x7FFFFFFF;
-
-void painter_end()
-{
-  int k;
-  int loopcount; /* for emergency loop bailout */
+void painter_process_trilist()
+{ size_t k;
+  size_t loopcount; /* for emergency loop bailout */
   struct tsort **ll,*tt;
-  int quadalloc;
-  int k_top;  /* top of tlist */
+  size_t quadalloc;
+  size_t k_top;  /* top of tlist */
 
-  struct tsort textra[TEXTRA]; /* for triangle fragments */
-
-  in_back_calls = box_overlaps = facetfacet = facetedge = edgeedge = 
-   crossings = sep_plane_calls = sep_line_calls = 0;
-  loopbailouts = 0;
-
-  if ( count > maxcount ) count = maxcount;    /* in case there was excess */
-
-  /* find bounding box */
-  if ( need_bounding_box )
-  { struct tsort *t;
-    bbox_minx = bbox_miny = 1e20;
-    bbox_maxx = bbox_maxy = -1e20;
-    for ( k = 0, t = trilist ; k < count ; k++,t++ )
-    { if ( t->mins[0] < bbox_minx ) bbox_minx = (REAL)t->mins[0];
-      if ( t->mins[1] < bbox_miny ) bbox_miny = (REAL)t->mins[1];
-      if ( t->maxs[0] > bbox_maxx ) bbox_maxx = (REAL)t->maxs[0];
-      if ( t->maxs[1] > bbox_maxy ) bbox_maxy = (REAL)t->maxs[1];
-    }
-  }
-
-  (*init_graphics)();
 
   if ( SDIM == 2 )  /* don't bother with depth */
   { for ( k = 0 ; k < count ; k++ )
       visibility_stage(trilist+k);
-    goto end_exit;
+    return;
   } 
 
   /* now sort on min z, moving pointers instead of structures */
@@ -643,6 +788,9 @@ void painter_end()
     if ( breakflag ) break;
     if ( !tk->flag ) { k++; continue; }
 
+    if ( painter_multiple_sweep_flag && tk->maxs[2] > sweep_top )
+       return;  // time to get the next sweep
+
     /* for debugging and testing */
     if ( k > debug_k )
        goto draw_it;
@@ -672,7 +820,7 @@ have_conflict:
     /* Now have conflict, tk obscuring tj */
 
       /* test for possible looping, and if found, split tk */
-      if ( (tj->backstamp == backstamp) )
+      if ( tj->backstamp == backstamp )
       { int ret;
 
         crossings++;
@@ -683,8 +831,8 @@ have_conflict:
                
         if ( k < 2 ) 
         { /* not enough room, so expand tlist allocation, with free at start */
-          int newsize = 2*k_top;
-          int n;
+          size_t newsize = 2*k_top;
+          size_t n;
           struct tsort *more = (struct tsort*)temp_calloc(k_top,sizeof(struct tsort));
           tlist = (struct tsort**)temp_realloc((char*)tlist,newsize*sizeof(struct tsort*));
           for ( n = 0 ; n < k_top ; n++ )
@@ -764,25 +912,70 @@ repeat_tests:
   
     continue;
   }
- 
-end_exit:
-
-  if ( verbose_flag )
-  {
-    printf("in_back_calls:   %g\n",in_back_calls);
-    printf("  facetfacet:    %g\n",facetfacet);
-    printf("  facetedge:     %g\n",facetedge);
-    printf("  edgeedge:      %g\n",edgeedge);
-    printf("box_overlaps:    %g\n",box_overlaps);
-    printf("sep_line_calls:  %g\n",sep_line_calls);
-    printf("sep_plane_calls: %g\n",sep_plane_calls);
-    printf("crossings:       %g\n",crossings);
-    printf("swaps:           %g\n",swaps);
-    printf("loop bailouts:   %g\n",loopbailouts);
-  }
 
   if ( tlist ) temp_free((char *)tlist);
   if ( qtree ) temp_free((char *)qtree);
+
+}  // end painter_process_trilist()
+
+/**************************************************************************
+*
+* function: painter_end()
+*
+* purpose: sort and display facets and edges from trilist.
+*/
+
+
+void painter_end()
+{
+  size_t k;
+ 
+  in_back_calls = box_overlaps = facetfacet = facetedge = edgeedge = 
+   crossings = sep_plane_calls = sep_line_calls = 0;
+  loopbailouts = 0;
+
+  if ( count > maxcount ) count = maxcount;    /* in case there was excess */
+
+  /* find bounding box */
+  if ( need_bounding_box && !painter_multiple_sweep_flag )
+  { struct tsort *t;
+    bbox_minx = bbox_miny = 1e20;
+    bbox_maxx = bbox_maxy = -1e20;
+    for ( k = 0, t = trilist ; k < count ; k++,t++ )
+    { if ( t->mins[0] < bbox_minx ) bbox_minx = (REAL)t->mins[0];
+      if ( t->mins[1] < bbox_miny ) bbox_miny = (REAL)t->mins[1];
+      if ( t->maxs[0] > bbox_maxx ) bbox_maxx = (REAL)t->maxs[0];
+      if ( t->maxs[1] > bbox_maxy ) bbox_maxy = (REAL)t->maxs[1];
+    }
+  }
+
+  if ( !painter_multiple_sweep_flag )
+    (*init_graphics)();  // print out postscript header
+
+  painter_process_trilist();
+
+  while ( painter_multiple_sweep_flag )
+  { reset_multiple_sweep();
+    if ( painter_multiple_sweep_flag == MULTIPLE_SWEEP_DONE )
+      break;
+    raw_generate();
+    painter_process_trilist();
+  }
+
+  if ( verbose_flag )
+  {
+    printf("in_back_calls:   %g\n",(DOUBLE)in_back_calls);
+    printf("  facetfacet:    %g\n",(DOUBLE)facetfacet);
+    printf("  facetedge:     %g\n",(DOUBLE)facetedge);
+    printf("  edgeedge:      %g\n",(DOUBLE)edgeedge);
+    printf("box_overlaps:    %g\n",(DOUBLE)box_overlaps);
+    printf("sep_line_calls:  %g\n",(DOUBLE)sep_line_calls);
+    printf("sep_plane_calls: %g\n",(DOUBLE)sep_plane_calls);
+    printf("crossings:       %g\n",(DOUBLE)crossings);
+    printf("swaps:           %g\n",(DOUBLE)swaps);
+    printf("loop bailouts:   %g\n",(DOUBLE)loopbailouts);
+  }
+
   temp_free((char *)trilist); trilist = NULL;
 
   if ( visibility_test )
@@ -800,8 +993,10 @@ end_exit:
 * returns DISJOINT, FIRST_BACK, SECOND_BACK, ASPLITTINGB, BSPLITTINGA, 
 *   or COPLANAR (possibly bitwise OR)
 */
-int in_back(ta,tb)
-struct tsort *ta,*tb;
+int in_back(
+  struct tsort *ta,
+  struct tsort *tb
+)
 {
   int n;
   
@@ -840,34 +1035,8 @@ struct tsort *ta,*tb;
   retval = plane_test(ta,tb);
   if ( retval & (FIRST_BACK|COPLANAR|DISJOINT) ) return retval;
 
-  /* now the nitty gritty check to see if they overlap */
-#ifdef ZZZ
-  if ( (ta->flag & 0xF) == FACET  )
-  { if ( (tb->flag & 0xF) == FACET  ) 
-      return facetfacetcompare(ta,tb);
-     else 
-     {    retval = edgefacetcompare(tb,ta);
-        if ( retval & (FIRST_BACK|SECOND_BACK) )
-           return retval ^ (FIRST_BACK|SECOND_BACK);
-        else return retval;
-    }
-  }
-  else
-  { if ( (tb->flag & 0xF) == FACET  ) 
-      return edgefacetcompare(ta,tb);
-    else
-    { retval = edgeedgecompare(tb,ta);
-      if ( retval & (FIRST_BACK|SECOND_BACK) )
-           return retval ^ (FIRST_BACK|SECOND_BACK);
-      else return retval;
-    }
-
-  }
-#endif
-
-
   return retval;
-}  
+} // end in_back()
 
 /**************************************************************************
 *
@@ -876,8 +1045,7 @@ struct tsort *ta,*tb;
 * purpose: convert quadcode to index number in quadtree list.
 *
 */
-int get_quadindex(q)
-unsigned int q;
+int get_quadindex(unsigned int q)
 { int inx,k;
 
   inx = 1;
@@ -889,7 +1057,7 @@ unsigned int q;
       inx++;
   }
   return inx;
-}
+} // end get_quadindex()
 
 /**************************************************************************
 *
@@ -898,8 +1066,7 @@ unsigned int q;
 * purpose: insert new fragment in proper place in quadtree depth list.
 *          For now, crude linear search.
 */
-void qdepth_insert(tc)
-struct tsort *tc;
+void qdepth_insert(struct tsort *tc)
 { struct tsort *prev,*next;
   int qinx = get_quadindex(tc->quadcode);
   int sinx;
@@ -931,7 +1098,7 @@ struct tsort *tc;
   tc->prev = prev;
 
 qdepth_insert_exit:;
-}
+} // end qdepth_insert()
 
 /*************************************************************************
 *
@@ -942,16 +1109,17 @@ qdepth_insert_exit:;
 * return: number of new elements generated.
 */
 
-int newell_split(ta,tb,tc,td)
-struct tsort *ta;  /* splittee and fragment return */
-struct tsort *tb;  /* splitter */
-struct tsort *tc;  /* fragment return */
-struct tsort *td;  /* fragment return */
+int newell_split(
+  struct tsort *ta,  /* splittee and fragment return */
+  struct tsort *tb,  /* splitter */
+  struct tsort *tc,  /* fragment return */
+  struct tsort *td   /* fragment return */
+)
 { 
   int i;
   REAL d0,d1,d2,db;
   int retval;
-  int tmpspot;
+  size_t tmpspot;
 
   backstamp++; /* clear loop indications */
 
@@ -1190,7 +1358,7 @@ if ( (d0>db) && (d1>db) && (d2>db) )
     else { retval--; tc->flag = 0; tc->next = (struct tsort *)0xEE; }
   }
   return retval;
-}
+} // end newell_split()
 
 /*********************************************************************
 *
@@ -1201,9 +1369,11 @@ if ( (d0>db) && (d1>db) && (d2>db) )
 *
 * returns  FIRST_BACK, SECOND_BACK, or ASPLITTINGB | BSPLITTINGA
 */
-int separating_plane(ta,tb,depth)
-struct tsort *ta,*tb;
-int depth; /* to limit recursion to depth 2 */
+int separating_plane(
+  struct tsort *ta,
+  struct tsort *tb,
+  int depth /* to limit recursion to depth 2 */
+)
 { int i,j;
   int na,nb; /* vertices on respective elements */
   int nna; /* number of vertex pairs to check on ta */
@@ -1308,7 +1478,7 @@ keeptrying: ;
       return FIRST_BACK;
   return retval;
 
-}
+} // end separating_plane()
 
 /*********************************************************************
 *
@@ -1320,8 +1490,10 @@ keeptrying: ;
 *
 * returns  DISJOINT or  NOTKNOWN
 */
-int separating_line(ta,tb)
-struct tsort *ta,*tb;
+int separating_line(
+  struct tsort *ta,
+  struct tsort *tb
+)
 { int i;
   int same = 0;
   int na,nb; /* vertices on respective elements */
@@ -1425,7 +1597,7 @@ struct tsort *ta,*tb;
   }
 
   return NOTKNOWN;
- }
+} // end separating_line(
 
 /*********************************************************************
 *
@@ -1438,8 +1610,10 @@ struct tsort *ta,*tb;
 * Returns FIRST_BACK if guaranteed first does not obscure any of second.
 *  Possibly bitwise OR of properties.
 */
-int plane_test(ta,tb)
-struct tsort *ta,*tb;
+int plane_test(
+  struct tsort *ta,
+  struct tsort *tb
+)
 {
   REAL da,db;
   int k,n;
@@ -1508,8 +1682,6 @@ struct tsort *ta,*tb;
     */
     
   return retval;
-  
- 
 
 } /* end plane_test() */
 
@@ -1547,35 +1719,37 @@ int visdebuglevel;
 struct vis_conedge;
 struct vis_vertex;
 
-/* Heap for ordering upcoming events. */
+/* Heap for ordering upcoming crossing events. */
 int vis_heap_count;  /* heap spots used */
 int vis_heap_max;    /* heap spots allocated */
 struct vis_event *vis_heap;
-void vis_insert_heap ARGS((struct vis_event *));
-void vis_delete_heap ARGS((int));
-void find_next_event ARGS((struct vis_conedge *));
-void find_next_event2 ARGS(( struct vis_conedge *, struct vis_conedge *));
-void vis_crossing ARGS((struct vis_conedge *,struct vis_conedge *)); 
+void vis_insert_heap(struct vis_event *);
+void vis_delete_heap(int);
+void find_next_event(struct vis_conedge *);
+void find_next_event2( struct vis_conedge *, struct vis_conedge *);
+void vis_crossing(struct vis_conedge *,struct vis_conedge *); 
 int vecount;  /* number of edges in edge list */
 int vis_crossing_count; /* just for info */
-int add_layer ARGS((struct vis_conedge *, struct tsort *));
-int delete_layer ARGS((struct vis_conedge *, struct tsort *));
-void check_layers ARGS(( struct vis_conedge *, REAL , REAL));
-int vvcomp ARGS(( struct vis_vertex *, struct vis_vertex *));
-REAL activate_edge ARGS(( struct vis_conedge *));
-void check_deactivate ARGS(( struct vis_conedge *));
+int add_layer(struct vis_conedge *, struct tsort *);
+int delete_layer(struct vis_conedge *, struct tsort *);
+int visibility_recover();
 
-/* Edge list */
+int vvcomp( struct vis_vertex *, struct vis_vertex *);
+REAL activate_edge( struct vis_conedge *);
+void deactivate_edge(struct vis_conedge *);
+int handle_vertex_event(struct vis_vertex *);
+
+/* Edge list, three for each facet */
 #define MAXLAYERS 20
 struct vis_rawedge { struct vis_vertex *v[2]; /*  endpoints */
-                  struct tsort *t; /* facet it borders */
-                  struct vis_conedge *conedge;
-                  int flags;    /* see below */
+                     struct tsort *tsrt; /* facet it borders */
+                     struct vis_conedge *conedge;
+                     int flags;    /* see below */
   };
 struct vis_rawedge *vis_rawedges;
 struct vis_rawedge **rawplist;  /* pointers for sorting */
 
-int vecomp ARGS((struct vis_rawedge **, struct vis_rawedge **));
+int vecomp(struct vis_rawedge **, struct vis_rawedge **);
 /* vis_rawedge flag bits */
 #define V_FACET_BOTTOM 1
 #define V_FACET_TOP   2
@@ -1584,22 +1758,28 @@ int vecomp ARGS((struct vis_rawedge **, struct vis_rawedge **));
 #define V_LAYER_CHECK  0x10
 
 /* Consolidated vertices */
-struct vis_vertex { REAL x[2];   /* u, v */
+#define MAXVEDGES 25
+struct vis_vertex { 
+                    REAL x[2];   /* u, v */                   
                     struct vis_vertex **fixup[2];  /* pre-cons reverse pointer */
+                    struct vis_conedge *left_edge_head; // linked list
+                    struct vis_conedge *right_edge_head;
     };
 struct vis_vertex *vis_vertices;
-int vis_vertex_max;
+size_t vis_vertex_max;
 int vis_vertex_count;
 
 /* Consolidated edges */
 struct vis_conedge {
+                  int id;    // for debugging
                   struct vis_vertex *v[2];  /* endpoints */
                   REAL m;     /* line slope */
                   int rawstart;  /* associated raw edge start */
                   int rawend;  /* last associated raw edge */
-                  int use_count; /* times in use as boundary */
                   struct vis_conedge *prev_active;  /* active list pointer */
                   struct vis_conedge *next_active;  /* active list pointer */
+                  struct vis_conedge *left_edge_next; // linked list for left edges of right vertex
+                  struct vis_conedge *right_edge_next; // linked list for right edges of left vertex
                   int flags;    /* see below */
                   int layers;  /* number of layers above edge */
                   struct tsort **layer; /* facets "above" edge */
@@ -1610,21 +1790,13 @@ struct vis_conedge *vis_conedges;
 int vis_conedge_max;
 int vis_conedge_count;
 
-/* Crossing event */
+/* Crossing event structure */
 struct vis_event { REAL time;  /* sweep time of event */
-                   int type;
-                   struct vis_conedge *e1;
-                   struct vis_conedge *e2;
-                   struct tsort *t;
+                   struct vis_conedge *e1;  // lower edge on left
+                   struct vis_conedge *e2;  // higher edge on left
  };
-int vis_event_comp ARGS((struct vis_event *, struct vis_event *));
-
-/* Event types, ordered in way wanted in sorting */
-#define V_FACET_END 1
-#define V_FACET_TOPMIDDLE 2
-#define V_FACET_BOTTOMMIDDLE 3
-#define V_FACET_START 4
-#define V_EDGE_CROSSING 5
+int vis_event_comp (struct vis_event *, struct vis_event *);
+int vertex_event_spot;  // the next event
 
 int wrong_middles;  /* for some debugging */
 
@@ -1640,57 +1812,16 @@ struct vis_vertex sentinelv[4]; /* for sentinel endpoints */
 struct vis_conedge **check_list;
 int check_list_count;
 int check_list_max;
-void check_visible ARGS((REAL));
+void check_visible ();
+void check_one_visible (struct vis_conedge *);
 
-/* random tilt coefficients for sweep line */
-REAL va = 0.8432848996472634;
-REAL vb = 0.5869487870825054;
+/* random rotation coefficients for sweep line */
+//REAL vis_va = 0.8432848996472634;
+//REAL vis_vb = 0.5869487870825054;
+REAL vis_va = 0.99995; // for debugging
+REAL vis_vb = 0.01;
 
 REAL sweep_u;  /* current sweep position */
-struct vis_event *facet_events;
-int f_event_count;
-int facet_start_event ARGS((struct vis_event *));
-int facet_middle_event ARGS((struct vis_event *));
-int facet_end_event ARGS((struct vis_event *));
-/* For brute force verification */
-int brute_force_flag = 1;
-void brute_force_times ARGS((void));
-int brutecount;  /* number of brute force times */
-struct brute { REAL time;
-               struct vis_conedge *e1,*e2;
-               int type;
- } *brute_times;
-void brute_section ARGS((REAL));
-void brute_visible ARGS((REAL));
-int maxbrute;
-struct brute_cut { REAL v; /* height */
-                   struct vis_edge *e;
- } *brute_cuts;
-int brute_cut_count;
-
-#ifdef PROFILING_ENABLED
-/* Profiling cycle counters */
-__int32 visibility_stage_elapsed_time[2];
-__int32 visibility_end_elapsed_time[2];
-__int32 visibility_end1_elapsed_time[2];
-__int32 visibility_end2_elapsed_time[2];
-__int32 visibility_end3_elapsed_time[2];
-__int32 visibility_end4_elapsed_time[2];
-__int32 visibility_end5_elapsed_time[2];
-__int32 vis_insert_heap_elapsed_time[2];
-__int32 vis_delete_heap_elapsed_time[2];
-__int32 vis_crossing_elapsed_time[2];
-__int32 facet_start_event_elapsed_time[2];
-__int32 facet_middle_event_elapsed_time[2];
-__int32 facet_end_event_elapsed_time[2];
-__int32 add_layer_elapsed_time[2];
-__int32 delete_layer_elapsed_time[2];
-__int32 check_visible_elapsed_time[2];
-__int32 find_next_event_elapsed_time[2];
-__int32 all_visibility_elapsed_time[2];
-__int32 activate_edge_elapsed_time[2];
-__int32 check_deactivate_elapsed_time[2];
-#endif
 
 /************************************************************************
 *
@@ -1701,11 +1832,8 @@ __int32 check_deactivate_elapsed_time[2];
 *
 */
 
-void visibility_stage(t)
-struct tsort *t;
+void visibility_stage(struct tsort *t)
 {
-PROF_START(all_visibility)
-PROF_START(visibility_stage)
 
   if ( !visibility_test )
   { if ( (t->flag & 0xF) == FACET )
@@ -1727,14 +1855,12 @@ PROF_START(visibility_stage)
 
   vis_list[vis_count++] = *t;
 
-PROF_FINISH(visibility_stage)
-PROF_FINISH(all_visibility)
-}
+} // end visibility_stage()
 
 /*
    FOR DEBUGGING
 */
-void active_list_check ARGS((void));
+void active_list_check(void);
 
 void active_list_check()
 { struct vis_conedge *e;
@@ -1743,8 +1869,38 @@ void active_list_check()
   { if ( e->next_active->prev_active != e )
       kb_error(2418,"Visibility edge active list bad.\n",RECOVERABLE);
   }
+} // end active_list_check())
+
+void print_active(int id)
+{ struct vis_conedge *ee;
+  int inrow = 0;
+  for ( ee = active_edge_first ; ee != &sentinel ; ee = ee->next_active )
+  { if ( ee->id == id )
+    { printf("\n    ---- %d ---- \n",ee->id);
+      inrow = 0;
+    }
+    else
+      printf("%d ",ee->id);
+    inrow++;
+    if ( inrow==10 )
+    { printf("\n");
+      inrow = 0;
+    }
+  }
 }
 
+// prints active list 5 edges each way
+void print_part_list(struct vis_conedge *e)
+{ int k;
+  struct vis_conedge *ee;
+  for ( ee = e, k = 0 ; ee && k < 20 ; k++, ee = ee->prev_active ) ;
+  if ( ee == NULL ) ee = active_edge_first;
+  for ( k = 0 ; ee && k <= 40 ; k++, ee=ee->next_active )
+  { if ( ee == e ) printf(" -- %d -- ",ee->id);
+    else printf("%d ",ee->id);
+  }
+  printf("\n");
+}
 /************************************************************************
 * 
 * function: vvcomp()
@@ -1752,15 +1908,17 @@ void active_list_check()
 * purpose: comparison of vertices, for consolidation
 *
 */
-int vvcomp(a,b)
-struct vis_vertex *a,*b;
+int vvcomp(
+   struct vis_vertex *a,
+   struct vis_vertex *b
+)
 {
   if ( a->x[0] < b->x[0] ) return -1;
   if ( a->x[0] > b->x[0] ) return  1;
   if ( a->x[1] < b->x[1] ) return -1;
   if ( a->x[1] > b->x[1] ) return  1;
   return 0;
-}
+} // end int vvcomp()
 
 /************************************************************************
 * 
@@ -1769,54 +1927,32 @@ struct vis_vertex *a,*b;
 * purpose: comparison of raw edges, for consolidation
 *
 */
-int vecomp(a,b)
-struct vis_rawedge **a,**b;
+int vecomp(
+  struct vis_rawedge **a,
+  struct vis_rawedge **b
+)
 {
   if ( a[0]->v[0] < b[0]->v[0] ) return -1;
   if ( a[0]->v[0] > b[0]->v[0] ) return  1;
   if ( a[0]->v[1] < b[0]->v[1] ) return -1;
   if ( a[0]->v[1] > b[0]->v[1] ) return  1;
   return 0;
-}
+} // end int vecomp()
 
 /************************************************************************
 *
-* function: visibility_end()
+* function: visibility_lists()
 *
-* purpose: Run visibility algorithm after accumulation of data.
+* purpose:   Populate raw edge and vertex lists.
 *
-*/
-int debug_seq = 0;  /* for debugging */
-
-void visibility_end()
-{ int k,i,ii,iii,j;
-  struct tsort *t;
-  struct vis_rawedge *ve;
-  struct vis_conedge *vc;
+*/   
+void visibility_lists()
+{ int tops,bottoms,lefts,rights;
   struct vis_vertex *vv;
-  REAL next_u;
-  struct vis_event *f_ev;
-  int facet_event_spot;
-  int vis_display_count;
-  int tops,bottoms,lefts,rights;
-
-debug_seq = 0;
-
-PROF_START(all_visibility)
-PROF_START(visibility_end)
-
-PROF_START(visibility_end1)
-  /* List of edges to check top facet for */
-  check_list_max = 1000;
-  check_list = (struct vis_conedge **)temp_calloc(check_list_max,
-                   sizeof(struct vis_conedge *));
-  check_list_count = 0;
-
-  /* Sorted list of facet starts, middle vertices, and ends */
-  facet_events = (struct vis_event *)temp_calloc(3*vis_count,
-                                       sizeof(struct vis_event));
-  f_event_count = 0;
-  f_ev = facet_events;
+  struct vis_rawedge *ve;
+  struct tsort *t;
+  int i,ii,iii;
+  size_t k;
 
   /* Populate raw edge and vertex lists */
   vis_vertex_max = 3*vis_count;
@@ -1829,7 +1965,6 @@ PROF_START(visibility_end1)
                                               sizeof(struct vis_rawedge));
   ve = vis_rawedges;
   vecount = 0;
-  
 
   for ( k = 0, t = vis_list ; k < vis_count ; k++,t++ )
   { if ( (t->flag & 0xF) == FACET )
@@ -1839,12 +1974,14 @@ PROF_START(visibility_end1)
       if ( t->color == CLEAR )
       { t->flag |= VISIBLE; continue; }  /* kludge for now */
 
-      /* rotate coordinates */
+      /* rotate coordinates for general position and get x bounding box */
+
       for ( i = 0 ; i < FACET_VERTS ; i++ )
-      { vv[i].x[0] = va*t->x[i][0] + vb*t->x[i][1];
+      { 
+        vv[i].x[0] = vis_va*t->x[i][0] + vis_vb*t->x[i][1];
+        vv[i].x[1] = -vis_vb*t->x[i][0] + vis_va*t->x[i][1];
         if ( vv[i].x[0] < minu ) minu = vv[i].x[0];
         if ( vv[i].x[0] > maxu ) maxu = vv[i].x[0];
-        vv[i].x[1] = -vb*t->x[i][0] + va*t->x[i][1];
       }
 
       /* now, the edges */
@@ -1868,71 +2005,24 @@ PROF_START(visibility_end1)
         area = (ve->v[1]->x[0]-ve->v[0]->x[0])*(vv[iii].x[1]-ve->v[0]->x[1])
           -(vv[iii].x[0]-ve->v[0]->x[0])*(ve->v[1]->x[1]-ve->v[0]->x[1]); 
         if ( fabs(area) < 1e-14 ) break;
+
         if ( area > 0 )
         { ve->flags |= V_FACET_BOTTOM; bottoms++; }
         else { ve->flags |= V_FACET_TOP; tops++; }
+
         if ( ve->v[0]->x[0] == minu )
         { ve->flags |= V_FACET_LEFT; lefts++; }
+
         if ( ve->v[1]->x[0] == maxu )
         { ve->flags |= V_FACET_RIGHT; rights++; }
-        ve->t = t;
+
+        ve->tsrt = t;
         ve++; vecount++;
       }
 
       /* check we successfully found things, and skip edge-on facets */
       if ( (tops==0) || (bottoms==0) || (lefts!=2) || (rights!=2) )
         continue;
-      
-      /* facet start event */
-      f_ev->type = V_FACET_START;
-      f_ev->time = minu;
-      f_ev->t = t;
-      for ( i = -FACET_EDGES ; i < 0 ; i++ )
-      { if ( ve[i].flags & V_FACET_LEFT )
-        { if ( ve[i].flags & V_FACET_BOTTOM )
-            f_ev->e1 = (struct vis_conedge*)(ve + i);
-          else f_ev->e2 = (struct vis_conedge*)(ve + i);
-        }
-      }
-      if ( !f_ev->e1 || !f_ev->e2 )
-      { f_ev->e1 = f_ev->e2 = NULL; continue; } /* skip edge-on */
-      f_ev++; f_event_count++;
-
-      /* facet middle event */
-      f_ev->t = t;
-      for ( i = -FACET_EDGES ; i < 0 ; i++ )
-      { if ( ve[i].flags & V_FACET_LEFT )
-        { if ( !(ve[i].flags & V_FACET_RIGHT) )
-          { f_ev->e1 = (struct vis_conedge*)(ve + i);
-            f_ev->time = ve[i].v[1]->x[0];
-          }
-        }
-        if ( ve[i].flags & V_FACET_RIGHT )
-        { if ( !(ve[i].flags & V_FACET_LEFT) )
-            f_ev->e2 = (struct vis_conedge*)(ve + i);
-        }
-      }
-      if ( !f_ev->e1 || !f_ev->e2 ) /* skip edge-on */
-      { f_ev->e1 = f_ev->e2 = NULL; f_ev--; f_event_count--; continue; }
-      if ( ((struct vis_rawedge *)f_ev->e1)->flags & V_FACET_BOTTOM ) 
-           f_ev->type = V_FACET_BOTTOMMIDDLE;
-      else f_ev->type = V_FACET_TOPMIDDLE;
-      f_ev++; f_event_count++;
-
-      /* facet end event */
-      f_ev->type = V_FACET_END;
-      f_ev->time = maxu;
-      f_ev->t = t;
-      for ( i = -FACET_EDGES ; i < 0 ; i++ )
-      { if ( ve[i].flags & V_FACET_RIGHT )
-        { if ( ve[i].flags & V_FACET_BOTTOM )
-            f_ev->e1 = (struct vis_conedge*)(ve + i);
-          else f_ev->e2 = (struct vis_conedge*)(ve + i);
-        }
-      }
-      if ( !f_ev->e1 || !f_ev->e2 ) /* skip edge-on */
-      { f_ev->e1 = f_ev->e2 = NULL; f_ev-=2; f_event_count-=2; continue; }
-      f_ev++; f_event_count++;
 
       vv += FACET_VERTS; vis_vertex_count += FACET_VERTS;
     } 
@@ -1943,15 +2033,17 @@ PROF_START(visibility_end1)
     }
   }
 
-  PROF_FINISH(visibility_end1)
+}  // end visibility_lists()
 
-  if ( f_event_count == 0 ) 
-    goto draw_visible;
-
-  PROF_START(visibility_end2)
-
-  /* Consolidation of vertices and edges */
-  /* First, consolidation of vertices */
+/************************************************************************
+*
+* function: visibility_vertex_consolidate()
+*
+* purpose: Consolidation of vertices, and sorting in u order .
+*
+*/
+void visibility_vertex_consolidate()
+{int i,j;
   qsort(vis_vertices,vis_vertex_count,sizeof(struct vis_vertex),FCAST vvcomp);
   for ( i = -1, j = 0 ; j < vis_vertex_count ; j++ )
   { int m;
@@ -1963,12 +2055,18 @@ PROF_START(visibility_end1)
      *(vis_vertices[j].fixup[m]) = vis_vertices+i;
   }
   vis_vertex_count = i+1;
-  PROF_FINISH(visibility_end2)
+} // end visibility_vertex_consolidate()
 
-  /* Next, consolidation of edges.  Use intermediate list of pointers,
-     since events point to raw edges.
-  */
-  PROF_START(visibility_end3)
+/************************************************************************
+*
+* function: visibility_edge_consolidate()
+*
+* purpose: Consolidation of edges.
+*
+*/
+void visibility_edge_consolidate() 
+{ int i,j;
+
   rawplist = (struct vis_rawedge **)temp_calloc(vecount,
                   sizeof(struct vis_rawedge *));
   for ( i = 0 ; i < vecount ; i++ ) rawplist[i] = vis_rawedges+i;
@@ -1976,21 +2074,18 @@ PROF_START(visibility_end1)
   vis_conedge_max = vecount;
   vis_conedges = (struct vis_conedge *) temp_calloc(vis_conedge_max,
                      sizeof(struct vis_conedge) );
-  vis_conedges[0].v[0] = rawplist[0]->v[0];
-  vis_conedges[0].v[1] = rawplist[0]->v[1];
-  vis_conedges[0].rawstart = 0;
-  vis_conedges[0].rawend = 0;
-  rawplist[0]->conedge = vis_conedges;
-  for ( i = 0, j = 1 ; j < vecount ; j++ )
-  { if ( (vis_conedges[i].v[0] != rawplist[j]->v[0]) || 
+  for ( i = -1, j = 0 ; j < vecount ; j++ )
+  { if ( (j==0) || (vis_conedges[i].v[0] != rawplist[j]->v[0]) || 
          (vis_conedges[i].v[1] != rawplist[j]->v[1]) )
-    { i++;
+    { // new consolidated edge
+      i++;
+      vis_conedges[i].id = i;
       vis_conedges[i].v[0] = rawplist[j]->v[0];
       vis_conedges[i].v[1] = rawplist[j]->v[1];
       vis_conedges[i].rawstart = j;
       vis_conedges[i].rawend = j;
     }
-    else
+    else // same consolidated edge
       vis_conedges[i].rawend++;
     rawplist[j]->conedge = vis_conedges+i;
   }
@@ -1998,41 +2093,95 @@ PROF_START(visibility_end1)
   vis_conedges = (struct vis_conedge*)temp_realloc((char*)vis_conedges,
      i*sizeof(struct vis_conedge));
   vis_conedge_max = vis_conedge_count = i;
-  PROF_FINISH(visibility_end3)
 
-  PROF_START(visibility_end4)
-  /* Initialize line coefficients */
+} // end visibility_edge_consolidate()
+
+/**********************************************************************
+*
+* Function: visibility_edge_sort()
+*
+* Purpose: Sort left edges and right edges at vertices, by slope
+*/
+
+void visibility_edge_sort()
+{ int i;
+  struct vis_conedge *vc,*ee,*prev_ee;
+
+  /* Initialize edge slopes */
   for ( i = 0, vc = vis_conedges; i < vis_conedge_count; i++, vc++ )
   { REAL du = vc->v[1]->x[0] - vc->v[0]->x[0];
     REAL dv = vc->v[1]->x[1] - vc->v[0]->x[1];
     vc->m = dv/du;
+
+    // Install in left vertex right edges, by increasing slope
+    prev_ee = NULL;
+    for ( ee = vc->v[0]->right_edge_head ; ee ; ee = ee->right_edge_next )
+    { if ( vc->m < ee->m )
+        break;
+      prev_ee = ee;
+    }
+    vc->right_edge_next = ee;
+    if ( prev_ee )
+      prev_ee->right_edge_next = vc;
+    else 
+      vc->v[0]->right_edge_head = vc;
+
+    // Install in right vertex left edges, by decreasing slope
+    prev_ee = NULL;
+    for ( ee = vc->v[1]->left_edge_head ; ee ; ee = ee->left_edge_next )
+    { if ( vc->m > ee->m )
+        break;
+      prev_ee = ee;
+    }
+    vc->left_edge_next = ee;
+    if ( prev_ee )
+      prev_ee->left_edge_next = vc;
+    else 
+      vc->v[1]->left_edge_head = vc;
   }
 
-  /* change facet events over to consolidated edges */
-  for ( i = 0 ; i < f_event_count ; i++ )
-  { facet_events[i].e1 = ((struct vis_rawedge*)(facet_events[i].e1))->conedge;
-    facet_events[i].e2 = ((struct vis_rawedge*)(facet_events[i].e2))->conedge;
-  }
-  PROF_FINISH(visibility_end4)
+} // end visibility_edge_sort()
 
-  /* and for later use */
-  brute_cuts=(struct brute_cut *)temp_calloc(vecount,sizeof(struct brute_cut));
+/************************************************************************
+*
+* function: visibility_end()
+*
+* purpose: Run visibility algorithm after accumulation of data.
+*
+*/
+int debug_seq = 0;  /* for debugging */
 
-#ifdef BRUTE
-  /* do brute-force list of all event times */
-  brute_force_times();
-  for ( i = 0 ; i < brutecount-1 ; i++ )
-  { if ( brute_times[i+1].time-brute_times[i].time > 1e-8 )
-      brute_visible((brute_times[i].time+brute_times[i+1].time)/2);
-  }
-#endif
+void visibility_end()
+{ 
+  size_t k;
+  struct tsort *t;
 
-#define FINESSE
-#ifdef FINESSE
+  REAL next_u;
+  int vis_display_count;
 
-  /* sort facet event list */
-  qsort((char*)facet_events,f_event_count,sizeof(struct vis_event),
-                        FCAST vis_event_comp);
+  int badflag = 0;
+
+  debug_seq = 0;
+
+  /* List of edges to check top facet for */
+  check_list_max = 1000;
+  check_list = (struct vis_conedge **)temp_calloc(check_list_max,
+                   sizeof(struct vis_conedge *));
+  check_list_count = 0;
+
+  /* populate raw vertex and edge lists */
+  visibility_lists();
+
+  if ( vis_vertex_count == 0 ) 
+    goto draw_visible;
+
+  /* Consolidation of vertices and edges */
+  visibility_vertex_consolidate();  
+  visibility_edge_consolidate();
+
+  if ( badflag ) goto bail_out;
+
+  visibility_edge_sort();
 
   /* Initialize crossing event heap with sentinel */
   vis_heap_max = vecount > 100 ? vecount : 100;
@@ -2042,7 +2191,7 @@ PROF_START(visibility_end1)
   vis_heap_count = 1;
   vis_crossing_count = 0;
 
-  /* Initialize active list */
+  /* Initialize active edge list with sentinel vertex at the top */
   sentinel.v[0] = sentinelv;
   sentinel.v[1] = sentinelv+1;
   sentinelv[0].x[0] = -1e20;
@@ -2050,102 +2199,65 @@ PROF_START(visibility_end1)
   sentinelv[1].x[0] = 1e20;
   sentinelv[1].x[1] = 1e20;
   sentinel.m = 0;
+  sentinel.maxlayers = 0;
+  sentinel.layers = 0;
+  sentinel.layer = NULL;
   sentinel.prev_active = NULL;
   sentinel.next_active = NULL;
+  sentinel.rawend = -1;  // no facets
   active_edge_first = &sentinel;
 
-  PROF_START(visibility_end5)
+
   /* Sweep */
-  facet_event_spot = 0;
-  while ( facet_event_spot < f_event_count )
-  { struct vis_event *fe = facet_events + facet_event_spot;
+  vertex_event_spot = 0;
+  sweep_u = -1e20;
+  while ( vertex_event_spot < vis_vertex_count )
+  {
     int retval; /* return code from event handlers; < 0 for error */
 
-/* print current active list and event heap */
-if ( visdebuglevel >= VIS_EVENTDUMP )
-{ struct vis_conedge *es;
-
-  if ( active_edge_first->prev_active != NULL )
-     printf("(%d<-) ",active_edge_first->prev_active-vis_conedges);
-  for ( es = active_edge_first ; es != &sentinel ; es = es->next_active )
-  { if ( es->next_active->prev_active != es )
-     printf("(%d<-) ",es->next_active->prev_active-vis_conedges);
-    printf("%d ",es-vis_conedges);
-  }
-  for ( i = 0 ; i < vis_heap_count ; i++ )
-    if ( vis_heap[i].time > 1e20 ) printf("(sentinel) ");
-    else
-      printf("(%d %d %f)",vis_heap[i].e1-vis_conedges,vis_heap[i].e2-vis_conedges,
-       vis_heap[i].time); 
-  printf("\n");
-} /* end debug */
+    debug_seq++;  // for debugging 
 
     /* find which is next event and process */
-    if ( (vis_heap_count <= 0) || (fe->time < vis_heap[0].time) )
-    { /* do facet event */
-      next_u = fe->time;
-  PROF_FINISH(visibility_end)
+    if ( (vis_heap_count <= 0) || (vis_vertices[vertex_event_spot].x[0] < vis_heap[0].time) )
+    { /* do vertex event */
+      next_u = vis_vertices[vertex_event_spot].x[0];
       if ( (next_u - sweep_u) > 1e-10 )
          check_visible((next_u+sweep_u)/2); 
       sweep_u = next_u;
-      switch ( fe->type )
-      { case V_FACET_START: 
-             retval = facet_start_event(fe); 
-             if ( retval < 0 )
-               goto bail_out;
-             break;
-        case V_FACET_TOPMIDDLE: 
-             retval = facet_middle_event(fe); 
-             if ( retval < 0 )
-               goto bail_out;
-             break;
-        case V_FACET_BOTTOMMIDDLE:
-             retval = facet_middle_event(fe); 
-             if ( retval < 0 )
-               goto bail_out;
-             break;
-        case V_FACET_END: 
-             retval = facet_end_event(fe); 
-             if ( retval < 0 )
-               goto bail_out;
-             break;
-      } 
-PROF_START(visibility_end)
-
-      facet_event_spot++;
-      continue;
+      retval = handle_vertex_event(vis_vertices+vertex_event_spot);
+      if ( retval < 0 )
+      { retval = visibility_recover();
+        if ( retval < 0 )
+          goto bail_out;
+      }
+      vertex_event_spot++;
     }
     else /* do crossing event */
     { struct vis_conedge *e1,*e2;
       next_u = vis_heap[0].time;
-  PROF_FINISH(visibility_end)
+
       if ( (next_u - sweep_u) > 1e-10 )
          check_visible((next_u+sweep_u)/2); 
-      e1 = vis_heap[0].e1; e2 = vis_heap[0].e2;
+      e1 = vis_heap[0].e1; 
+      e2 = vis_heap[0].e2;
       vis_delete_heap(0);
       if ( visdebuglevel >= VIS_EVENTDUMP )
-        printf("crossing %d %d  at %20.15f\n",e1-vis_conedges,e2-vis_conedges,(double)next_u);
+        printf("crossing %d %d  at %20.15f\n",(int)(e1-vis_conedges),  
+              (int)(e2-vis_conedges),(DOUBLE)next_u);
       sweep_u = next_u;   
       vis_crossing(e1,e2);
-PROF_START(visibility_end)
-
-      continue;
     }
-  } 
-#endif
+  } // end while
+
 
   goto draw_visible;
 
 bail_out: /* error handling: mark all as visible */
-  erroutstring("Abandoning visibility test and drawing all facets.\n");
+  kb_error(5555,"Abandoning visibility test and drawing all facets.\n",WARNING);
   for ( k = 0, t = vis_list, vis_display_count = 0 ; k < vis_count ; k++,t++ )
     t->flag |= VISIBLE;
 
 draw_visible:
-  PROF_FINISH(visibility_end5)
-  PROF_FINISH(visibility_end)
-  PROF_FINISH(all_visibility)
-
   /* Display elements marked visible */
   for ( k = 0, t = vis_list, vis_display_count = 0 ; k < vis_count ; k++,t++ )
   if ( t->flag & VISIBLE )
@@ -2154,48 +2266,21 @@ draw_visible:
     else (*display_edge)(t);
     vis_display_count++;
   }
-  temp_free((char*)vis_heap);
-  temp_free((char*)vis_conedges);
-  temp_free((char*)vis_rawedges);
-  temp_free((char*)vis_vertices);
-  temp_free((char*)check_list);
-  temp_free((char*)rawplist);
-  temp_free((char*)vis_list);
-  temp_free((char*)facet_events);
-  temp_free((char*)brute_cuts);
-
+  temp_free((char*)vis_heap);  vis_heap = 0;
+  temp_free((char*)vis_conedges); vis_conedges = 0;
+  temp_free((char*)vis_rawedges); vis_rawedges = 0;
+  temp_free((char*)vis_vertices); vis_vertices = 0;
+  temp_free((char*)check_list);  check_list = 0;
+  temp_free((char*)rawplist);  rawplist = 0;
+  temp_free((char*)vis_list);  vis_list = 0;
 
 if (visdebuglevel >= VIS_TIMING)
 {
-fprintf(stderr,"Visible: %d facets out of %d\n",vis_display_count,vis_count);
+fprintf(stderr,"Visible: %d facets out of %d\n",vis_display_count,(int)vis_count);
 fprintf(stderr,"Crossing count: %d\n",vis_crossing_count);
 fprintf(stderr,"Wrong middles: %d\n",wrong_middles); wrong_middles = 0;
-#ifdef MSC
-/* print out profile times, only for Visual Studio */
-printf("CPU clock cycles in various visibility routines:\n");
-PROF_PRINT(all_visibility)
-PROF_PRINT(visibility_stage)
-PROF_PRINT(visibility_end)
-PROF_PRINT(visibility_end1)
-PROF_PRINT(visibility_end2)
-PROF_PRINT(visibility_end3)
-PROF_PRINT(visibility_end4)
-PROF_PRINT(visibility_end5)
-PROF_PRINT(check_visible)
-PROF_PRINT(vis_crossing)
-PROF_PRINT(facet_start_event)
-PROF_PRINT(facet_middle_event)
-PROF_PRINT(facet_end_event)
-PROF_PRINT(vis_insert_heap)
-PROF_PRINT(vis_delete_heap)
-PROF_PRINT(find_next_event)
-PROF_PRINT(add_layer)
-PROF_PRINT(delete_layer)
-PROF_PRINT(activate_edge)
-PROF_PRINT(check_deactivate)
-#endif
 }
-}
+} // end visibility_end()
 
 /************************************************************************
 *
@@ -2205,13 +2290,13 @@ PROF_PRINT(check_deactivate)
 *          then average slope, then edges.
 */
 
-int vis_event_comp(a,b)
-struct vis_event *a, *b;
+int vis_event_comp(
+  struct vis_event *a, 
+  struct vis_event *b
+)
 { REAL ma,mb;
   if ( a->time < b->time ) return -1;
   if ( a->time > b->time ) return  1;
-  if ( a->type < b->type ) return -1;
-  if ( a->type > b->type ) return  1;
   ma = (a->e1->m+a->e2->m);
   mb = (b->e1->m+b->e2->m);
   if ( ma < mb ) return -1;
@@ -2221,7 +2306,7 @@ struct vis_event *a, *b;
   if ( a->e2 < b->e2 ) return -1;
   if ( a->e2 > b->e2 ) return  1;
   return 0;
-}
+} // end vis_event_comp()
 
 /************************************************************************
 *
@@ -2232,12 +2317,9 @@ struct vis_event *a, *b;
 *
 */
 
-void vis_insert_heap(e)
-struct vis_event *e;
+void vis_insert_heap(struct vis_event *e)
 { int k,kk;
   int result;
-
-PROF_START(vis_insert_heap)
 
   if ( vis_heap_count >= vis_heap_max-1 )
   { vis_heap = (struct vis_event *)kb_realloc((char*)vis_heap,
@@ -2258,23 +2340,19 @@ PROF_START(vis_insert_heap)
   vis_heap[k] = *e;
   vis_heap_count++;
 
-PROF_FINISH(vis_insert_heap)
-}
+} // end vis_insert_heap()
 
 /***************************************************************************
 *
 * function: vis_delete_heap()
 *
-* purpose: Delete element n of heap and adjust heap.
+* purpose: Delete element n of event heap and adjust heap.
 */
 
-void vis_delete_heap(n)
-int n;
+void vis_delete_heap(int n)
 { int k,kk;
   int result;
   struct vis_event e;
-
-PROF_START(vis_delete_heap)
 
   if ( n == vis_heap_count-1 ) 
   { vis_heap_count--;
@@ -2346,8 +2424,8 @@ PROF_START(vis_delete_heap)
     vis_heap[k] = e;   /* in case at top of heap */
   }
 vis_delete_heap_exit: ;
-PROF_FINISH(vis_delete_heap)
-}
+
+} // end vis_delete_heap()
 
 /****************************************************************************
 *
@@ -2358,14 +2436,16 @@ PROF_FINISH(vis_delete_heap)
 * return value: 1 if added, 0 if already there.
 */
 
-int add_layer(ee,f)
-struct vis_conedge *ee;
-struct tsort *f;
+int add_layer(
+  struct vis_conedge *ee,
+  struct tsort *f
+)
 { int i;
   int retval;
 
-PROF_START(add_layer)
+  debug_seq++;
 
+  f->flag |= VISIBILITY_LIVE;
   for ( i = 0 ; i < ee->layers ; i++ )
     if ( ee->layer[i] == f ) break;
   if ( i == ee->maxlayers )
@@ -2379,7 +2459,7 @@ PROF_START(add_layer)
     ee->layer[ee->layers++] = f;
     if ( visdebuglevel >= VIS_EVENTDUMP )
       fprintf(stderr,"Adding facet %d to edge %d layers.\n",
-         f-vis_list,ee-vis_conedges);
+         (int)(f->f_id & 0xFFFFFF)+1,(int)(ee-vis_conedges));
     if ( !(ee->flags & V_LAYER_CHECK) )
     { 
       if ( check_list_count >= check_list_max )
@@ -2394,9 +2474,8 @@ PROF_START(add_layer)
   }
   else retval = 0;
 
-PROF_FINISH(add_layer)
   return retval;
-}
+} // end add_layer()
 
 /****************************************************************************
 *
@@ -2408,20 +2487,19 @@ PROF_FINISH(add_layer)
 * return value: 1 if found, 0 if not.
 */
 
-int delete_layer(ee,f)
-struct vis_conedge *ee;
-struct tsort *f;
+int delete_layer(
+  struct vis_conedge *ee,
+  struct tsort *f
+)
 { int i;
   int retval = 0;
-
-PROF_START(delete_layer)
 
   for ( i = 0 ; i < ee->layers ; i++ )
     if ( ee->layer[i] == f )
     { ee->layer[i] = ee->layer[--ee->layers];
       if ( visdebuglevel >= VIS_EVENTDUMP )
         fprintf(stderr,"Deleting facet %d from edge %d layers.\n",
-          f-vis_list,ee-vis_conedges);
+          (int)(f->f_id & 0xFFFFF)+1,(int)(ee-vis_conedges));
       if ( !(ee->flags & V_LAYER_CHECK) )
       { if ( check_list_count >= check_list_max )
         { check_list = (struct vis_conedge **)temp_realloc((char*)check_list,
@@ -2434,9 +2512,9 @@ PROF_START(delete_layer)
       retval = 1;
       break;
     }
-PROF_FINISH(delete_layer)
+
   return retval;
-}
+} // end delete_layer()
 
 
 
@@ -2450,20 +2528,18 @@ PROF_FINISH(delete_layer)
 *
 */
 
-void find_next_event(e)
-struct vis_conedge *e;
+void find_next_event(struct vis_conedge *e)
 { struct vis_event ev;
-
-PROF_START(find_next_event)
   ev.time = 1e30;
  
-  /* Forward */
-  if ( (e->m > e->next_active->m )  )
+  /* Above */
+  if ( (e->m > e->next_active->m ) && (e->v[1] != e->next_active->v[1]) )
   { REAL u;
+
     u = e->v[0]->x[0] + (e->v[0]->x[1]-e->next_active->v[0]->x[1] +
          e->next_active->m*(e->next_active->v[0]->x[0]-e->v[0]->x[0]))/
               (e->next_active->m - e->m);
-    if ( (u > e->v[0]->x[0]-1e-8) && (u < ev.time) && (u < e->v[1]->x[0] - 1e-10)
+    if ( (u > e->v[0]->x[0]-1e-10) && (u < ev.time) && (u < e->v[1]->x[0] - 1e-10)
              && (u < e->next_active->v[1]->x[0] - 1e-10) )
     { ev.e1 = e;
       ev.e2 = e->next_active; 
@@ -2471,8 +2547,8 @@ PROF_START(find_next_event)
     }
   }
  
-  /* Backward */
-  if ( e->prev_active && (e->m < e->prev_active->m))
+  /* Below */
+  if ( e->prev_active && (e->m < e->prev_active->m) && (e->v[1] != e->prev_active->v[1]))
   { REAL u;
     u = e->v[0]->x[0] + (e->v[0]->x[1]-e->prev_active->v[0]->x[1] +
          e->prev_active->m*(e->prev_active->v[0]->x[0]-e->v[0]->x[0]))/
@@ -2485,62 +2561,16 @@ PROF_START(find_next_event)
     }
   }
 
-
-PROF_FINISH(find_next_event)
   if ( ev.time < 1e20 )
   { 
     if ( visdebuglevel >= VIS_EVENTDUMP )
       printf("next crossing %d %d at %20.15f\n",
-        ev.e1-vis_conedges,ev.e2-vis_conedges, (double)ev.time);
+        (int)(ev.e1-vis_conedges),(int)(ev.e2-vis_conedges), (DOUBLE)ev.time);
     vis_insert_heap(&ev);
   }
 
-} 
+} // end find_next_event()
 
-/*************************************************************************
-*
-* function: find_next_event2()
-*
-* purpose:  Check for upcoming crossing event between two given edges.  
-*           Doesn't count crossing
-*           near end of edge.   Need to do very robust crossing
-*           calculation, so not to be fooled by numerical glitches.
-*
-*/
-
-void find_next_event2(e,ee)
-struct vis_conedge *e;
-struct vis_conedge *ee;
-{ struct vis_event ev;
-
-  if ( !e || !ee ) return;
-
-  ev.time = 1e30;
- 
-  /* Forward */
-  if ( (e->m > ee->m )  )
-  { REAL u;
-    u = e->v[0]->x[0] + (e->v[0]->x[1]-e->next_active->v[0]->x[1] +
-         e->next_active->m*(e->next_active->v[0]->x[0]-e->v[0]->x[0]))/
-              (e->next_active->m - e->m);
-    if ( (u > e->v[0]->x[0]-1e-8) && (u < ev.time) && (u < e->v[1]->x[0] - 1e-10)
-             && (u < e->next_active->v[1]->x[0] - 1e-10) )
-    { ev.e1 = e;
-      ev.e2 = e->next_active; 
-      ev.time = u;
-    }
-  }
-
-  if ( ev.time < 1e20 )
-  { 
-    if ( visdebuglevel >= VIS_EVENTDUMP )
-      printf("next crossing %d %d at %20.15f\n",
-        ev.e1-vis_conedges,ev.e2-vis_conedges, (double)ev.time);
-    vis_insert_heap(&ev);
-  }
-} 
-
-#ifdef XXXXXX
 /* for debugging */
 /**************************************************************************
 *
@@ -2559,7 +2589,7 @@ void dump_vislist()
   for ( e = active_edge_first ; e != &sentinel ; e = e->next_active )
   { if ( e == NULL ) { fprintf(stderr,"NULL next_active.\n"); break; }
     v = e->m*(sweep_u-e->v[0]->x[0]) + e->v[0]->x[1]; 
-    fprintf(stderr,"%3d   %5d v: %18.15f layers:",e->seqno,e-vis_conedges,v);
+    fprintf(stderr,"%3d   %5d v: %18.15f layers:",e->seqno,e->id,v);
     for ( i = 0 ; i < e->layers ; i++ ) 
       fprintf(stderr," %3d",ordinal(e->layer[i]->f_id)+1);
     fprintf(stderr,"\n");
@@ -2567,21 +2597,21 @@ void dump_vislist()
  fprintf(stderr,"\n");
 }
 
-void check_vislist()  /* for v in ascending sequence */
+void check_vislist(REAL u)  /* for v in ascending sequence */
 { struct vis_conedge *e;
   REAL v,prev = -1e30;
 
   for ( e = active_edge_first ; e != &sentinel ; e = e->next_active )
   { if ( e == NULL ) { fprintf(stderr,"NULL next_active.\n"); break; }
-    v = e->m*(sweep_u-e->v[0]->x[0]) + e->v[0]->x[1]; 
-    if ( prev > v+1e-5 )
+    v = e->m*(u-e->v[0]->x[0]) + e->v[0]->x[1]; 
+    if ( prev > v+1e-12 )
     {  dump_vislist();
        printf("Bad vislist at debug_seq %d\n",debug_seq);
     }
     prev = v;
  }
 }
-#endif
+
 
 
 /***************************************************************************
@@ -2595,27 +2625,26 @@ void check_vislist()  /* for v in ascending sequence */
 */
 REAL vis_eps = 1e-13; /* for equality detection */
 
-REAL activate_edge(e)
-struct vis_conedge *e;
+REAL activate_edge(struct vis_conedge *e)
 { struct vis_conedge *spot;
   REAL v,vprev;
   int seq = 0;
 
   v = e->m*(sweep_u-e->v[0]->x[0]) + e->v[0]->x[1]; 
   if ( e->next_active ) return v; /* already active */
-  PROF_START(activate_edge)
 
   vprev = -1e30;
   for ( spot = active_edge_first ; spot != NULL ; spot = spot->next_active )
   { REAL spotv = spot->m*(sweep_u-spot->v[0]->x[0]) + spot->v[0]->x[1];
-    if ( spotv < vprev-1e-5 )
+    if ( spotv < vprev-1e-10 )
     { sprintf(errmsg,"Internal error: visibility list out of order by %f.\n",
-        vprev-spotv);
+        (DOUBLE)(vprev-spotv));
       kb_error(3509,errmsg,WARNING);
     }
     vprev = spotv; /* debugging */
     spot->seqno = seq++;
-    if ( spotv > v+vis_eps ) break;
+    if ( spotv > v+vis_eps ) 
+      break;
     if ( (spotv > v-vis_eps) && (spot->m > e->m) ) 
        break;
   } 
@@ -2641,212 +2670,322 @@ struct vis_conedge *e;
     e->maxlayers = 10;
   }
 
-  /* update sequence numbers; time waster, but we're doing linear search
-     anyway. */
-  for ( spot = e ; spot != NULL ; spot = spot->next_active )
-  { REAL spotv = spot->m*(sweep_u-spot->v[0]->x[0]) + spot->v[0]->x[1];
-    if ( spotv < vprev-1e-5 )
-    { sprintf(errmsg,"Internal error: visibility list out of order by %f.\n",
-        vprev-spotv);
-      kb_error(2509,errmsg,WARNING);
-    }
-    vprev = spotv; /* debugging */
-    spot->seqno = seq++;
-  }
-
-  PROF_FINISH(activate_edge)
   return v;
-}
+} // end activate_edge()
 
 /*****************************************************************************
 *
-* function: check_deactivate()
+* function: deactivate_edge()
 *
-* purpose: see if edge can be deleted from active list, since no longer
-*          separating facets.
+* purpose: 
 */
-void check_deactivate(e)
-struct vis_conedge *e;
+void deactivate_edge(struct vis_conedge *e)
 {
-  if ( e->use_count != 0 ) return;
-  PROF_START(check_deactivate)
-
   if ( e->prev_active )
     e->prev_active->next_active = e->next_active;
   else active_edge_first = e->next_active;
   e->next_active->prev_active = e->prev_active;
-  find_next_event2(e->prev_active,e->next_active);
   e->next_active = e->prev_active = NULL;
   temp_free((char*)e->layer);
   e->layer = NULL;
-  PROF_FINISH(check_deactivate)
+  e->layers = 0;
+
+} // end check_deactivate()
+
+/*************************************************************************************
+* 
+* function: vis_edge_comp()
+*
+* purpose: evaluate active edge order.
+*
+*/
+
+int vis_edge_comp(struct vis_conedge *a, struct vis_conedge *b, REAL u)
+{ REAL va,vb;
+
+  if ( a->v[0] == b->v[0] ) 
+  { // compare slopes
+    if ( a->m < b->m ) return -1;
+    if ( a->m > b->m ) return  1;
+    return 0;
+  }
+  if ( a->v[1] == b->v[1] ) 
+  { // compare slopes
+    if ( a->m < b->m ) return  1;
+    if ( a->m > b->m ) return -1;
+    return 0;
+  }
+  // now compare vertical position
+  va = a->v[0]->x[1] + a->m*(u-a->v[0]->x[0]);
+  vb = b->v[0]->x[1] + b->m*(u-b->v[0]->x[0]);
+  if ( va < vb ) return -1;
+  if ( va > vb ) return  1;
+
+  // Geometric tie, so some arbitrary ordering
+  if ( a < b ) return -1;
+  if ( a > b ) return  1;
+  return 0;
 }
 
-/***************************************************************************
+
+/*************************************************************************************
 *
-* function: facet_start_event()
+* function: visibility_recover()
 *
-* purpose: handle starts of two edges of facet.
+* purpose: re-construct edge list, layers, and crossing-event list when 
+*          things go wrong.
 *
-* return: -1 if error, 1 if ok.
+* return: 1 for success, -1 for failure
 */
+int visibility_recover()
+{ struct vis_conedge *e,*prev_e,*e_next;
+  int j;
+  REAL uv = vis_vertices[vertex_event_spot+1].x[0];  // next vertex after this one
+  REAL ux = vis_heap[0].time;  // next crossing time
+  REAL u = (sweep_u + (uv < ux ? uv : ux))/2;
 
-int facet_start_event(fe)
-struct vis_event *fe;
-{ REAL v1,v2;  /* for some debugging */ 
-  struct vis_conedge *spot;
+  // Make sure edge list in order, using insertion sort
+  for ( e = active_edge_first->next_active ; e ; e = e_next )
+  { e_next = e->next_active;
 
-  if ( visdebuglevel >= VIS_EVENTDUMP )
-    printf("start edges %d %d  facet %d at %20.15f\n",
-      fe->e1-vis_conedges,fe->e2-vis_conedges,
-        fe->t-vis_list, (double)sweep_u);
-
-PROF_START(facet_start_event)
-  sweep_u = fe->time;
-  v1 = activate_edge(fe->e1); fe->e1->use_count++;
-  v2 = activate_edge(fe->e2); fe->e2->use_count++;
-
-  if ( v2 < v1 )
-  { kb_error(2505,"Internal: Visibility list insertion out of order.\n",
-        WARNING);
-    return -1;
-  }
-
-  if ( fe->e1->seqno > fe->e2->seqno )
-  { kb_error(2508,"Internal: Visibility list insertion out of order.\n",
-        WARNING);
-    return -1;
-  }
-
-
-  /* add this facet to layers */
-  for ( spot = fe->e1 ; spot != fe->e2 ; spot = spot->next_active )
-  { if ( spot == NULL )
-    { kb_error(2506,"Internal: Visibility list bad in facet_start_event().\n",
-          WARNING);
-      return -1;
-    }
-    add_layer(spot,fe->t);
-  }
-PROF_FINISH(facet_start_event)
-
-  find_next_event(fe->e1);
-  find_next_event(fe->e2);
-
-  return 1;
-} /* end facet_start_event() */
-
-/***************************************************************************
-*
-* function: facet_middle_event()
-*
-* purpose: handle edge transition in middle of facet
-*
-* return: -1 for error, 1 for ok.
-*/
-
-int  facet_middle_event(fe)
-struct vis_event *fe;
-{ struct vis_conedge *e;
-
-  if ( visdebuglevel >= VIS_EVENTDUMP )
-     printf("middle edges %d %d  facet %d  at %20.15f\n",
-        fe->e1-vis_conedges,fe->e2-vis_conedges,
-           fe->t-vis_list,(double)sweep_u);
-
-PROF_START(facet_middle_event)
-  sweep_u = fe->time;
-  activate_edge(fe->e2); fe->e2->use_count++;
-  if ( fe->type == V_FACET_TOPMIDDLE )
-  { if ( delete_layer(fe->e2,fe->t) )
-    { /* second edge got put in the right way */
-      for ( e = fe->e2->next_active ; e != fe->e1 ; e = e->next_active )
-      { if ( e == NULL )
-        { kb_error(2575,
-            "Internal: Visibility list bad in facet_middle_event().\n",
-              WARNING);
-          return -1;
-        }
-        delete_layer(e,fe->t);
-      }
-    }
-    else /* got inserted above old edge */
+    prev_e = e->prev_active;
+    while ( vis_edge_comp(e,prev_e,u) < 0 )
     { 
-      for ( e = fe->e1; e != fe->e2 ; e = e->next_active ) 
-      { if ( e == NULL )
-        { kb_error(2507,
-           "Internal: Visibility list bad in facet_middle_event(). \n",
-          WARNING);
-          return -1;  
-        }
-        add_layer(e,fe->t);
-      }
-      wrong_middles++;
+      prev_e = prev_e->prev_active;
+      if ( prev_e == NULL ) 
+        break;
     }
-  }
-  else /* bottom middle */
-  { if ( add_layer(fe->e2,fe->t) )
-    { /* new edge snuck in below old */
-      for ( e = fe->e2->next_active ; e != fe->e1 ; e = e->next_active )
-         add_layer(e,fe->t);
-      wrong_middles++;
-    }
-    else /* new edge got in above old */
-    { for ( e = fe->e1 ; e != fe->e2 ; e = e->next_active )
-         delete_layer(e,fe->t);
-    }
-  }
-  fe->e1->use_count--;
-  check_deactivate(fe->e1);
+    if ( prev_e == e->prev_active )
+        continue;  // all ok
 
-PROF_FINISH(facet_middle_event)
-  /* let event crossings take care of place in active list */
-  find_next_event(fe->e2);
+    // excise from current spot
+    e->next_active->prev_active = e->prev_active;
+    e->prev_active->next_active = e->next_active;
 
-  return 1;
-
-} /* end facet_middle_event() */
-
-/***************************************************************************
-*
-* function: facet_end_event()
-*
-* purpose: handle deletion of active edges at end of facet
-*
-* return: -1 for error, 1 for ok.
-*/
-
-int facet_end_event(fe)
-struct vis_event *fe;
-{ struct vis_conedge *spot;
-
-  if ( visdebuglevel >= VIS_EVENTDUMP )
-    printf("end edges %d %d  facet %d  at %20.15f\n",
-      fe->e1-vis_conedges,fe->e2-vis_conedges,
-        fe->t-vis_list,(double)sweep_u);
-
-  for ( spot = fe->e1 ; spot != fe->e2 ; spot = spot->next_active )
-  { if ( spot == NULL )
-    { struct vis_conedge *e;
-      /* Oops. Something went wrong, so delete facet from entire list */
-      active_list_check();
-      for ( e = active_edge_first ; e != &sentinel ; e = e->next_active )
-         delete_layer(e,fe->t); 
-      break;
+    // insert in new spot
+    e->prev_active = prev_e;
+    if ( prev_e )
+    { e->next_active = prev_e->next_active;
+      prev_e->next_active->prev_active = e;
+      prev_e->next_active = e;
     }
     else
-      delete_layer(spot,fe->t); 
+    { e->next_active = active_edge_first;
+      active_edge_first->prev_active = e;
+      active_edge_first = e;
+    }
+  } // end active list ordering
+
+  // Now layers
+  // First, clear old stuff.
+  for ( e = active_edge_first ; e != NULL ; e = e->next_active )
+  { e->layers = 0;
+    memset(e->layer,0,e->maxlayers*sizeof(struct tsort*));
   }
-PROF_START(facet_end_event)
-  sweep_u = fe->time;
-  fe->e1->use_count--; check_deactivate(fe->e1); 
-  fe->e2->use_count--; check_deactivate(fe->e2); 
+  // Then restore layers
+  for ( e = active_edge_first ; e != NULL ; e = e->next_active )
+  { for ( j = e->rawstart ; j <= e->rawend ; j++ )
+     { struct vis_rawedge *re = rawplist[j];
+       if ( re->flags & V_FACET_BOTTOM )
+       { struct vis_conedge *ee;
+         // install going up until reach top edge of facet
+         add_layer(e,re->tsrt);
+         // and go up until hit top edge of facet
+         ee = e;
+         while ( ee )
+         { int m;
+           ee = ee->next_active;
+           if ( ee == NULL ) break;
+           for ( m = ee->rawstart ; m <= ee->rawend ; m++ )
+             if ( rawplist[m]->tsrt == re->tsrt )
+             { // have top, so stop adding as layer
+               goto layer_end;
+             }
+           add_layer(ee,re->tsrt);
+         }
+         if ( ee == NULL )
+         { int n,m;
 
-PROF_FINISH(facet_end_event)
- 
- return 1;
+           kb_error(3038,"visibility_test INTERNAL ERROR: can't find facet top edge.\n",WARNING);
 
-} /* end facet_end_event() */
+           for ( ee = active_edge_first, n = 0 ; ee ; ee = ee->next_active, n++ )
+           { for ( m = ee->rawstart ; m <= ee->rawend ; m++ )
+               if ( rawplist[m]->tsrt == re->tsrt )
+               {  printf ("tsrt at spot %d  flag %d\n",n,rawplist[m]->flags);
+               }
+                
+            }
+            return -1;
+         }
+       }
+       layer_end: continue;
+    }
+  } // end layer restore
+
+  // Rebuild crossing event heap
+  vis_heap_count = 0;
+  for ( e = active_edge_first ; e != &sentinel ; e = e->next_active )
+    find_next_event(e);
+
+  // Mark visible facets
+  for ( e = active_edge_first ; e != &sentinel ; e = e->next_active )
+    check_one_visible(e);
+
+  return 1;
+
+} // end visibility_recover
+
+/***************************************************************************************
+*
+* function: handle_vertex_event()
+*
+* purpose: Handle the next vertex event. Do deactivation of left edges and activation
+*          of right edges;
+*
+* return: 1 for success, -1 for error
+*/
+int handle_vertex_event(struct vis_vertex *v)
+{  struct vis_conedge *before; // active edge below our vertex
+   struct vis_conedge *after;  // active edge above our vertex
+   struct vis_conedge *spot,*ee,*e,*last_e;
+   int i,j,m;
+   int retval = 1;  // exit code
+
+   static int this_seq = 0;  // for detecting loops in linked list
+
+   if ( visdebuglevel >= VIS_EVENTDUMP )
+       printf("Vertex event at u = %18.15f  v = %18.15f\n",sweep_u,v->x[1]);
+
+   // First, delete left edges and associated facets.
+   if ( v->left_edge_head )
+   {  // left edges in vislist might be out of order, if coincident
+      // so delete them individually
+      for ( spot = v->left_edge_head ; spot != NULL ; 
+             spot = spot->left_edge_next )
+      { 
+        // Delete facets
+        for ( j = spot->rawstart ; j <= spot->rawend ; j++ )
+        { struct vis_rawedge *re = rawplist[j];
+          struct vis_conedge *ee = spot->next_active;
+          if ( re->flags & V_FACET_BOTTOM )
+          { re->tsrt->flag &= ~VISIBILITY_LIVE;
+            while ( ee )
+            { if ( !delete_layer(ee,re->tsrt) )
+                break;
+              ee = ee->next_active;
+            }
+          }
+        }
+
+        // save insertion spot when get to last deletion
+        if ( spot->left_edge_next == NULL )
+        { before = spot->prev_active;
+          after = spot->next_active;
+        }
+
+        // delete from linked list of edges
+        deactivate_edge(spot);        
+      }
+   }
+   else // have to do linear search through active edges
+   { this_seq++;
+     for ( spot = active_edge_first ; spot ; spot = spot->next_active )
+     { REAL spoty = spot->m*(sweep_u-spot->v[0]->x[0]) + spot->v[0]->x[1];
+       if ( spoty > v->x[1] )
+           break;
+       if ( spot->seqno == this_seq )
+       {  kb_error(6542,"visibility_test INTERNAL ERROR: loop in edge list\n",WARNING);
+          return -1;
+       }
+       spot->seqno = this_seq;     
+     }
+     before = spot->prev_active;
+     after  = spot;
+   }
+
+   // Now insert right edges in place of left edges
+   if ( v->right_edge_head )
+   { if ( before )
+       before->next_active = v->right_edge_head;
+     else
+       active_edge_first = v->right_edge_head;
+     v->right_edge_head->prev_active = before;
+     for ( ee = v->right_edge_head ; ee->right_edge_next != NULL ;
+                 ee = ee->right_edge_next )
+     {  ee->next_active = ee->right_edge_next;
+        ee->right_edge_next->prev_active = ee;
+     }
+     ee->next_active = after;
+     after->prev_active = ee;
+   }
+   else
+   { if ( before )
+       before->next_active = after;
+     else
+       active_edge_first = after;
+     after->prev_active = before;
+   }
+
+   if ( v->right_edge_head == NULL )
+     return 1;
+
+   /* Fix up layers */
+   // Add own facets of right edges
+   for ( e = v->right_edge_head ; e != NULL ; e = e->right_edge_next )
+   {
+     for ( j = e->rawstart ; j <= e->rawend ; j++ )
+     { struct vis_rawedge *re = rawplist[j];
+       if ( re->flags & V_FACET_BOTTOM )
+       { struct vis_conedge *ee;
+         // install going up until reach top edge of facet
+         add_layer(e,re->tsrt);
+         // and go up until hit top edge of facet
+         ee = e;
+         while ( ee )
+         { ee = ee->next_active;
+           if ( ee == &sentinel ) break;
+           for ( m = ee->rawstart ; m <= ee->rawend ; m++ )
+             if ( rawplist[m]->tsrt == re->tsrt )
+             { // have top, so stop adding as layer
+               goto own_layer_end;
+             }
+           add_layer(ee,re->tsrt);
+         }
+         if ( ee == &sentinel )
+         {
+            retval = -1;
+         }
+       }
+own_layer_end: continue;
+     }
+     if ( e->right_edge_next == NULL )
+       last_e = e;
+   }
+   // Add continuing layers from below
+   if ( before )
+   { for ( i = 0 ; i < before->layers ; i++ )
+     { for ( ee = v->right_edge_head ; ee != NULL ; ee = ee->right_edge_next )
+       { // first see if this is the top of the facet
+         for ( m = ee->rawstart ; m <= ee->rawend ; m++ )
+           if ( rawplist[m]->tsrt == before->layer[i] )
+           { // have top, so stop adding as layer
+             goto prev_layer_end;
+           }
+         add_layer(ee,before->layer[i]);
+       }
+prev_layer_end: continue;
+     }
+   }
+
+  // Look for upcoming crossing events
+  find_next_event(v->right_edge_head);
+  if ( last_e != v->right_edge_head )
+    find_next_event(last_e);
+
+  return retval;
+
+}  // end handle_vertex_event
+
 
 /***************************************************************************
 *
@@ -2858,8 +2997,10 @@ PROF_FINISH(facet_end_event)
 *
 */
 
-void vis_crossing(ea,eb)
-struct vis_conedge *ea,*eb;  /* ea below eb */
+void vis_crossing(
+  struct vis_conedge *ea,
+  struct vis_conedge *eb  /* ea below eb */
+    )
 { struct vis_conedge *te;
   struct vis_rawedge *ra,*rb;
   int i;
@@ -2873,18 +3014,17 @@ struct vis_conedge *ea,*eb;  /* ea below eb */
   for ( i = ea->rawstart; i <= ea->rawend ; i++ )
   { ra = rawplist[i];
     if ( ra->flags & V_FACET_BOTTOM )
-      delete_layer(eb,ra->t);
+      delete_layer(eb,ra->tsrt);
     if ( ra->flags & V_FACET_TOP )
-      add_layer(eb,ra->t);
+      add_layer(eb,ra->tsrt);
   }
   for ( i = eb->rawstart; i <= eb->rawend ; i++ )
   { rb = rawplist[i];
     if ( rb->flags & V_FACET_BOTTOM )
-      add_layer(ea,rb->t);
+      add_layer(ea,rb->tsrt);
     if ( rb->flags & V_FACET_TOP )
-      delete_layer(ea,rb->t);
+      delete_layer(ea,rb->tsrt);
   }
-PROF_START(vis_crossing)
 
   /* switch order in active list */
   eb->next_active->prev_active = ea;
@@ -2897,59 +3037,39 @@ PROF_START(vis_crossing)
   eb->next_active = ea;
   ea->next_active = te;
 
-PROF_FINISH(vis_crossing)
-
   /* Test for next events */ 
   find_next_event(ea);
   find_next_event(eb);
   
 vis_crossing_exit: ;
 
-}
+}  // end vis_crossing()
 
-/* check_layers() - Brute force check of facet layers at point. */
-void check_layers(e,u,v)
-struct vis_conedge *e;
-REAL u,v;
-{ int i,j,jj,k;
-  int found=0;
-  REAL *x[3];
-  REAL orientation,d;
 
-  for ( i = 0 ; i < f_event_count ; i++ )
-  { struct vis_event *fe = facet_events + i;
-    if ( (fe->type != V_FACET_TOPMIDDLE)
-          && (fe->type != V_FACET_BOTTOMMIDDLE)) continue;
-    x[0] = fe->e1->v[0]->x; 
-    x[1] = fe->e1->v[1]->x; 
-    x[2] = fe->e2->v[1]->x; 
-    orientation = (x[1][0]-x[0][0])*(x[2][1]-x[0][1])
-                     - (x[1][1]-x[0][1])*(x[2][0]-x[0][0]);
-    for ( j = 0 ; j < 3 ; j++ )
-    { jj = (j==2) ? 0 : j+1;
-      d = (x[jj][0]-x[j][0])*(v-x[j][1])
-                     - (x[jj][1]-x[j][1])*(u-x[j][0]);
-      if ( d*orientation < 0.0 )
-          break;
-    }
-    if ( j < 3 ) continue;  /* not all on proper side */
+/************************************************************************
+*
+* function: check_one_visible()
+*
+* purpose: mark top layer facet at given edge
+*/
+void check_one_visible(struct vis_conedge *e)
+{ struct tsort *topf;
+  int j;
 
-    /* now check layers */
-    for ( k = 0 ; k < e->layers ; k++ )
-      if ( fe->t == e->layer[k] )
-         { found++; break; }
-    if ( k == e->layers )
-    { fprintf(stderr,"Edge %d missing facet %d at (%f,%f).\n",e-vis_conedges,
-         fe->t - vis_list,u,v);
-    }
-  } 
-
-  /* report */
-  if ( found < e->layers ) 
-    fprintf(stderr,"Edge %d extra %d layers(facet %d) at (%f,%f).\n",
-       e-vis_conedges,e->layers-found,e->layer[0]-vis_list,u,v);
-  
-   
+  // using tsort order from painter's algorithm to see which is on top
+  topf = NULL;
+  for ( j = 0 ; j < e->layers ; j++ )
+  { 
+    struct tsort *f = e->layer[j];
+    if ( (topf==NULL || (f > topf)) && (f->flag & VISIBILITY_LIVE) )    /* using painter facet order */
+    { topf = f; }
+  }
+  if ( topf ) 
+  { topf->flag |= VISIBLE;
+    if ( visdebuglevel >= VIS_EVENTDUMP )
+        printf("Marking facet %d visible at edge %d.\n",(int)(topf->f_id & 0xFFFFF)+1,(int)(e-vis_conedges));
+  }
+  e->flags &= ~V_LAYER_CHECK;
 }
 
 /*************************************************************************
@@ -2963,167 +3083,18 @@ REAL u,v;
 *
 */
 
-void check_visible(u)
-REAL u;  /* sweep time to check */
-{ REAL v,vv;  /* height on sweep line of edge and next */
-  int i,j;
-PROF_START(check_visible)
+void check_visible()
+{
+  int i;
 
   for ( i = 0 ; i < check_list_count ; i++ )
   { struct vis_conedge *e = check_list[i];
-    struct tsort *topf;
 
-    e->flags &= ~V_LAYER_CHECK;
-    if ( e->next_active == NULL ) continue;
-    v  = e->m*(u-e->v[0]->x[0]) + e->v[0]->x[1];
-    vv = e->next_active->m*(u-e->next_active->v[0]->x[0]) 
-              + e->next_active->v[0]->x[1];
-    if ( fabs(v-vv) < 1e-10 ) continue; /* ignore cracks */
-    v = (v+vv)/2;
-    
-    if ( visdebuglevel >= VIS_LAYERCHECK )
-      check_layers(e,u,v);  /* debugging */
-
-    topf = NULL;
-    for ( j = 0 ; j < e->layers ; j++ )
-    { 
-      struct tsort *f = e->layer[j];
-      if ( f > topf )    /* using painter facet order */
-      { topf = f; }
-    }
-    if ( topf ) 
-    { topf->flag |= VISIBLE;
-      if ( visdebuglevel >= VIS_EVENTDUMP )
-          printf("Marking facet %d visible.\n",topf-vis_list);
-    }
+    if ( e->layers )
+      check_one_visible(e);
   }
   check_list_count = 0;
 
-PROF_FINISH(check_visible)
-}
+} // end check_visible()
 
-#ifdef BRUTE
-/*************************************************************************
-  Brute force visibility.
-**************************************************************************/
-
-
-/*************************************************************************
-*
-* function: brutecomp
-*
-* purpose: comparison function for sorting brute force event times.
-*/
-
-int brutecomp (const void *a, const void *b)
-{
-  struct brute *aa = (struct brute *)a;
-  struct brute *bb = (struct brute *)b;
-
-  if ( aa->time < bb->time ) return -1;
-  if ( aa->time > bb->time ) return 1;
-  if ( aa->e1 < bb->e1 ) return -1;
-  if ( aa->e1 > bb->e1 ) return 1;
-  if ( aa->e2 < bb->e2 ) return -1;
-  if ( aa->e2 > bb->e2 ) return 1;
-  return 0;
-}
-
-/*************************************************************************
-*
-* function: brutecut_comp
-*
-* purpose: comparison function for sorting brute force cut heights.
-*/
-
-int brute_cut_comp (const void *a, const void *b)
-{
-  struct brute_cut *aa = (struct brute_cut *)a;
-  struct brute_cut *bb = (struct brute_cut *)b;
-
-  if ( aa->v < bb->v ) return -1;
-  if ( aa->v > bb->v ) return 1;
-  if ( aa->e < bb->e ) return -1;
-  if ( aa->e > bb->e ) return 1;
-  return 0;
-}
-/***************************************************************************
-*
-* function: brute_section
-*
-* purpose: Find all edge intersections at a particular sweep position
-*          by brute force, and order by height.
-*/
-
-void brute_section(u)
-REAL u;  /* sweep position */
-{ struct brute_cut *b;
-  int i;
-  struct vis_edge *e;
-
-  brute_cut_count = 0;
-  for ( i = 0 ; i < vecount ; i++ )
-  { e = vis_edges + i;
-    if ( e->x[0][0] > u ) continue;
-    if ( e->x[1][0] < u ) continue;
-    b = brute_cuts + brute_cut_count++;
-    b->v = e->m*(u-e->x[0][0]) + e->x[0][1];
-    b->e = e;
-  }
-  qsort(brute_cuts,brute_cut_count,sizeof(struct brute_cut),FCAST brute_cut_comp);
-}
-
-/*************************************************************************
-*
-* function: brute_visible()
-*
-* purpose: Mark as visible those facets along sweep line, using edge
-*          order found by brute_section().
-*
-*/
-
-struct vis_facet *brute_column[100]; /* list of facets at spot */
-
-void brute_visible(u)
-REAL u; /* sweep line position */
-{ int i,j;
-  int depth = 0; /* number of facets stacked up */
-  REAL v,vv,z;
-
-  brute_section(u);
-  
-  for ( i = 0 ; i < brute_cut_count-1 ; i++ )
-  { struct vis_edge *e = brute_cuts[i].e;
-    struct vis_edge *ee = brute_cuts[i+1].e;
-
-    if ( e->flags & V_FACET_BOTTOM )
-    { /* add to column */
-      brute_column[depth++] = e->f;
-    } 
-    else if ( e->flags & V_FACET_TOP )
-    { /* delete from column */
-      for ( j = 0 ; j < depth ; j++ )
-       if ( brute_column[j] == e->f )
-         brute_column[j] = brute_column[--depth];
-    }
-
-    /* check halfway in between for top facet */
-    v = e->m*(u-e->x[0][0]) + e->x[0][1];
-    vv = ee->m*(u-ee->x[0][0]) + ee->x[0][1];
-    if ( (depth > 0) && (fabs(v-vv) > 1e-8) )
-    { REAL topz = -1e30;
-      int topj = -1;
-
-      v = (v+vv)/2;
-      for ( j = 0 ; j < depth ; j++ )
-      { struct vis_facet *f = brute_column[j];
-        z = f->a*u + f->b*v + f->c;
-        if ( z > topz )
-        { topj = j; topz = z; }
-      }
-      brute_column[topj]->t->flag |= VISIBLE;
-    }
-  }
-}
-#endif    
 

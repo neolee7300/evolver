@@ -79,29 +79,31 @@ typedef REAL pptype[PDIM][PDIM];
 * matrices.
 */
   
-static void copy ARGS((ptype,ptype));
-static void matmult ARGS((pptype,ptype,ptype));
-static void applygen ARGS((int,ptype,ptype));
-static void copymat ARGS((pptype,pptype));
-static void matmatmult ARGS((pptype,pptype,pptype));
-static void genmat ARGS((int,pptype));
-static void q_init ARGS ((void));
-void khyp_wrap ARGS((REAL*,REAL*,WRAPTYPE));
-WRAPTYPE khyp_compose ARGS((WRAPTYPE,WRAPTYPE));
-WRAPTYPE khyp_inverse ARGS((WRAPTYPE));
-void khyp_form_pullback ARGS(( REAL *,REAL *,REAL *,WRAPTYPE));
+static void copy(ptype,ptype);
+static void matmult(pptype,ptype,ptype);
+static void applygen(int,ptype,ptype);
+static void copymat(pptype,pptype);
+static void matmatmult(pptype,pptype,pptype);
+static void genmat(int,pptype);
+static void q_init(void);
+void khyp_wrap(REAL*,REAL*,WRAPTYPE);
+WRAPTYPE khyp_compose(WRAPTYPE,WRAPTYPE);
+WRAPTYPE khyp_inverse(WRAPTYPE);
+void khyp_form_pullback( REAL *,REAL *,REAL *,WRAPTYPE);
 
-static void copy(z,w)
-REAL z[PDIM],w[PDIM];
+static void copy(REAL z[PDIM], REAL w[PDIM])
 {
      int j;
 
      for (j=0; j<PDIM; j++)
           w[j]=z[j];
-}
+} // end copy()
 
-static void matmult(m,z,w)
-REAL m[PDIM][PDIM],z[PDIM],w[PDIM];
+static void matmult(
+  REAL m[PDIM][PDIM],
+  REAL z[PDIM],
+  REAL w[PDIM]
+)
 {
      int i,j;
      REAL t[PDIM];
@@ -110,11 +112,13 @@ REAL m[PDIM][PDIM],z[PDIM],w[PDIM];
           for (i=0,t[j]=0.; i<=SDIM; i++)
                 t[j] += m[j][i] * z[i];
      copy(t,w);
-}
+} // end void matmult()
 
-static void applygen(g,z,w)
-int g;
-REAL z[PDIM],w[PDIM];
+static void applygen(
+  int g,
+  REAL z[PDIM],
+  REAL w[PDIM]
+)
 {
      REAL t[PDIM];
      int i;
@@ -128,16 +132,21 @@ REAL z[PDIM],w[PDIM];
      for (i=g;i<8;i++)
           matmult(RotMat,t,t);
      copy(t,w);
-}
+} // end applygen()
 
-static void copymat(a,b)
-REAL a[PDIM][PDIM],b[PDIM][PDIM];
+static void copymat(
+  REAL a[PDIM][PDIM],
+  REAL b[PDIM][PDIM]
+)
 {
   memcpy((char*)b,(char*)a,PDIM*PDIM*sizeof(REAL));
-}
+} // end copymat()
 
-static void matmatmult(a,b,c)
-REAL a[PDIM][PDIM],b[PDIM][PDIM],c[PDIM][PDIM];
+static void matmatmult(
+  REAL a[PDIM][PDIM],
+  REAL b[PDIM][PDIM],
+  REAL c[PDIM][PDIM]
+)
 { int i,j,k;
   REAL t[PDIM][PDIM];
   REAL *tp;
@@ -148,11 +157,12 @@ REAL a[PDIM][PDIM],b[PDIM][PDIM],c[PDIM][PDIM];
              *tp += a[i][j]*b[j][k];
         }
   copymat(t,c);
-}
+} // end matmatmult()
 
-static void genmat(g,t)
-int g;
-REAL t[PDIM][PDIM];
+static void genmat(
+  int g,
+  REAL t[PDIM][PDIM]
+)
 {
      int i;
 
@@ -162,7 +172,7 @@ REAL t[PDIM][PDIM];
      matmatmult(TrMat,t,t);
      for (i=g;i<8;i++)
           matmatmult(RotMat,t,t);
-}
+} // end genmat()
 
 static void q_init()
 { int i;
@@ -173,7 +183,7 @@ static void q_init()
     }
 
   q_init_flag = 1;
-}
+} // end  q_init()
 
 /*******************************************************************
 *
@@ -185,10 +195,11 @@ static void q_init()
 *
 */
 
-void khyp_wrap(x,y,wrap)
-REAL *x;    /* original coordinates */
-REAL *y;    /* wrapped coordinates  */
-WRAPTYPE wrap;  /* encoded symmetry group element */
+void khyp_wrap(
+  REAL *x,    /* original coordinates */
+  REAL *y,    /* wrapped coordinates  */
+  WRAPTYPE wrap  /* encoded symmetry group element */
+)
 {
      REAL z[2][PDIM]; /* two work vectors */
      int j,i;
@@ -214,7 +225,7 @@ WRAPTYPE wrap;  /* encoded symmetry group element */
           matmult(eg[CHOP(g)],z[j],z[1-j]);
      }
     for ( i = 0 ; i < SDIM ; i++ ) y[i] = z[j][i+1]/z[j][0];
-}
+} // end khyp_wrap()
 
 
 /********************************************************************
@@ -234,8 +245,10 @@ coordinates of its head (relative to khyp_wrap(tail,v) being its tail).
 
 #define TRY(g1,gk,h1,hk) if (DFF(gk,h1,0)) return WRAP(g1,hk)
 
-WRAPTYPE khyp_compose(gw,hw)
-WRAPTYPE gw,hw;  /* the elements to compose */
+WRAPTYPE khyp_compose(
+  WRAPTYPE gw,
+  WRAPTYPE hw  /* the elements to compose */
+)
 {
      int g1,gk, h1,hk;
 
@@ -254,7 +267,7 @@ WRAPTYPE gw,hw;  /* the elements to compose */
      kb_error(1305,msg,WARNING);
 
      return 0;
-}
+} // end khyp_compose()
 
 
 /********************************************************************
@@ -265,8 +278,7 @@ WRAPTYPE gw,hw;  /* the elements to compose */
 *
 */
 
-WRAPTYPE khyp_inverse(wrap)
-WRAPTYPE wrap;  /* the element to invert */
+WRAPTYPE khyp_inverse(WRAPTYPE wrap  /* the element to invert */)
 {
     return WRAP(END(wrap),CHOP(wrap));
 }
@@ -280,11 +292,12 @@ WRAPTYPE wrap;  /* the element to invert */
 *
 */
 
-void khyp_form_pullback(x,xform,yform,wrap)
-REAL *x;    /* original coordinates */
-REAL *xform;  /* result pullback */
-REAL *yform;    /* original form input  */
-WRAPTYPE wrap;  /* encoded symmetry group element */
+void khyp_form_pullback(
+  REAL *x,    /* original coordinates */
+  REAL *xform,  /* result pullback */
+  REAL *yform,    /* original form input  */
+  WRAPTYPE wrap  /* encoded symmetry group element */
+)
 {
   int i,j;
   REAL trans[PDIM][PDIM];
@@ -322,5 +335,5 @@ WRAPTYPE wrap;  /* encoded symmetry group element */
      for ( j = 0, xform[i] = 0. ; j < SDIM ; j++ )
         xform[i] += jac[j][i]*yform[j];
 
-}
+} // end khyp_form_pullback()
 

@@ -38,8 +38,7 @@ the factor of (1-cos).
 *
 */
 
-REAL edge_edge_knot_energy(e_info)
-struct qinfo *e_info;
+REAL edge_edge_knot_energy(struct qinfo *e_info)
 { edge_id e1 = e_info->id,e2;
   REAL *x1,*x2,*yy1,*y2; /* end coordinates */
   REAL energy = 0.0;
@@ -70,7 +69,7 @@ struct qinfo *e_info;
       energy += L1*L2/dd;
     }
   return energy;
-}
+} // end edge_edge_knot_energy()
 
 /**************************************************************
 *
@@ -83,8 +82,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_edge_knot_energy_gradient(e_info)
-struct qinfo *e_info;
+REAL edge_edge_knot_energy_gradient(struct qinfo *e_info)
 { edge_id e1 = e_info->id,e2;
   REAL *x1,*x2,*yy1,*y2; /* end coordinates */
   REAL energy = 0.0;
@@ -127,7 +125,7 @@ struct qinfo *e_info;
     }
 
   return energy;  /* since doing all pairs */
-}
+} // end edge_edge_knot_energy_gradient()
 
 /******************************************************************
 *
@@ -138,8 +136,7 @@ struct qinfo *e_info;
 */
 #define do_nextedge(ee) (ee = inverse_id(get_next_head_edge(ee)))
 
-REAL edge_normalization(e_info)
-struct qinfo *e_info;
+REAL edge_normalization(struct qinfo *e_info)
 {
   edge_id e_id;
   REAL ti,tj;
@@ -162,7 +159,7 @@ struct qinfo *e_info;
         energy += ti*tj/pow(shortdist,power);
      }
   return energy;
-}
+} // end edge_normalization()
 
 /******************************************************************
 
@@ -192,8 +189,7 @@ are calculated from edge midpoints there.
 */
 #define clip(x) ( x = (x<0.? 0. : (x>1.? 1. : x)) )
 
-REAL edge_min_knot_energy(e_info)
-struct qinfo *e_info;
+REAL edge_min_knot_energy(struct qinfo *e_info)
 { edge_id e1 = e_info->id,e2;
   REAL *x1,*x2,*yy1,*y2; /* end coordinates */
   REAL energy = 0.0;
@@ -287,7 +283,7 @@ struct qinfo *e_info;
  ok: energy += sqrt(vv*ww)/mind;
     }
   return energy;
-}
+} // end edge_min_knot_energy()
 
 /******************************************************************
 *
@@ -297,8 +293,7 @@ struct qinfo *e_info;
 *              singular divergence of integral.
 */
 
-REAL simon_normalization(e_info)
-struct qinfo *e_info;
+REAL simon_normalization(struct qinfo *e_info)
 {
   edge_id e_id;
   REAL ti;
@@ -322,7 +317,7 @@ struct qinfo *e_info;
         if (2*j==comp_nedge) energy -= ti*ti/pow(dist,power)/2;
      }
   return 2*energy;
-}
+} // end simon_normalization()
 
 /******************************************************************
 
@@ -348,8 +343,7 @@ E = 1/d^2 * (|e1||e2| - e1.e2 +2*e1.d*e2.d/d^2)
 *
 */
 
-REAL circle_knot_energy(e_info)
-struct qinfo *e_info;
+REAL circle_knot_energy(struct qinfo *e_info)
 { edge_id e1 = e_info->id,e2;
   REAL *x1,*x2,*yy1,*y2; /* end coordinates */
   REAL energy = 0.0;
@@ -385,7 +379,7 @@ struct qinfo *e_info;
          /* 0 for cocircular edges */
     }
   return energy;
-}
+} // end circle_knot_energy()
 
 /**************************************************************
 *
@@ -398,8 +392,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL circle_knot_energy_gradient(e_info)
-struct qinfo *e_info;
+REAL circle_knot_energy_gradient(struct qinfo *e_info)
 { edge_id e1 = e_info->id,e2;
   REAL *x1,*x2,*yy1,*y2; /* end coordinates */
   REAL energy = 0.0;
@@ -450,7 +443,7 @@ struct qinfo *e_info;
     }
 
   return energy;  /* since doing all pairs */
-}
+} // end circle_knot_energy_gradient()
 
 /******************************************************************
 
@@ -479,8 +472,7 @@ E = |e1||e2|/d^2 * sqrt(1 - e1.e2/|e1||e2| +2*e1.d*e2.d/d^2/|e1||e2|)
 *
 */
 
-REAL sin_knot_energy(e_info)
-struct qinfo *e_info;
+REAL sin_knot_energy(struct qinfo *e_info)
 { edge_id e1 = e_info->id,e2;
   REAL *x1,*x2,*yy1,*y2; /* end coordinates */
   REAL energy = 0.0;
@@ -517,7 +509,7 @@ struct qinfo *e_info;
       energy += L1L2/dd * sqrt(s); /* 0 for cocircular edges */
     }
   return 2*energy;
-}
+} // end sin_knot_energy()
 
 /**************************************************************
 *
@@ -530,8 +522,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL sin_knot_energy_gradient(e_info)
-struct qinfo *e_info;
+REAL sin_knot_energy_gradient(struct qinfo *e_info)
 { edge_id e1 = e_info->id,e2;
   REAL *x1,*x2,*yy1,*y2; /* end coordinates */
   REAL energy = 0.0;
@@ -584,7 +575,7 @@ struct qinfo *e_info;
     }
 
   return energy;  /* since doing all pairs */
-}
+} // end sin_knot_energy_gradient()
 
 
 
@@ -613,9 +604,10 @@ and t1,t2 are sides of the other.
 #define SURF_COSPOW_NAME "surface_cos_power"
 static REAL spower,cpower;
 
-void sphere_knot_energy_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void sphere_knot_energy_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   exponent_param = lookup_global(SURF_KNOTPOW_NAME);
   if ( exponent_param < 0 ) /* missing, so add */
@@ -631,7 +623,7 @@ struct method_instance *mi;
           globals(cos_exponent_param)->flags |= ORDINARY_PARAM|RECALC_PARAMETER | ALWAYS_RECALC;
         }
   cpower = globals(cos_exponent_param)->value.real;
-}
+} // end sphere_knot_energy_init()
 
 /**************************************************************
 *
@@ -643,8 +635,7 @@ struct method_instance *mi;
 *
 */
 
-REAL sphere_knot_energy(f_info)
-struct qinfo *f_info;
+REAL sphere_knot_energy(struct qinfo *f_info)
 { facet_id f1 = f_info->id,f2;
   REAL *x[FACET_VERTS],*y[FACET_VERTS]; /* vertex coordinates */
   REAL energy = 0.0;
@@ -713,7 +704,7 @@ struct qinfo *f_info;
       energy += AsAt * pp / pow(2*rr2,spower);
     }
   return 2*energy/4;  /* As,At are 2*areas; also we want full REAL sum */
-}
+} // end sphere_knot_energy()
 
 /**************************************************************
 *
@@ -726,8 +717,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL sphere_knot_energy_gradient(f_info)
-struct qinfo *f_info;
+REAL sphere_knot_energy_gradient(struct qinfo *f_info)
 { facet_id f1 = f_info->id,f2;
   REAL *x[FACET_VERTS],*y[FACET_VERTS]; /* vertex coordinates */
   REAL energy = 0.0;
@@ -864,4 +854,142 @@ struct qinfo *f_info;
     }
 
   return energy;  /* since doing all pairs */
-}
+} // end sphere_knot_energy_gradient()
+
+
+/******************************************************************
+
+Mughal far-field energy, mughal_far_field named method
+
+Suggested by Adil Mughal [mailto:adil.m.mughal@gmail.com]
+
+Between pairs of edges, energy is inverse power of distance
+between midpoints of edges times charge on the second edge.
+Charge of an edge is the dot of its normal with the unit
+Y vector, which is the x-component of the edge vector.
+
+Steps in creating a named method:
+  Write initialization, energy, gradient, and maybe hessian functions.
+  Declare these functions in quantity.h.
+  Insert these functions into the method function array in quantity.c.
+
+******************************************************************/
+
+/************************************************************************
+*
+*  function: mughal_far_field_init()
+*  
+*  purpose: Method initialization.  Called before each set of method
+*           evaluations.
+*
+*/
+void mughal_far_field_init(  
+  int mode, /* energy or gradient or hessian */
+  struct method_instance *mi  /* in case this routine needs info about the particular method instance */
+)
+{
+  if ( web.sdim != 2 )
+    kb_error(4569,"mughal_far_field method requires space dimension 2.\n",RECOVERABLE);
+  if ( web.torus_flag )
+    kb_error(4570,"mughal_far_field method not now implemented for torus model.\n",RECOVERABLE);
+}   
+  
+/***************************************************************************
+*
+*  function: mughal_far_field_energy()
+*  
+*  purpose: calculates energy of one edge relative to all other edges,
+*           with the charge considered being on the other edge.
+*
+*  input: info about edge is in qinfo structure.
+*
+*/
+
+REAL mughal_far_field_energy(struct qinfo *e_info)
+{ edge_id e1 = e_info->id,e2;
+  REAL *x1,*x2,*yy1,*y2; /* end coordinates */
+  REAL charge;
+  REAL energy = 0.0;
+  REAL dd;
+  int j;
+
+  x1 = get_coord(get_edge_tailv(e1));
+  x2 = get_coord(get_edge_headv(e1));
+
+  FOR_ALL_EDGES(e2)
+    { if ( e2 == e1 ) continue; /* skip self */
+      yy1 = get_coord(get_edge_tailv(e2));
+      y2 = get_coord(get_edge_headv(e2));
+      charge = y2[0] - yy1[0];
+      dd = 0.0;
+      for ( j = 0 ; j < SDIM ; j++ )
+      { REAL rj;
+        rj = (yy1[j] + y2[j] - x1[j] - x2[j])/2;
+        dd += rj*rj;
+      }
+      energy += charge/sqrt(dd);
+    }
+  return energy;
+} // end mughal_far_field_energy()
+
+/**************************************************************
+*
+*  function: mughal_far_field_gradient()
+*  
+*  purpose: calculates energy gradient of one edge due to potential
+*              with all others.
+*
+*  input: info about edge is in qinfo structure.
+*
+*/
+
+REAL mughal_far_field_gradient(struct qinfo *e_info)
+{ edge_id e1 = e_info->id,e2;
+  REAL *x1,*x2,*yy1,*y2; /* end coordinates */
+  REAL charge;
+  REAL energy = 0.0;
+  REAL r[MAXCOORD];
+  REAL dd;
+  REAL en1;
+  int j;
+
+  x1 = get_coord(get_edge_tailv(e1));
+  x2 = get_coord(get_edge_headv(e1));
+  FOR_ALL_EDGES(e2)
+    { if ( e2 == e1 ) continue; /* skip self */
+
+      // First, same energy calculation as mughal_far_field_energy()
+      yy1 = get_coord(get_edge_tailv(e2));
+      y2 = get_coord(get_edge_headv(e2));
+      charge = y2[0] - yy1[0];
+      dd = 0.0;
+      for ( j = 0 ; j < SDIM ; j++ )
+      {
+        r[j] = (yy1[j] + y2[j] - x1[j] - x2[j])/2;
+        dd += r[j]*r[j];
+      }
+      en1 = charge/sqrt(dd);
+      energy += en1;
+
+      // Gradient for this edge being first edge.  Note
+      // grad[0] is for tail vertex and grad[1] for head.
+      for ( j = 0 ; j < SDIM ; j++ ) 
+      {
+         e_info->grad[0][j] += en1/dd*r[j]/2;
+         e_info->grad[1][j] += en1/dd*r[j]/2;
+      }
+
+      // Gradient for this edge being second edge
+      e_info->grad[0][0] += -1/sqrt(dd);
+      e_info->grad[1][0] += 1/sqrt(dd);
+      for ( j = 0 ; j < SDIM ; j++ ) 
+      {  REAL charg = x2[0] - x1[0];
+         e_info->grad[0][j] +=   charg/sqrt(dd)/dd*r[j]/2;
+         e_info->grad[1][j] +=   charg/sqrt(dd)/dd*r[j]/2;
+      }
+
+    }
+
+  return energy; 
+
+} // end mughal_far_field_energy_gradient()

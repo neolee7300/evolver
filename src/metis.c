@@ -17,36 +17,38 @@
 #include "include.h"
 
 #ifndef METIS
-void metis_partition(parts,algorithm)
-int parts;
-int algorithm; /* METIS_ or KMETIS_ */
+  void metis_partition(
+  int parts,
+  int algorithm /* METIS_ or KMETIS_ */
+)
 { kb_error(1623,"This Evolver not compiled with METIS library.\n",RECOVERABLE);
 
 }
-void metis_partition_dual(parts,algorithm)
-int parts;
-int algorithm; /* METIS_ or KMETIS_ */
+void metis_partition_dual(
+  int parts,
+  int algorithm /* METIS_ or KMETIS_ */
+)
 { kb_error(1624,"This Evolver not compiled with METIS library.\n",RECOVERABLE);
 
 }
-void metis_partition_body(parts,algorithm)
-int parts;
-int algorithm; /* METIS_ or KMETIS_ */
+void metis_partition_body(
+  int parts,
+  int algorithm /* METIS_ or KMETIS_ */
+)
 { kb_error(3778,"This Evolver not compiled with METIS library.\n",RECOVERABLE);
 
 }
-void metis_order(S)
-struct linsys *S;
+void metis_order(struct linsys *S)
 { kb_error(1625,"This Evolver not compiled with METIS library.\n",RECOVERABLE);
 
 }
-void metis_vertex_order(parts)
-int parts;
+void metis_vertex_order(int parts)
 { kb_error(1626,"This Evolver not compiled with METIS library.\n",RECOVERABLE);
 }
-void metis_partition_plain(parts,algorithm)
-int parts;
-int algorithm; /* METIS_ or KMETIS_ */
+void metis_partition_plain(
+  int parts,
+  int algorithm /* METIS_ or KMETIS_ */
+)
 { kb_error(6345,"This Evolver not compiled with METIS library.\n",RECOVERABLE);
 }
 #else
@@ -62,9 +64,10 @@ int algorithm; /* METIS_ or KMETIS_ */
 *          graph to metis.  Only does end-edge vertices.  Leaves
 *          partition number in vertex attribute vpart.
 */
-void metis_partition_plain(parts,algorithm)
-int parts;
-int algorithm; /* METIS_ or KMETIS_ */
+void metis_partition_plain(
+  int parts,
+  int algorithm /* METIS_ or KMETIS_ */
+)
 {
   int i;
   GraphType graph;
@@ -74,6 +77,11 @@ int algorithm; /* METIS_ or KMETIS_ */
   int j,k;
   int vpart;
   int weightflag = 0;
+
+  if ( parts <= 1 )
+  { sprintf(errmsg,"metis called with %d parts; must be at least 2 parts.\n",parts);
+    kb_error(6006,errmsg,RECOVERABLE);
+  }
 
   if ( web.representation == SIMPLEX )
      kb_error(1627,"Cannot do Metis on simplex model.\n",RECOVERABLE);
@@ -85,7 +93,7 @@ int algorithm; /* METIS_ or KMETIS_ */
   vpart = find_attribute(VERTEX,"vpart");
   if ( vpart < 0 ) 
   { int one = 1;
-    vpart = add_attribute(VERTEX,"vpart",INTEGER_TYPE,0,&one,1,NULL);
+    vpart = add_attribute(VERTEX,"vpart",INTEGER_TYPE,0,&one,1,NULL,MPI_NO_PROPAGATE);
   }
   k = 0;
   FOR_ALL_VERTICES(v_id)
@@ -141,9 +149,10 @@ int algorithm; /* METIS_ or KMETIS_ */
 *             For string model, treats vertices and edges as graph
 *             nodes.
 */
-void metis_partition_dual(parts,algorithm)
-int parts;
-int algorithm; /* METIS_ or KMETIS_ */
+void metis_partition_dual(
+  int parts,
+  int algorithm /* METIS_ or KMETIS_ */
+)
 {
   int i,k;
   GraphType graph;
@@ -174,7 +183,7 @@ int algorithm; /* METIS_ or KMETIS_ */
      epart = find_attribute(EDGE,"epart");
      if ( epart < 0 ) 
      { int one = 1;
-       epart = add_attribute(EDGE,"epart",INTEGER_TYPE,0,&one,1,NULL);
+       epart = add_attribute(EDGE,"epart",INTEGER_TYPE,0,&one,1,NULL,MPI_NO_PROPAGATE);
      }
 
      /* use partition attribute for contiguous numbering */
@@ -235,7 +244,7 @@ int algorithm; /* METIS_ or KMETIS_ */
      fpart = find_attribute(FACET,"fpart");
      if ( fpart < 0 ) 
      { int one = 1;
-       fpart = add_attribute(FACET,"fpart",INTEGER_TYPE,0,&one,1,NULL);
+       fpart = add_attribute(FACET,"fpart",INTEGER_TYPE,0,&one,1,NULL,MPI_NO_PROPAGATE);
      }
 
      /* use partition attribute to hold contiguous ordinals */
@@ -308,9 +317,11 @@ int adjcomp(struct bb_adj *a, struct bb_adj *b)
   if ( a->b2 > b->b2 ) return  1;
   return 0;
 }
-void metis_partition_body(parts,algorithm)
-int parts;
-int algorithm; /* METIS_ or KMETIS_ */
+
+void metis_partition_body(
+  int parts,
+  int algorithm /* METIS_MODE or KMETIS_MODE */
+)
 {
   int i,m;
   GraphType graph;
@@ -341,7 +352,7 @@ int algorithm; /* METIS_ or KMETIS_ */
   bpart = find_attribute(BODY,"bpart");
   if ( bpart < 0 ) 
   { int one = 1;
-    bpart = add_attribute(BODY,"bpart",INTEGER_TYPE,0,&one,1,NULL);
+    bpart = add_attribute(BODY,"bpart",INTEGER_TYPE,0,&one,1,NULL,MPI_NO_PROPAGATE);
   }
   
   /* get contiguous indexes for bodies */
@@ -448,8 +459,7 @@ int algorithm; /* METIS_ or KMETIS_ */
 *     Passes actual vertex-edge graph to metis.
 *     Just demo.
 */
-void metis_vertex_order(mmdswitch)
-int mmdswitch;  /* size of subgraph to stop at */
+void metis_vertex_order(int mmdswitch /* size of subgraph to stop at */)
 {
   int i;
   GraphType graph;
@@ -530,8 +540,7 @@ int mmdswitch;  /* size of subgraph to stop at */
 *          Passes actual vertex-edge graph to metis.
 *          Returns A_OFF-based permutation for ysmp.
 */
-void metis_order(S)
-struct linsys *S;  /* system to order */
+void metis_order(struct linsys *S /* system to order */)
 {
   int i,k;
   GraphType graph;
@@ -642,8 +651,7 @@ struct linsys *S;  /* system to order */
 *             dense in A, just the fill is.
 */
 
-void do_tree_factor(S)
-struct linsys *S;
+void do_tree_factor(struct linsys *S)
 { int me = GET_THREAD_ID;
   int spot; /* stree index */
   int blocks;
@@ -877,8 +885,7 @@ struct linsys *S;
 * purpose:  minimal degree factoring of system using tree decomp
 *
 */
-void tree_factor(S)
-struct linsys *S;
+void tree_factor(struct linsys *S)
 { 
 
   if ( S->N <= 0 )
@@ -944,8 +951,8 @@ struct linsys *S;
         sprintf(msg,"Critical path flops: %12.0f\n",(DOUBLE)critpath);
         outstring(msg);
      }
-     sprintf(msg,"Total fill: %d  Total flops(flop=mul+add): %g    Fillspace: %d\n",
-         fill,(DOUBLE)flops,fillspace);
+     sprintf(msg,"Total fill: %ld  Total flops(flop=mul+add): %g    Fillspace: %ld\n",
+         (long)fill,(DOUBLE)flops,(long)fillspace);
      outstring(msg);
   }
 }
@@ -960,10 +967,11 @@ struct linsys *S;
 *          NOT set up to run in parallel.
 *          Parallel would need U stored columnwise instead of rowwise.
 */
-void do_tree_solve(S,BB,Y)
-struct linsys *S;
-REAL *BB; /* incoming and outgoing */
-REAL *Y;  /* intermediate */
+void do_tree_solve(
+  struct linsys *S,
+  REAL *BB, /* incoming and outgoing */
+  REAL *Y  /* intermediate */
+)
 { SepNodeType *stree;
   int spot;
   int n;
@@ -1015,10 +1023,11 @@ REAL *Y;  /* intermediate */
 *
 */
 
-void tree_solve(S,B,x)
-struct linsys *S; /* factored system */
-REAL *B;    /* incoming right hand side */
-REAL *x;    /* solution, may be rhs */
+void tree_solve(
+  struct linsys *S, /* factored system */
+  REAL *B,    /* incoming right hand side */
+  REAL *x    /* solution, may be rhs */
+)
 {
   int n; /* row index */
   REAL *BB,*Y;
@@ -1049,11 +1058,12 @@ REAL *x;    /* solution, may be rhs */
 *
 */
 
-void tree_solve_multi(S,B,x,rk)
-struct linsys *S; /* factored system */
-REAL **B;    /* incoming right hand side */
-REAL **x;    /* solution, may be rhs */
-int rk;         /* number of right sides */
+void tree_solve_multi(
+  struct linsys *S, /* factored system */
+  REAL **B,    /* incoming right hand side */
+  REAL **x,    /* solution, may be rhs */
+  int rk         /* number of right sides */
+)
 {
   int k;
   for ( k = 0 ; k < rk ; k++ )
@@ -1067,8 +1077,7 @@ int rk;         /* number of right sides */
 * purpose: Try to reverse-engineer factor tree from order permutation.
 */
 
-void tree_analyze(S)
-struct linsys *S;
+void tree_analyze( struct linsys *S )
 { int k; /* end of block */
   int n; /* member of block */
 

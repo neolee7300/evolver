@@ -250,7 +250,14 @@ have_scale:
 
   if ( estimate_flag )
      {
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+        sprintf(msg,"Estimated energy change: %#*.*Qg\n",DWIDTH,DPREC,
+            estimate_decrease());
+        outstring(msg);
+        sprintf(msg,"Actual energy change   : %#*.*Qg\n",DWIDTH,DPREC,
+            web.total_energy-old_energy);
+        outstring(msg);
+#elif defined(LONGDOUBLE)
         sprintf(msg,"Estimated energy change: %#*.*Lg\n",DWIDTH,DPREC,
             estimate_decrease());
         outstring(msg);
@@ -266,7 +273,10 @@ have_scale:
 #endif
      }
 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+  sprintf(msg,"%3d. energy: %#*.*Qg  scale: %#Qg\n",gocount,DWIDTH,DPREC,
+                web.total_energy,web.scale);
+#elif defined(LONGDOUBLE)
   sprintf(msg,"%3d. energy: %#*.*Lg  scale: %#Lg\n",gocount,DWIDTH,DPREC,
                 web.total_energy,web.scale);
 #else
@@ -307,8 +317,9 @@ iterate_exit:
 *
 */
 
-void calc_all_grads(mode)
-int mode; /* bits for CALC_FORCE and CALC_VOLGRADS */
+void calc_all_grads(
+  int mode /* bits for CALC_FORCE and CALC_VOLGRADS */
+)
 { find_fixed();
  
 
@@ -347,8 +358,7 @@ int mode; /* bits for CALC_FORCE and CALC_VOLGRADS */
 *  end to original small value.
 */
 
-void burchard(maxsteps)
-int maxsteps;
+void burchard(int maxsteps)
 {
   REAL old_scale = web.scale;
   int old_motion_flag = web.motion_flag;
@@ -361,7 +371,7 @@ int maxsteps;
     }
   web.scale = old_scale;
   web.motion_flag = old_motion_flag;
-}
+} // end burchard()
 
 /***************************************************************
 *
@@ -455,14 +465,15 @@ void fix_vertices()
     {
       conmap_t * conmap = get_v_constraint_map(v_id);
       int oncount = 0;
-      struct constraint *con[MAXCONPER];
-      int conlist[MAXCONPER];
+      struct constraint *con[MAXCONHIT];
+      int conlist[MAXCONHIT];
       REAL perp[MAXCOORD];
 
       for ( j = 1 ; j <= (int)conmap[0] ; j++ )
       { 
         if ( conmap[j] & CON_HIT_BIT )
-        { conlist[oncount] = conmap[j] & CONMASK;
+        { if ( oncount >= web.sdim ) { oncount++; continue; }
+          conlist[oncount] = conmap[j] & CONMASK;
           con[oncount] = get_constraint(conmap[j]);
 /*          if ( !(con[oncount]->attr & (NONNEGATIVE|NONPOSITIVE) ) ) */
             oncount++;  
@@ -502,9 +513,10 @@ void fix_vertices()
 *
 *    Purpose: handle possible MPI invocation of local_move_vertices
 */
-void move_vertices(mode,scale)
-int mode; /* TEST_MOVE or ACTUAL_MOVE */
-REAL scale;
+void move_vertices(
+  int mode, /* TEST_MOVE or ACTUAL_MOVE */
+  REAL scale
+)
 {
   if ( itdebug )
     outstring("move_vertices(): by scale factor times velocity\n");
@@ -531,7 +543,8 @@ REAL scale;
 
   calc_energy();  /* energy after motion */
 
-}
+} // end move_vertices()
+
 /***************************************************************
 *
 *    Function: local_move_vertices()
@@ -544,9 +557,10 @@ REAL scale;
 
 REAL thread_scale; /* for passing scale argument to threads */
 
-void local_move_vertices(mode,scale)
-int mode; /* TEST_MOVE or ACTUAL_MOVE */
-REAL scale;
+void local_move_vertices(
+  int mode, /* TEST_MOVE or ACTUAL_MOVE */
+  REAL scale
+)
 {
   REAL *velocity;
   REAL *x;
@@ -556,7 +570,13 @@ REAL scale;
 
   if ( optparamcount > 0 )
   { for ( i = 0 ; i < optparamcount ; i++ )
-      globals(optparam[i].pnum)->value.real -= scale*optparam[i].velocity;
+    { struct global *g =  globals(optparam[i].pnum);
+      g->value.real -= scale*g->attr.varstuff.pscale*optparam[i].velocity;
+      if ( g->attr.varstuff.on_assign_call )
+      { struct  global *gg = globals(g->attr.varstuff.on_assign_call);
+        eval(&gg->value.proc,NULL,NULLID,NULL);
+      }
+    }
     project_all(0,TEST_MOVE);  /* force vertices to constraints */
   }
 
@@ -626,7 +646,7 @@ void thread_move_vertices()
     }
   }
  ) /* end of macro argument */
-}  
+}  // end thread_move_vertices()
 #endif
 /* THREADS */
 
@@ -637,9 +657,10 @@ void thread_move_vertices()
 * purpose: projection to all constraints and boundaries after moving.
 */
 
-void project_all(mode,mode2)
-int mode;  /* 1 for extensive constraints */
-int mode2; /* TEST_MOVE or ACTUAL_MOVE */
+void project_all(
+  int mode,  /* 1 for extensive constraints */
+  int mode2  /* TEST_MOVE or ACTUAL_MOVE */
+)
 { vertex_id v_id;
   int one_sided_mode = (mode2==TEST_MOVE) ? KEEP_ONESIDEDNESS : RESET_ONESIDEDNESS;
   /* project to constraints and boundaries */
@@ -653,7 +674,7 @@ int mode2; /* TEST_MOVE or ACTUAL_MOVE */
   }
   else
   FOR_ALL_VERTICES(v_id)
-  { int attr = get_vattr(v_id);
+  { ATTR attr = get_vattr(v_id);
     if ( attr & CONSTRAINT )
        project_v_constr(v_id,mode2,one_sided_mode);
     else if ( attr & BOUNDARY )
@@ -690,10 +711,10 @@ int mode2; /* TEST_MOVE or ACTUAL_MOVE */
         if ( itdebug ) printf("Diff increased. Restoring coords.\n");
         restore_coords(&psaved,SAVE_SEPARATE); 
         if ( diff > 100*old_diff )
-        { sprintf(msg,"Total constraint difference would increase by factor of %f.\nAborting constraint adjustment.\n",fabs(diff/old_diff) );
+        { sprintf(msg,"Total constraint difference would increase by factor of %f.\nAborting constraint adjustment.\n",(DOUBLE)fabs(diff/old_diff) );
           outstring(msg);
           break;
-        }
+        } 
        /*   calc_content(Q_FIXED); taken care of by restore_coords */
           stepsize *= 0.5;
       }
@@ -741,7 +762,7 @@ void thread_project_all(int mode2)
 { int one_sided_mode = (mode2==TEST_MOVE) ? KEEP_ONESIDEDNESS : RESET_ONESIDEDNESS;
   /* project to constraints and boundaries */ 
   THREAD_FOR_ALL_NEW(VERTEX,
-    { int attr = get_vattr(*idptr);
+    { ATTR attr = get_vattr(*idptr);
       if ( attr & CONSTRAINT )
          project_v_constr(*idptr,mode2,one_sided_mode);
       else if ( attr & BOUNDARY )
@@ -755,7 +776,7 @@ void thread_project_all(int mode2)
       }
     }
   ) /* end of THREAD_FOR_ALL macro  */
-}
+} // end thread_project_all()
 #endif
 /* THREADS */
 
@@ -766,10 +787,11 @@ void thread_project_all(int mode2)
 * Purpose: wrapper for local_save_coords()
 *   NOTE: relies on mode to determine where to save, rather than saver
 */
-void save_coords(saver,mode)
-struct oldcoord *saver;  
-int mode; /* SAVE_IN_ATTR if use vertex attribute __oldx  */
-          /* SAVE_SEPARATE for separate memory allocation */
+void save_coords(
+  struct oldcoord *saver,  
+  int mode  /* SAVE_IN_ATTR if use vertex attribute __oldx  */
+            /* SAVE_SEPARATE for separate memory allocation */
+)
 {
   #ifdef MPI_EVOLVER
   if ( this_task != 0 ) return;
@@ -778,7 +800,7 @@ int mode; /* SAVE_IN_ATTR if use vertex attribute __oldx  */
   local_save_coords(saver,mode);
   #endif
   
-}
+} // end save_coords()
 
 
 /****************************************************************
@@ -790,10 +812,11 @@ int mode; /* SAVE_IN_ATTR if use vertex attribute __oldx  */
 *
 */
 
-void local_save_coords(saver,mode)
-struct oldcoord *saver;  
-int mode; /* SAVE_IN_ATTR if use vertex attribute __oldx  */
+void local_save_coords(
+  struct oldcoord *saver, 
+  int mode  /* SAVE_IN_ATTR if use vertex attribute __oldx  */
           /* SAVE_SEPARATE for separate memory allocation */
+)
 {
   vertex_id v_id;
   body_id b_id;
@@ -844,7 +867,8 @@ int mode; /* SAVE_IN_ATTR if use vertex attribute __oldx  */
      saver->meth[n] = METH_INSTANCE(n)->value;
   saver->quant = (REAL*)temp_calloc(gen_quant_count,2*sizeof(REAL));
   for ( n = 0 ; n < gen_quant_count ; n++ )
-  { saver->quant[2*n] = GEN_QUANT(n)->value;
+  { 
+    saver->quant[2*n] = GEN_QUANT(n)->value;
     saver->quant[2*n+1] = GEN_QUANT(n)->pressure;
   }
 
@@ -861,9 +885,10 @@ int mode; /* SAVE_IN_ATTR if use vertex attribute __oldx  */
 *  Purpose: wrapper for local_restore_coords()
 *
 */
-void restore_coords(saver,mode)
-struct oldcoord *saver;
-int mode;
+void restore_coords(
+  struct oldcoord *saver,
+  int mode
+)
 {
   #ifdef MPI_EVOLVER
   if ( this_task != 0 ) return;
@@ -871,7 +896,7 @@ int mode;
   #else
   local_restore_coords(saver,mode);
   #endif
-}
+} // end restore_coords()
 
 /****************************************************************
 *
@@ -881,9 +906,10 @@ int mode;
 *
 */
 
-void local_restore_coords(saver,mode)
-struct oldcoord *saver;
-int mode;
+void local_restore_coords(
+  struct oldcoord *saver,
+  int mode
+)
 {
   vertex_id v_id;
   body_id b_id;
@@ -898,7 +924,13 @@ int mode;
 
   /* restore optimizing parameters */
   for ( n = 0 ; n < optparamcount ; n++ )
-     globals(optparam[n].pnum)->value.real = saver->optparam_values[n];
+  {  struct global *g = globals(optparam[n].pnum);
+     g->value.real = saver->optparam_values[n];
+     if ( g->attr.varstuff.on_assign_call )
+     { struct  global *gg = globals(g->attr.varstuff.on_assign_call);
+       eval(&gg->value.proc,NULL,NULLID,NULL);
+     }
+  }
 
   FOR_ALL_VERTICES(v_id)
      restore_vertex(v_id,saver,mode);
@@ -928,10 +960,11 @@ int mode;
 *  Purpose:  Put a vertex back where it was.
 */
 
-void restore_vertex(v_id,saver,mode)
-vertex_id v_id;
-struct oldcoord *saver;
-int mode; /* whether to use _oldx */
+void restore_vertex(
+  vertex_id v_id,
+  struct oldcoord *saver,
+  int mode /* whether to use _oldx */
+)
 {
   int i;
   REAL *p,*x;
@@ -967,9 +1000,10 @@ int mode; /* whether to use _oldx */
 *  Purpose: wrapper for local_unsave_coords()
 *
 */
-void unsave_coords(saver,mode)
-struct oldcoord *saver;
-int mode;
+void unsave_coords(
+  struct oldcoord *saver,
+  int mode
+)
 {
   #ifdef MPI_EVOLVER
   if ( this_task != 0 ) return;
@@ -977,7 +1011,8 @@ int mode;
   #else
   local_unsave_coords(saver,mode);
   #endif
-}
+} // end unsave_coords()
+
 /********************************************************************
 *
 *  Function: local_unsave_coords()
@@ -985,9 +1020,10 @@ int mode;
 *  Purpose: Clean up after all trial motions done.
 */
 
-void local_unsave_coords(saver,mode)
-struct oldcoord *saver;
-int mode;
+void local_unsave_coords(
+struct oldcoord *saver,
+int mode
+)
 {
     if ( saver->coord )
       temp_free( (char *)saver->coord );
@@ -1002,7 +1038,7 @@ int mode;
       temp_free( (char *)saver->meth );
     saver->meth = NULL;
   
-}
+} // end local_unsave_coords()
 
 
 /****************************************************************
@@ -1026,7 +1062,7 @@ void jiggle()
   int j;
 
   if ( web.max_len == 0.0 ) web.max_len = .1;
-  if ( overall_size == 0.0 ) overall_size = 1.0;
+  if ( overall_size <= 0.0 ) resize();
   FOR_ALL_VERTICES(v_id)
      { if ( get_vattr(v_id) & FIXED ) continue;
         x = get_coord(v_id);
@@ -1034,7 +1070,7 @@ void jiggle()
           x[j] += gaussian()*web.temperature*web.max_len*overall_size;
      }
   outstring("One jiggle done.\n");
-}
+} // end jiggle()
 
 
 /****************************************************************
@@ -1065,9 +1101,14 @@ void long_jiggle()
   REAL *x;
   char response[100];
 
+  if ( overall_size <= 0 ) resize();
+  if ( overall_size <= 0 ) return;
+
   /* get wave vector */
 get_wv:
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+  sprintf(msg,"Enter wave vector (%Qf,%Qf,%Qf;r): ",wavev[0],wavev[1],wavev[2]);
+#elif defined(LONGDOUBLE)
   sprintf(msg,"Enter wave vector (%Lf,%Lf,%Lf;r): ",wavev[0],wavev[1],wavev[2]);
 #else
   sprintf(msg,"Enter wave vector (%f,%f,%f;r): ",wavev[0],wavev[1],wavev[2]);
@@ -1171,7 +1212,7 @@ REAL gaussian()
 
   for ( k = 0 ; k < 5 ; k++ ) sum += (REAL)(rand()&0x7FFF);
   return (sum/0x7FFFL - 2.5)/5*sqrt(12.0/5);
-}
+} // end gaussian()
 
 
 /***************************************************************
@@ -1201,7 +1242,7 @@ REAL estimate_decrease()
   estimated_change = -change;  /* for estimated_change internal variable */
   return -change;  /* negative since forces are opposite gradients */
   
-}
+} // end estimate_decrease()
 
 /**************************************************************************
 *
@@ -1275,7 +1316,7 @@ void homothety()
   {  x = get_coord(v_id);
      for ( i = 0 ; i < SDIM ; i++ ) x[i] *= scale;
   }
-}
+} // end homothety()
 
 /***********************************************************************
 *
@@ -1353,7 +1394,7 @@ REAL ribiere_calc()
     for ( i = 0 ; i < SDIM ; i++ ) g[i] = f[i]; 
   }
   return rsum;
-}
+} // end ribiere_calc()
 
 /**************************************************************************
 *
@@ -1371,7 +1412,7 @@ REAL cg_sum_calc()
     sum += SDIM_dot(v,f);
   }
   return sum;
-}
+} // end cg_sum_calc()
 
 /***********************************************************************
 *
@@ -1395,7 +1436,7 @@ void cg_direction()
   { optparam[i].grad += cg_gamma*optparam[i].cg;
     optparam[i].cg = optparam[i].grad;
   }
-}
+} // end cg_direction()
 
 /**********************************************************************
 *
@@ -1422,7 +1463,7 @@ void cg_direction_local()
     for ( i = 0 ; i < SDIM ; i++ )
       h[i] = v[i] += cg_gamma*h[i];
   }
-}
+} // end cg_direction_local()
 
 /**********************************************************************
 *
@@ -1442,7 +1483,7 @@ void cg_restart()
    }
 #endif
    { myfree((char *)cg_hvector); cg_hvector = NULL; cg_oldsum = 0.0;}
-}
+} // end cg_restart()
 
 /*********************************************************************
 *
@@ -1660,8 +1701,9 @@ void apply_h_inverse_metric()
 *
 *    Purpose: wrapper for local_convert_forms_to_vectors()
 */
-void convert_forms_to_vectors(mode)
-int mode; /* bits for CALC_FORCE and CALC_VOLGRADS */
+void convert_forms_to_vectors(
+  int mode /* bits for CALC_FORCE and CALC_VOLGRADS */
+)
 {
   if ( itdebug ) 
   { sprintf(msg,"convert_forms_to_vectors(%s %s)\n",
@@ -1675,7 +1717,7 @@ int mode; /* bits for CALC_FORCE and CALC_VOLGRADS */
   #else
   local_convert_forms_to_vectors(mode);
   #endif
-}
+} // end convert_forms_to_vectors()
 
 /***************************************************************
 *
@@ -1687,8 +1729,9 @@ int mode; /* bits for CALC_FORCE and CALC_VOLGRADS */
 *
 */
 
-void local_convert_forms_to_vectors(mode)
-int mode; /* bits for CALC_FORCE and CALC_VOLGRADS */
+void local_convert_forms_to_vectors(
+   int mode /* bits for CALC_FORCE and CALC_VOLGRADS */
+   )
 {
   vertex_id v_id;
   REAL *force,*velocity;
@@ -1903,7 +1946,6 @@ int mode; /* bits for CALC_FORCE and CALC_VOLGRADS */
                  }
                  while ( !equal_id(e_id,start_e) );
                }
-               set_vertex_star(v_id,star_fraction*area);
              }
              else if ( effective_area_flag && (web.representation == SOAPFILM) )
              { /* crude correction for triple edges and tetra points */
@@ -2094,8 +2136,8 @@ int mode; /* bits for CALC_FORCE and CALC_VOLGRADS */
         if ( (attr & CONSTRAINT) && (!check_pinning_flag || (attr & PINNED_V)) )
         { conmap_t * conmap = get_v_constraint_map(v_id);
           int oncount = 0;
-          struct constraint *con[MAXCONPER];
-          int conlist[MAXCONPER];
+          struct constraint *con[MAXCONHIT];
+          int conlist[MAXCONHIT];
           REAL perp[MAXCOORD];
           int one_sided_flag = 0;
 
@@ -2106,6 +2148,7 @@ int mode; /* bits for CALC_FORCE and CALC_VOLGRADS */
               if ( con[oncount]->attr & (NONPOSITIVE|NONNEGATIVE) )
                 one_sided_flag = 1;
               oncount++; 
+              if ( oncount > SDIM ) break;
             }
           }
 
@@ -2176,8 +2219,8 @@ int mode; /* bits for CALC_FORCE and CALC_VOLGRADS */
 
   /* project to parameter space for boundary points */   
   if ( (mode & CALC_FORCE) && web.bdrymax )
-   FOR_ALL_VERTICES(v_id)
-   {
+  { FOR_ALL_VERTICES(v_id)
+    {
      int pcount;
      REAL *v = get_velocity(v_id);
      REAL tmp[MAXCOORD];
@@ -2194,8 +2237,12 @@ int mode; /* bits for CALC_FORCE and CALC_VOLGRADS */
      for ( m = 0 ; m < pcount ; m++ ) v[m] = tmp[m];
      for ( m = pcount ; m < SDIM ; m++ ) v[m] = 0.0;    
    }
+  }
 
-  /* for debugging, transfer volgrads to vertex attribute */
+  /* For debugging, transfer volgrads to vertex attribute,
+     if the user has defined __volgrad and __volvelocity 
+     vertex attributes.
+  */
   vgrad_attr = find_extra("__volgrad",&eltype);
   vvelocity_attr = find_extra("__volvelocity",&eltype);
   if ( (vgrad_attr >= 0) || (vvelocity_attr >= 0) )

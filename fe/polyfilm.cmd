@@ -29,13 +29,17 @@ do_off := { printf "OFF\n%g %g %g\n",vertex_count,facet_count,edge_count;
 }  // end do_off
 
 // vect-like file command for triple lines
-traa := { trcount ::= sum(edges where valence==3,1)}
 trbb := { foreach edge ee where ee.valence==3 do 
           { foreach ee.vertex vv do printf "%f %f %f  ",x,y,z ;
 		    printf "\n";
           } 
 }
-trips := { printf "TRIPLE\n"; traa; printf "%g\n",trcount; trbb }
+trips := { printf "TRIPLE\n"; printf "%g\n",sum(edges where valence==3,1); trbb }
 
 polyfilm := {do_off; trips}
+
+
+// End polyfilm.cmd
+
+// Usage: polyfilm >>> "filename.poly"
 

@@ -1,14 +1,13 @@
 // CMCcousin.cmd
 
-// Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
-
 // A constant mean curvature surface in R^3 has a "cousin" minimal
 // surface in S^3, which is isometric to it and has tangent planes
 // rotated by 90 degrees.  In S^3, the translation is done through
 // the quaternion group.
 
 // This representation uses the 4th coordinate as the quaternion
-// scalar component, for better mapping between R^3 and S^3 at quaternion unit.
+// scalar component, for better mapping between R^3 and S^3 at 
+// quaternion unit.
 
 // Datafiles should be set up in 4 dimensions, with S^3 implemented as
 // level set constraint x^2 + y^2 + z^2 + w^2 = 1
@@ -33,6 +32,10 @@ define edge attribute enewx real [4];
 // Angle of Bonnet rotation, degrees
 bangle := 90
 
+if space_dimension != 4 then
+{ errprintf "\nERROR: CMCcousin.cmd requires the ambient space to have 4 dimensions.\n";
+  abort;
+}
 
 // unit normal of S^3 facet
 define s3points real[3][4]  // input
@@ -376,7 +379,7 @@ calc_r3_to_s3 := {
 
 s3_to_r3 := { 
    foreach vertex vv do
-     if vv.__v_constraint_list[1] != 0 then
+     if vv.v_constraint_list[1] != 0 then
      { errprintf "s3_to_r3 error: vertex %d is still on a constraint.\n",
          vv.id;
        return;
@@ -390,7 +393,7 @@ s3_to_r3 := {
 
 r3_to_s3 := { 
    foreach vertex vv do
-     if vv.__v_constraint_list[1] != 0 then
+     if vv.v_constraint_list[1] != 0 then
      { errprintf "s3_to_r3 error: vertex %d is still on a constraint.\n",
          vv.id;
        return;
@@ -421,4 +424,11 @@ procedure centralize ( integer v_id ) {
     vv.w := aw*vw + ax*vx + ay*vy + az*vz;
   };
 }
+
+
+// End cmccousin.cmd
+// Usage:
+//   s3_to_r3     Convert from S^3 to R^3
+//   r3_to_s3     Convert from R^3 to S^3
+
 

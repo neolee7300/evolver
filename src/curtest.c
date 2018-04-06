@@ -83,7 +83,7 @@ void curtest()
   sprintf(msg,"Mixed curvature facets:     %6d\n\n",facettally[1]);
      outstring(msg);
 
-}
+} // end curtest()
 
 /*******************************************************************
 *
@@ -104,9 +104,11 @@ REAL uu[4] = {0.0, 0.7, 1.3, 2.0};  /* parameter along edge, 0 < u < 2 */
 /* coefficients for finding polynomial coefficients */
 REAL b1 = 0.3, b2 = 0.09, b3 = 0.027, denom = 1.0/(1 - 0.09);
 
-int curtest_edge(e_id,fe_1,fe_2)
-edge_id e_id;    /* the edge */
-facetedge_id fe_1,fe_2;    /* link edge with facets */ 
+int curtest_edge(
+  edge_id e_id,    /* the edge */
+  facetedge_id fe_1,  /* link edge with facets */
+  facetedge_id fe_2   
+)
 {
   REAL *x[2][FACET_CTRL];  /* pointers to sets of vertices, starting along edge */
   REAL h[4];        /* values of curvature polynomial */
@@ -174,7 +176,7 @@ facetedge_id fe_1,fe_2;    /* link edge with facets */
      }
 
   return sign;
-}
+} // end curtest_edge()
 
 /*******************************************************************
 *
@@ -188,8 +190,7 @@ facetedge_id fe_1,fe_2;    /* link edge with facets */
 *                  0 otherwise
 */
 
-int curtest_facet(f_id)
-facet_id f_id;
+int curtest_facet(facet_id f_id)
 {
   REAL *x[FACET_CTRL];  /* pointers to coordinates */
   facetedge_id fe;
@@ -259,4 +260,4 @@ facet_id f_id;
          }
 
   return sign;
-}
+} // end curtest_facet()

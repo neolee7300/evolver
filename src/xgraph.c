@@ -75,7 +75,7 @@ unsigned long pixel_values[256];
 #define NOT_ALLOC 0xFFA93871
 static int White,Black;  /* color indices in default colormap */ 
 
-unsigned long get_a_color ARGS((int,int));
+unsigned long get_a_color (int,int);
 
 unsigned long get_a_color(c,g)
 int c;    /* color, 0-15 */
@@ -105,57 +105,58 @@ void init_xgraph()
   int g;
   int waiting_for_window = 0;
 
-  if ( init_flag == 0 ) {
-        waiting_for_window = 1;
-        init_flag = 1;
-        event.type = 0;
+  if ( init_flag == 0 ) 
+  {
+    waiting_for_window = 1;
+    init_flag = 1;
+    event.type = 0;
 
-        for ( g = 0 ; g < 256 ; g++ ) pixel_values[g] = NOT_ALLOC;
+    for ( g = 0 ; g < 256 ; g++ ) pixel_values[g] = NOT_ALLOC;
 
-        dpy = XOpenDisplay("");
-        if (dpy == NULL)
-          kb_error(2213,"Unable to open X display.\n", RECOVERABLE);
-        screen = XDefaultScreenOfDisplay(dpy);
-        if (screen == NULL)
-          kb_error(2214,"Unable to get default screen of X display.\n", RECOVERABLE);
-        rootwin = XRootWindowOfScreen(screen);
-        if (rootwin == 0)
-          kb_error(2215,"X display: Unable to get root window of screen.\n", RECOVERABLE);
-        win = XCreateSimpleWindow(dpy, rootwin, 0, 0, 500, 500, 1,
-                                  WhitePixelOfScreen(screen),
-                                  BlackPixelOfScreen(screen));
-        if (win == 0)
-          kb_error(2216,"X display: Unable to create window\n", RECOVERABLE);
+    dpy = XOpenDisplay("");
+    if (dpy == NULL)
+      kb_error(2213,"Unable to open X display.\n", RECOVERABLE);
+    screen = XDefaultScreenOfDisplay(dpy);
+    if (screen == NULL)
+      kb_error(2214,"Unable to get default screen of X display.\n", RECOVERABLE);
+    rootwin = XRootWindowOfScreen(screen);
+    if (rootwin == 0)
+      kb_error(2215,"X display: Unable to get root window of screen.\n", RECOVERABLE);
+    win = XCreateSimpleWindow(dpy, rootwin, 0, 0, 500, 500, 1,
+                              WhitePixelOfScreen(screen),
+                              BlackPixelOfScreen(screen));
+    if (win == 0)
+      kb_error(2216,"X display: Unable to create window\n", RECOVERABLE);
 
-        cmap = DefaultColormap(dpy,/*XScreenNumberOfScreen(screen)*/0);
+    cmap = DefaultColormap(dpy,/*XScreenNumberOfScreen(screen)*/0);
 
-        XSelectInput(dpy, win, StructureNotifyMask);
+    XSelectInput(dpy, win, StructureNotifyMask);
 
-        XMapRaised(dpy, win);
+    XMapRaised(dpy, win);
 
-        White = WhitePixelOfScreen(screen);
-        Black = BlackPixelOfScreen(screen);
-        gcv.line_width = 0;
+    White = WhitePixelOfScreen(screen);
+    Black = BlackPixelOfScreen(screen);
+    gcv.line_width = 0;
 
-        gc = XCreateGC(dpy, win, GCForeground|GCLineWidth, &gcv);
+    gc = XCreateGC(dpy, win, GCForeground|GCLineWidth, &gcv);
 
-        /* wait for window to appear */
-        XFlush(dpy);
-        while ( event.type != MapNotify ) {
-          XNextEvent(dpy, &event);
-          switch(event.type) {
-          case ConfigureNotify:
-             maxx = event.xconfigure.width;
-             maxy = event.xconfigure.height;
-             xscale = (maxx<maxy?maxx:maxy)/3;
-             yscale = xscale;
-             waiting_for_window = 0;
-             break;
-          default:
-             break;
-          }
-         }
-        }
+    /* wait for window to appear */
+    XFlush(dpy);
+    while ( event.type != MapNotify ) {
+      XNextEvent(dpy, &event);
+      switch(event.type) {
+      case ConfigureNotify:
+         maxx = event.xconfigure.width;
+         maxy = event.xconfigure.height;
+         xscale = (maxx<maxy?maxx:maxy)/3;
+         yscale = xscale;
+         waiting_for_window = 0;
+         break;
+      default:
+         break;
+      }
+     }
+   }
 
   /*  Note: X events are only handled each time we get here.    This is not
         the best situation, but without trying to modify the command parser
@@ -187,7 +188,9 @@ void init_xgraph()
   }
 
   /* clear window */
-     XSetWindowBackground(dpy, win, get_a_color(background_color,MAXGRAY));
+  if ( background_color == -1 )
+    background_color = WHITE;
+  XSetWindowBackground(dpy, win, get_a_color(background_color,MAXGRAY));
   XClearWindow(dpy,win);
 }
 

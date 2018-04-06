@@ -42,7 +42,7 @@ function integer vertex_hash_add(real xx, real yy, real zz)
   local vnum,dist;
 
   hashval := floor((mskew1*xx + mskew2*yy + mskew3*zz)/eps);
-  hashspot := hashval imod vertex_hash_table_size;
+  hashspot := (hashval imod vertex_hash_table_size) + 1;
 
   // See if there
   for ( vnum := vertex_hash_table[hashspot] ; vnum != 0 ;
@@ -97,7 +97,7 @@ function integer edge_hash_add(integer tailv, integer headv)
   else signflag := 1;
 
   hashval := tailv*737 + headv;
-  hashspot := hashval imod edge_hash_table_size;
+  hashspot := (hashval imod edge_hash_table_size)+1;
 
   // See if there
   for ( edgenum := edge_hash_table[hashspot] ; edgenum != 0 ;

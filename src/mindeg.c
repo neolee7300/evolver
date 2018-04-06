@@ -115,29 +115,28 @@ int *xJL;  /* lists of rows to be added to uneliminated rows:
                   i < K => xJL(i) is row following row i in some list of rows.
                   xJL(i) = -1 indicates end of list */ 
 
-int md_alloc ARGS((struct linsys *, int));
-int region_alloc ARGS((struct linsys *));
-int supernode_compare ARGS((struct supernode **,struct supernode **));
-int degree_compare ARGS((struct supernode *,struct supernode *));
-void do_region_absorb ARGS((struct linsys *,int,int));
-int exact_degree ARGS((struct linsys *,struct supernode *));
-int exact_sdegree ARGS((struct linsys *,struct supernode *));
-void  traverse_recur ARGS((struct linsys *,struct region *,int*,int*));
-void  permute_recur ARGS((struct linsys *,struct region *));
-void  factor_recur ARGS((struct linsys *,struct region *));
-void  sparse_permute ARGS((struct linsys *));
-void md_vertex_setup ARGS((struct linsys *));
-void md_supernode_setup ARGS((struct linsys *));
-void md_region_string ARGS((struct linsys *));
-void md_supernode_regions ARGS((struct linsys *));
-void degree_sort ARGS((struct linsys *));
-void multiple_eliminate ARGS((struct linsys *));
-void region_absorb ARGS((struct linsys *));
-void clean_supernodes ARGS((struct linsys *));
-void merge_supernodes ARGS((struct linsys *));
-void traverse_region_tree ARGS((struct linsys *));
-void mass_eliminate ARGS((struct linsys *,struct supernode*));
-void show_mindeg_state ARGS((struct linsys *));
+int md_alloc(struct linsys *, int);
+int region_alloc(struct linsys *);
+int supernode_compare(struct supernode **,struct supernode **);
+int degree_compare(struct supernode *,struct supernode *);
+void do_region_absorb(struct linsys *,int,int);
+int exact_degree(struct linsys *,struct supernode *);
+int exact_sdegree(struct linsys *,struct supernode *);
+void traverse_recur(struct linsys *,struct region *,int*,int*);
+void permute_recur(struct linsys *,struct region *);
+void factor_recur(struct linsys *,struct region *);
+void md_vertex_setup(struct linsys *);
+void md_supernode_setup(struct linsys *);
+void md_region_string(struct linsys *);
+void md_supernode_regions(struct linsys *);
+void degree_sort(struct linsys *);
+void multiple_eliminate(struct linsys *);
+void region_absorb(struct linsys *);
+void clean_supernodes(struct linsys *);
+void merge_supernodes(struct linsys *);
+void traverse_region_tree(struct linsys *);
+void mass_eliminate(struct linsys *,struct supernode*);
+void show_mindeg_state(struct linsys *);
 
 struct supernode **superheap;  /* for heap ordering */
 static int heapcount;  /* how many in heap */
@@ -151,8 +150,7 @@ static struct supernode sentinel;
  *          Sets all edges between non-eliminated vertices to red,
  *          others to black.  Pauses for user response.
  */
-void show_mindeg_state(S)
-struct linsys *S;
+void show_mindeg_state(struct linsys *S)
 { char *marks;  /* unelim node numbers */
   edge_id e_id;
   int j;
@@ -186,7 +184,7 @@ struct linsys *S;
   sprintf(msg,"Elimcount %d of %d;  regions %d\n",elim_count,S->N,rcount);
   prompt(msg,errmsg,100);
   temp_free(marks);
-}
+} // end show_mindeg_state()
 
 
 /*****************************************************************************
@@ -198,9 +196,10 @@ struct linsys *S;
 *          User must allocate ISP and set NSP before first call.
 * return:  offset from start
 */
-int md_alloc(S,bytes)
-struct linsys *S;
-int bytes; /* bytes wanted */
+int md_alloc(
+  struct linsys *S,
+  int bytes /* bytes wanted */
+)
 { int spot; 
   int size; /* in ints */
 
@@ -213,7 +212,8 @@ int bytes; /* bytes wanted */
   spot = S->ISP[0] + 1;
   S->ISP[0] += size;
   return spot;
-}
+} // end md_alloc()
+
 /***************************************************************************
 *
 * function: region_alloc()
@@ -221,8 +221,7 @@ int bytes; /* bytes wanted */
 * purpose: allocate new region structure in workspace
 *
 */
-int region_alloc(S)
-struct linsys *S;
+int region_alloc(struct linsys *S)
 { int spot;
   struct region *r;
 
@@ -236,7 +235,7 @@ struct linsys *S;
   r->son = -1;
   last_region = spot;
   return spot;
-}
+} // end region_alloc()
 
 /*****************************************************************************
 *
@@ -247,8 +246,7 @@ struct linsys *S;
 *             
 */
  
-void md_vertex_setup(S)
-struct linsys *S;
+void md_vertex_setup(struct linsys *S)
 { int i,k;
   struct hess_verlist *vh;
   vertex_id v_id;
@@ -276,13 +274,15 @@ struct linsys *S;
       }
     }
     for ( i=0 ; i < gen_quant_count ; i++ )
-    { vh = vhead + GEN_QUANT(i)->vhead_index;
+    { 
+      if ( GEN_QUANT(i)->flags & Q_DELETED ) continue;
+      vh = vhead + GEN_QUANT(i)->vhead_index;
       if ( vh->freedom )
         vlist[vh->rownum].newspot =  vh - vhead;
     }
   }
 
-}
+} // end md_vertex_setup()
 
 /*****************************************************************************
 *
@@ -291,8 +291,7 @@ struct linsys *S;
 * purpose: initialize region list with one region per edge, 
 */
 
-void md_region_string(S)
-struct linsys *S;
+void md_region_string(struct linsys *S)
 { int j,k,p,q;
   size_t n1,n2;
   int rcount;
@@ -436,7 +435,7 @@ struct linsys *S;
   }
 
   temp_free(entrymark);
-}
+} // end md_region_string()
 
 /*****************************************************************************
 *
@@ -447,8 +446,7 @@ struct linsys *S;
 */
 
 #ifdef FACETREGIONS
-void md_region_soapfilm(S)
-struct linsys *S;
+void md_region_soapfilm(struct linsys *S)
 { int i,j,k,n;
   int ecount;
   struct md_vertex *v;
@@ -462,8 +460,7 @@ struct linsys *S;
 *
 * purpose: set up lists of regions per supernode
 */
-void md_supernode_regions(S)
-struct linsys *S;
+void md_supernode_regions(struct linsys *S)
 { int k,rnum,snum;
   struct region *r;
   struct supernode *s;
@@ -487,7 +484,7 @@ struct linsys *S;
       INT(s->rlist)[s->rcount++] = rnum;
     } 
   }
-}
+} // end md_supernode_regions()
 
 /***************************************************************************
 *
@@ -497,8 +494,7 @@ struct linsys *S;
 */
 int supercount;
 
-void md_supernode_setup(S)
-struct linsys *S;
+void md_supernode_setup(struct linsys *S)
 { int n,i,j;
   struct supernode *s;
   int vhead_hi;
@@ -600,7 +596,7 @@ struct linsys *S;
   slist[0].prev = -1;
   slist[supercount-1].next = -1;
   superstart = 0;
-}
+} // end md_supernode_setup()
 
 /****************************************************************************
 *
@@ -608,8 +604,7 @@ struct linsys *S;
 *
 * purpose: eliminate merged regions from supernode region lists
 */
-void clean_supernodes(S)
-struct linsys *S;
+void clean_supernodes(struct linsys *S)
 { struct supernode *s;
   int i,j,k,m;
   int n;
@@ -633,7 +628,7 @@ struct linsys *S;
     }
     s->rcount = j;
   }
-}
+} // end clean_supernodes()
 
 /****************************************************************************
 *
@@ -643,8 +638,10 @@ struct linsys *S;
 * return  -1 for a < b, 0 for a == b, 1 for a > b
 */
 struct linsys *SSS;  /* for communication with compare routine */
-int supernode_compare(aa,bb)
-struct supernode **aa,**bb;
+int supernode_compare(
+  struct supernode **aa,
+  struct supernode **bb
+)
 { int k;
   struct linsys *S;
   struct supernode *a = *aa, *b = *bb;
@@ -656,7 +653,7 @@ struct supernode **aa,**bb;
      if ( INT(a->rlist)[k] > INT(b->rlist)[k] ) return  1;
   }
   return 0;
-}
+} // end int supernode_compare()
 
 /****************************************************************************
 *
@@ -664,8 +661,7 @@ struct supernode **aa,**bb;
 *
 * purpose: merge supernodes with same regions
 */
-void merge_supernodes(S)
-struct linsys *S;
+void merge_supernodes(struct linsys *S)
 {
   struct supernode **sslist,*s,*ss;
   int n,k,j,i;
@@ -691,7 +687,8 @@ struct linsys *S;
     { /* merge */
       ss = sslist[n];
       if ( mindeg_debug_level > 7 )
-        printf("Merging supernode %d into %d.\n",ss-slist,s-slist);
+        printf("Merging supernode %ld into %ld.\n",(long)(ss-slist),
+            (long)(s-slist));
       newverlist = md_alloc(S,(s->vercount+ss->vercount)*sizeof(int));
       memcpy(CHAR(newverlist),CHAR(s->verlist),s->vercount*sizeof(int));
       memcpy(CHAR(newverlist+s->vercount),CHAR(ss->verlist),
@@ -723,7 +720,7 @@ struct linsys *S;
     }
   }
   temp_free((char*)sslist);
-}
+} // end merge_supernodes()
 
 /****************************************************************************
 *
@@ -732,9 +729,11 @@ struct linsys *S;
 * purpose: absorb one region into another
 *
 */
-void do_region_absorb(S,keeper,goner)
-struct linsys *S;
-int keeper,goner; /* the regions */
+void do_region_absorb(
+  struct linsys *S,
+  int keeper, /* the regions */
+  int goner
+)
 { int n;
   struct region *rk = REG(keeper),*rg = REG(goner);
 
@@ -749,7 +748,7 @@ int keeper,goner; /* the regions */
   rg->BROTHER = rk->son;
   rk->son = goner;
 /*  rg->size = rg->vercount; */
-}
+} // end do_region_absorb()
 
 /****************************************************************************
 *
@@ -759,8 +758,7 @@ int keeper,goner; /* the regions */
 *
 */
 
-void region_absorb(S)
-struct linsys *S;
+void region_absorb(struct linsys *S)
 { int i,j,k;
   struct region *r;
   struct supernode *s;
@@ -800,7 +798,7 @@ struct linsys *S;
   }
   if ( mindeg_debug_level > 1 ) 
       printf("Absorbed %d; max size %d\n",absorbcount,maxab);
-}
+} // end  region_absorb()
 
 /****************************************************************************
 *
@@ -809,8 +807,10 @@ struct linsys *S;
 * purpose: compare supernode degrees, breaking ties by verlist spot.
 */
 
-int degree_compare(s1,s2)
-struct supernode *s1,*s2;
+int degree_compare(
+  struct supernode *s1,
+  struct supernode *s2
+)
 { int diff = s1->degree - s2->degree;
 
   if ( s1->flag & MD_AUG_CON )
@@ -822,7 +822,7 @@ struct supernode *s1,*s2;
   if ( diff ) return diff;
   return (s1->height < s2->height) ? -1 : 1;  
   /* high order, since high first */
-}
+} // end degree_compare()
 
 /**************************************************************************
 *
@@ -834,9 +834,10 @@ struct supernode *s1,*s2;
 * return:  number of vertices in union.
 */
 
-int exact_degree(S,s)
-struct linsys *S;
-struct supernode *s;
+int exact_degree(
+  struct linsys *S,
+  struct supernode *s
+)
 { int i,j,degree;
   struct region *r;
   struct supernode *ss;
@@ -852,7 +853,7 @@ struct supernode *s;
     }
   }
   return degree - s->vercount;
-}
+} // end exact_degree()
 
 
 /**************************************************************************
@@ -865,9 +866,10 @@ struct supernode *s;
 * return:  number of supernodes in union, including self.
 */
 
-int exact_sdegree(S,s)
-struct linsys *S;
-struct supernode *s;
+int exact_sdegree(
+  struct linsys *S,
+  struct supernode *s
+)
 { int i,j,degree;
   struct region *r;
   struct supernode *ss;
@@ -882,7 +884,7 @@ struct supernode *s;
     }
   }
   return degree;
-}
+} // end exact_sdegree()
 
 /****************************************************************************
 *
@@ -892,8 +894,7 @@ struct supernode *s;
 * of nodes bordering the region left after removing the supernode.
 */
 
-void degree_sort(S)
-struct linsys *S;
+void degree_sort(struct linsys *S)
 { int n;
   struct supernode *s;
   int spot;
@@ -919,7 +920,7 @@ struct linsys *S;
   if ( heapcount != supercount )
    kb_error(2467,"Internal error: degree_sort() has heapcount != supercount.\n",
      RECOVERABLE);
-}
+} // end degree_sort()
 
 /******************************************************************************
 *
@@ -927,9 +928,10 @@ struct linsys *S;
 *
 * purpose: eliminate one supernode, if independent
 */
-void mass_eliminate(S,s)
-struct linsys *S;
-struct supernode *s;
+void mass_eliminate(
+  struct linsys *S,
+  struct supernode *s
+)
 { int i,k;
   struct region *r,*rk;
   struct md_vertex *v;
@@ -950,7 +952,8 @@ struct supernode *s;
       sontotal += r->size - r->vercount;
   }
   if ( mindeg_debug_level >= 2 )
-     printf("Eliminating supernode %d, size %d.\n",s-slist,s->vercount);
+     printf("Eliminating supernode %ld, size %ld.\n",
+       (long)(s-slist),(long)(s->vercount));
   /* mark timestamps */
   for ( i = 0 ; i < s->rcount ; i++ )
   { r = REG(INT(s->rlist)[i]);
@@ -969,7 +972,7 @@ struct supernode *s;
   /* first, elim supernode at end */
   vtimestamp++; /* new round */
   stimestamp++; /* new round */
-  INT(newslist)[ssize-1] = s-slist;
+  INT(newslist)[ssize-1] = (int)(s-slist);
   s->stimestamp = stimestamp;
   vercount = s->degree;
   for ( k = 0 ; k < s->vercount ; k++ )
@@ -1017,7 +1020,8 @@ struct supernode *s;
   rk->supercount = scount;
   rk->son = -1;
   if ( vercount != s->degree ) 
-     printf("vercount %d != degree %d, supernode %d\n",vercount,s->degree,s-slist);
+     printf("vercount %d != degree %d, supernode %ld\n",vercount,s->degree,
+             (long)(s-slist));
      
   /* mark all old regions as merged and remove from active list */
   for ( i = 0 ; i < s->rcount ; i++ )
@@ -1068,7 +1072,7 @@ struct supernode *s;
   supercount--;
 
   s->rcount = 0; /* inactivate */
-}
+} // end mass_eliminate()
 
 
 
@@ -1083,9 +1087,10 @@ struct supernode *s;
 static int final_regions;  /* number making it to factoring */
 static int final_versizes;  /* number making it to factoring */
 
-void groom_regions_recur(S,r)
-struct linsys *S;
-struct region *r;
+void groom_regions_recur(
+  struct linsys *S,
+  struct region *r
+)
 { struct region *rr;
   int son,k;
   
@@ -1107,7 +1112,7 @@ struct region *r;
   }
   final_regions++;
   final_versizes += r->size;
-}
+} // end groom_regions_recur()
 
 /******************************************************************************
  *
@@ -1121,9 +1126,10 @@ struct region *r;
 static int *new_ISP;  /* compacted storage */
 static int new_ISP_spot;
 
-int compact_recur(S,r)
-struct linsys *S;
-struct region *r;
+int compact_recur(
+  struct linsys *S,
+  struct region *r
+)
 { struct region *rr;
   int son;
   int *v;
@@ -1150,7 +1156,7 @@ struct region *r;
 
   return retval;
 
-}
+} // end compact_recur()
 
 /******************************************************************************
  *
@@ -1159,8 +1165,7 @@ struct region *r;
  *  purpose: Compact region information to free up large amounts
  *           of storage before numerical factoring.
  */
-void compact_regions(S)
-struct linsys *S;
+void compact_regions(struct linsys *S)
 { int rnum;
   int *new_rnum;
   int new_NSP;
@@ -1178,8 +1183,8 @@ struct linsys *S;
   }
   temp_free((char*)S->ISP);
   S->ISP = new_ISP;
-  S->NSP = new_NSP;
-}
+  S->NSP = new_NSP/sizeof(int);  // since new_NSP was in bytes
+} // end compact_regions()
 
 /******************************************************************************
 *
@@ -1188,8 +1193,7 @@ struct linsys *S;
 * purpose: eliminate independent supernodes of low degree
 */
 
-void multiple_eliminate(S)
-struct linsys *S;
+void multiple_eliminate(struct linsys *S)
 { 
   int lowdegree;
   int bounddegree; /* cutoff for multiple elimination */
@@ -1230,7 +1234,7 @@ struct linsys *S;
       }
     }
   }
-}
+} // end multiple_eliminate()
 
 /*************************************************************************
 *
@@ -1245,11 +1249,12 @@ struct linsys *S;
 static int treedepth;
 static int IJA_base; /* number of entries in LIJA */
 
-void traverse_recur(S,r,depth,fill)
-struct linsys *S;
-struct region *r;
-int *depth;  /* matrix depth of r and below */
-int *fill;  /* total fill of subtree */
+void traverse_recur(
+  struct linsys *S,
+  struct region *r,
+  int *depth,  /* matrix depth of r and below */
+  int *fill  /* total fill of subtree */
+)
 { int son;
   struct region *rr;
   int fillsum = 0;
@@ -1271,7 +1276,7 @@ int *fill;  /* total fill of subtree */
   *depth = maxdepth + (r->size*(r->size+1))/2;
 { int n; for (n=0;n<treedepth;n++)printf("  ");printf("%d\n",(r->size*(r->size+1))/2); }
 treedepth--;
-}
+} // end traverse_recur()
 
 /*********************************************************************************
 *
@@ -1280,16 +1285,17 @@ treedepth--;
 * purpose: traverse region tree to find elimnation order
 *
 */
-void permute_recur(S,r)
-struct linsys *S;
-struct region *r;
+void permute_recur(
+  struct linsys *S,
+  struct region *r
+)
 { int k;
   struct region *rr;
   int son;
 
   if ( mindeg_debug_level > 5 ) 
-     printf("permute_recur region %d, vercount %d rsize %d\n",
-         (int*)r-S->ISP,r->vercount,r->size);
+     printf("permute_recur region %ld, vercount %d rsize %d\n",
+         (long)((int*)r-S->ISP),r->vercount,r->size);
   for ( son = r->son ; son >= 0 ; son = rr->BROTHER )
   { rr = REG(son);
     permute_recur(S,rr);
@@ -1300,7 +1306,7 @@ struct region *r;
     K++;
   }
   IJA_base += r->size;
-}
+} // permute_recur()
 
 
 /*********************************************************************************
@@ -1312,8 +1318,7 @@ struct region *r;
 *             Leaves permuted sparse matrix in  S->pIA,pJA,pA.
 *             Uses radix sort.
 */
-void sparse_permute(S)
-struct linsys *S;
+void sparse_permute(struct linsys *S)
 { int i,j,end,total;
   int *cIA;
   int *cJA;
@@ -1379,7 +1384,7 @@ struct linsys *S;
   temp_free((char*)cIA);
   temp_free((char*)cJA);
   temp_free((char*)cA); 
-}
+} // end sparse_permute()
 
 /********************************************************************************
 *
@@ -1388,16 +1393,16 @@ struct linsys *S;
 * purpose: Traverse region tree, factoring supernode at each.
 */
 
-int vcompare ARGS((int*,int*));
+int vcompare(int*,int*);
 
-int vcompare(a,b)
-int *a,*b;
+int vcompare(int *a, int *b)
 { return *a-*b;
 }
 
-void factor_recur(S,r)
-struct linsys *S;
-struct region *r;
+void factor_recur(
+  struct linsys *S,
+  struct region *r
+)
 { int to_elim = r->size - r->vercount;
   REAL *base;  /* scratch row start in LA */
   int i,j,m,ii,ii_next;
@@ -1658,7 +1663,7 @@ struct region *r;
   }
 
   K += to_elim;
-}
+} // end factor_recur()
 
 /**************************************************************************
 *
@@ -1669,8 +1674,7 @@ struct region *r;
 *          Calls factor_recur().
 */
 
-void traverse_region_tree(S)
-struct linsys *S;
+void traverse_region_tree(struct linsys *S)
 { struct region *r;
   int rnum,n;
   int fill;
@@ -1721,7 +1725,7 @@ struct linsys *S;
 
   /* test_print(S,0); */
 /*debug */    /*  dsolve(S); */  
-}
+} // end traverse_region_tree()
 
 
 /*************************************************************************
@@ -1734,10 +1738,12 @@ struct linsys *S;
 *
 */
 
-void xmd_solve(S,B,x)
-struct linsys *S; /* factored system */
-REAL *B;    /* incoming right hand side */
-REAL *x;    /* solution, may be rhs */
+void xmd_solve(
+  struct linsys *S, /* factored system */
+  REAL *B,    /* incoming right hand side */
+  REAL *x,    /* solution, may be rhs */
+  int mtype   /* definiteness (not used) */
+)
 {
   int n; /* row index */
   int i;
@@ -1759,6 +1765,7 @@ REAL *x;    /* solution, may be rhs */
 
   /* solve U^T Y = B */
   for ( n = 0 ; n < S->N ; n++ ) BB[n] = B[S->P[n]]; /* permute */
+
   for ( n = 0 ; n < S->N ; n++ )
   { int start,end;
     Y[n] = BB[S->LJA[S->LIJA[n]]];  /* for BK inner permutation */
@@ -1768,7 +1775,8 @@ REAL *x;    /* solution, may be rhs */
     end = S->LIA[n+1];
     for ( i=S->LIA[n]+start, e=S->LA+i , jp=S->LJA+S->LIJA[n]+start ; 
                    i < end ; i++,e++,jp++ )
-      BB[*jp] -= (*e)*Y[n];
+    {  BB[*jp] -= (*e)*Y[n];
+    }
   }
 
   /* solve D V = Y (will use Y to store V) */
@@ -1810,7 +1818,7 @@ REAL *x;    /* solution, may be rhs */
   for ( n = 0 ; n < S->N ; n++ )
      x[S->P[n]] = BB[n];
 
-}
+} // end xmd_solve()
 
 
 /*************************************************************************
@@ -1823,15 +1831,17 @@ REAL *x;    /* solution, may be rhs */
 *
 */
 
-void xmd_solve_multi(S,B,x,rk)
-struct linsys *S; /* factored system */
-REAL **B;    /* incoming right hand side */
-REAL **x;    /* solution, may be rhs */
-int rk;         /* number of right sides */
+void xmd_solve_multi(
+  struct linsys *S, /* factored system */
+  REAL **B,    /* incoming right hand side */
+  REAL **x,    /* solution, may be rhs */
+  int rk,         /* number of right sides */
+  int mtype   /* definiteness (not used) */
+)
 { int k; /* rhs column index */
 
   for ( k = 0 ; k < rk ; k++ )
-    xmd_solve(S,B[k],x[k]);
+    xmd_solve(S,B[k],x[k],mtype);
   return;
 
 #ifdef OLDXMDMULTI
@@ -1923,14 +1933,15 @@ int rk;         /* number of right sides */
 
   free_matrix(Y);
   free_matrix(BB);
-}
+} 
 #endif
-}
+} // end xmd_solve_multi()
 
 /*************************************************************************/
 
-void dsolve(S)  /* solve as dense matrix */
-struct linsys *S;
+void dsolve(  /* solve as dense matrix */
+  struct linsys *S
+)
 { REAL **a,**u;
   int i,j,k,m,jj;
 
@@ -1991,7 +2002,7 @@ struct linsys *S;
   free_matrix(a);
   free_matrix(u);
   temp_free((char*)xIP);
-}
+} // end dsolve()
      
 /***************************************************************************
 *
@@ -2000,8 +2011,7 @@ struct linsys *S;
 * purpose: experimental minimal degree factoring of system
 *
 */
-void xmd_factor(S)
-struct linsys *S; 
+void xmd_factor(struct linsys *S, int mtype)
 { int i,j;
   int rnum;
   struct region *r;
@@ -2092,12 +2102,261 @@ struct linsys *S;
   if ( !hessian_quiet_flag )
   {
     printf("Variables: %d  Original fill: %d\n",S->N,S->IA[S->N]);
-    printf("Workspace: %d bytes\n",S->ISP[0]*sizeof(int));
+    printf("Workspace: %lu bytes\n",(unsigned long)(S->ISP[0]*sizeof(int)));
     printf("Passes through main loop: %d\n",passes);
     printf("Total_fill:  %d\n",total_fill);
-    printf("Total_flops: %g\n",total_flops);
+    printf("Total_flops: %g\n",(DOUBLE)total_flops);
+  }
+} // end  xmd_factor()
+
+
+
+/************************************************************************
+*************************************************************************
+**
+**  Routines for using Intel's MKL library to solve sparse matrices.
+**  Meant to be drop-in replacement for ysmp_factor and ysmp_solve.
+**
+**
+** Notes: 
+**  You can control the parallel execution of the solver by explicitly 
+**  setting the environment variable MKL_NUM_THREADS. If fewer processors 
+**  are available than specified, the execution may slow down instead of 
+**  speeding up. If the variable MKL_NUM_THREADS is not defined, then the 
+**  solver uses all available processors.
+*************************************************************************
+************************************************************************/
+
+#ifdef MKL
+#include "mkl_pardiso.h"
+#include "mkl_types.h"
+
+char *mkl_error[12] = {     
+    "no error",
+    "input inconsistent",
+    "not enough memory",
+    "reordering problem"
+    "zero pivot, numerical factorization or iterative refinement problem",
+    "unclassified (internal) error",
+    "reordering failed (matrix types 11 and 13 only)",
+    "diagonal matrix is singular",
+    "32-bit integer overflow problem",
+    "not enough memory for OOC",
+    "problems with opening OOC temporary files",
+    "read/write problems with the OOC data file"
+};
+
+void mkl_factor(struct linsys *S,int mtype)
+{ /* Auxiliary variables. */
+  double ddum;			/* Double dummy */
+  MKL_INT idum;			/* Integer dummy. */
+  MKL_INT maxfct, mnum, phase, error, msglvl;
+  MKL_INT nrhs = 1;		/* Number of right hand sides. */
+  int i,j;
+
+#ifdef WINTHREADS
+  // Have to undo affinity_mongering()
+  { DWORD_PTR procmask = 0,sysmask = 0;
+    GetProcessAffinityMask(GetCurrentProcess(),&procmask,&sysmask);
+    SetProcessAffinityMask(GetCurrentProcess(),sysmask);
+  }
+#endif
+
+  /* .. Setup Pardiso control parameters. */
+  memset(S->iparm,0,sizeof(S->iparm));
+  S->iparm[0] = 1;			/* No solver default */
+  S->iparm[1] = 0;			/* Fill-in reordering: 0 mindeg, 2 METIS, 3 OpenMP */
+//  S->iparm[1] = 2;			/* Fill-in reordering: 0 mindeg, 2 METIS, 3 OpenMP */
+//  S->iparm[1] = 3;			/* Fill-in reordering: 0 mindeg, 2 METIS, 3 OpenMP */
+  S->iparm[2] = 0;          /* not used */
+  S->iparm[3] = 0;			/* No iterative-direct algorithm */
+  S->iparm[4] = 0;			/* No return of permutation in "perm" argument */
+  S->iparm[5] = 0;			/* Write solution into x */
+  S->iparm[6] = 0;          /* OUTPUT: number of perturbed pivots */
+  if ( S->lambda != 0.0 )   
+    S->iparm[7] = 1;			/* refinement uses original array, which doesn't
+                                   have lambda subtracted from the diagonal
+                                   any more. */
+  else
+    S->iparm[7] = 2;			/* Max numbers of iterative refinement steps */                            
+  S->iparm[8] = 0;       /* not used */
+  S->iparm[9] = 13;		/* Perturb the pivot elements with 1E-13 */
+  S->iparm[10] = 1;		/* Use nonsymmetric permutation and scaling MPS */
+  S->iparm[11] = 0;     /* Whether to transpose A; irrelevant here */
+  S->iparm[12] = 0;		/* Maximum weighted matching algorithm is switched-off (default for symmetric). Try iparm[12] = 1 in case of inappropriate accuracy */
+  S->iparm[13] = 0;		/* Output: Number of perturbed pivots */
+  S->iparm[14] = 0;		/* Output: Peak memory KB in symbolic factorization */
+  S->iparm[15] = 0;		/* Output: Permanent memory KB in symbolic factorization */
+  S->iparm[16] = 0;		/* Output: Numeric factorization memory, KB */
+
+  if ( hessian_quiet_flag )
+  { S->iparm[17] = 0;		/* No Output: Number of nonzeros in the factor LU */
+    S->iparm[18] = 0;		/* No Output: Mflops for LU factorization */
+  }
+  else
+  { S->iparm[17] = -1;		/* Output: Number of nonzeros in the factor LU */
+    S->iparm[18] = -1;		/* Output: Mflops for LU factorization */
+  }
+ 
+  S->iparm[19] = 0;		/* Output: Numbers of CG Iterations */
+  S->iparm[20] = 1;     /* Use Bunch-Kaufman pivoting */
+  S->iparm[21] = 0;     /* Output: Number of positive eigenvalues */
+  S->iparm[22] = 0;     /* Output: Number of negative eigenvalues */
+  S->iparm[27] = 0;     /* double precision */
+  if ( A_OFF == 1 )
+    S->iparm[34] = 0;		/* PARDISO use FORTRAN-style indexing for ia and ja arrays */
+  else
+    S->iparm[34] = 1;		/* PARDISO use C-style indexing for ia and ja arrays */
+  maxfct = 1;			/* Maximum number of numerical factorizations. */
+  mnum = 1;		    	/* Which factorization to use. */
+  msglvl = !hessian_quiet_flag;			/* Print statistical information to screen */
+  error = 0;			/* Initialize error flag */
+
+  /* subtract lambda from diagonal */
+  if ( S->lambda != 0.0 )
+  for ( i = 0 ; i < S->A_rows ; i++ )
+  { for ( j = S->IA[i]-A_OFF ; j < S->IA[i+1]-A_OFF ; j++ )
+      if ( S->JA[j]-A_OFF == i )
+         { S->A[j] -= S->lambda; break; }
+  }
+
+  /* -------------------------------------------------------------------- */
+  /* Reordering and Symbolic Factorization. This step also allocates      */
+  /* all memory that is necessary for the factorization.                  */
+  /* -------------------------------------------------------------------- */
+  phase = 11;
+  PARDISO (S->pt, &maxfct, &mnum, &mtype, &phase,
+	   &S->N, S->A, S->IA, S->JA, &idum, &nrhs, S->iparm, &msglvl, &ddum, &ddum, &error);
+  if (error != 0)
+  {
+    sprintf(errmsg,"\nERROR during MKL symbolic factorization: %s", mkl_error[-error]);
+    kb_error(7754,errmsg,RECOVERABLE);
+  }
+  if ( itdebug )
+  {
+    outstring("\nReordering completed ... \n");
+    sprintf(msg,"Number of nonzeros in factors = %d\n", S->iparm[17]);
+    outstring(msg);
+    sprintf(msg,"Number of factorization MFLOPS = %d\n", S->iparm[18]);
+    outstring(msg);
+  }
+
+  /* -------------------------------------------------------------------- */
+  /* Numerical factorization.                                             */
+  /* -------------------------------------------------------------------- */
+  phase = 22;
+  PARDISO (S->pt, &maxfct, &mnum, &mtype, &phase,
+	   &S->N, S->A, S->IA, S->JA, &idum, &nrhs, S->iparm, &msglvl, &ddum, &ddum, &error);
+  if (error != 0)
+    {
+      printf ("\nERROR during numerical factorization: %s", mkl_error[-error]);
+      kb_error(7755,errmsg,RECOVERABLE);
+    }
+  if ( itdebug )
+   outstring("MKL factorization completed. \n");
+
+  S->pos = S->iparm[21];
+  S->neg = S->iparm[22];
+  S->zero = S->N - S->iparm[21] - S->iparm[22];
+
+  /* add lambda back to diagonal */
+  if ( S->lambda != 0.0 )
+    for ( i = 0 ; i < S->A_rows ; i++ )
+      { for ( j = S->IA[i]-A_OFF ; j < S->IA[i+1]-A_OFF ; j++ )
+            if ( S->JA[j]-A_OFF == i )
+            { S->A[j] += S->lambda; break; }
+      }
+
+  if ( hessian_quiet_flag == 0 )
+  { sprintf(msg,"MKL - number of perturbed pivots: %d\n",S->iparm[13]);
+    outstring(msg);
+    sprintf(msg,"MKL - peak symbolic factorization memory: %d KB\n",S->iparm[14]);
+    outstring(msg);
+    sprintf(msg,"MKL - permanent symbolic factorization memory: %d KB\n",S->iparm[15]);
+    outstring(msg);
+    sprintf(msg,"MKL - numeric factorization memory: %d KB\n",S->iparm[16]);
+    outstring(msg);
   }
 }
 
+void mkl_solve(struct linsys *S, REAL *b, REAL *x, int mtype)
+{ 
+  MKL_INT idum;			/* Integer dummy. */
+  MKL_INT maxfct, mnum, phase, error, msglvl;
+  MKL_INT nrhs = 1;		/* Number of right hand sides. */
+  maxfct = 1;			/* Maximum number of numerical factorizations. */
+  mnum = 1;		    	/* Which factorization to use. */
+  msglvl = 0;			/* Print statistical information in file */
+  error = 0;			/* Initialize error flag */
 
+  /* -------------------------------------------------------------------- */
+  /* Back substitution and iterative refinement.                          */
+  /* -------------------------------------------------------------------- */
+  phase = 33;
+  S->iparm[7] = 2;			/* Max numbers of iterative refinement steps. */
+  PARDISO (S->pt, &maxfct, &mnum, &mtype, &phase,
+	   &S->N, S->A, S->IA, S->JA, &idum, &nrhs, S->iparm, &msglvl, b, x, &error);
+  if (error != 0)
+  {
+      sprintf (errmsg,"ERROR during MKL solution: %s\n", mkl_error[-error]);
+      kb_error(6005,errmsg,RECOVERABLE);
+  }
+}
+
+void mkl_solve_multi(struct linsys *S, REAL **b, REAL **x, int nrhs, int mtype)
+{ MKL_INT idum;			/* Integer dummy. */
+  MKL_INT maxfct, mnum, phase, error, msglvl;
+  maxfct = 1;			/* Maximum number of numerical factorizations. */
+  mnum = 1;		    	/* Which factorization to use. */
+  msglvl = 0;			/* Print statistical information in file */
+  error = 0;			/* Initialize error flag */
+
+  // Check that b and x are actually laid out as pardiso expects
+  if ( nrhs > 1 )
+  { if ( b[1] != b[0]+S->N )
+      kb_error(7758,"mkl_multisolve ERROR: noncontiguous memory for b.\n",RECOVERABLE);
+    if ( x[1] != x[0]+S->N )
+      kb_error(7759,"mkl_multisolve ERROR: noncontiguous memory for x.\n",RECOVERABLE);
+  }
+
+  /* -------------------------------------------------------------------- */
+  /* Back substitution and iterative refinement.                          */
+  /* -------------------------------------------------------------------- */
+  phase = 33;
+  S->iparm[7] = 2;			/* Max numbers of iterative refinement steps. */
+  PARDISO (S->pt, &maxfct, &mnum, &mtype, &phase,
+	   &S->N, S->A, S->IA, S->JA, &idum, &nrhs, S->iparm, &msglvl, b, x, &error);
+  if (error != 0)
+  {
+      sprintf (errmsg,"ERROR during MKL solution: %d\n", error);
+      kb_error(7756,errmsg,RECOVERABLE);
+  }
+}
+
+void mkl_free(struct linsys *S)
+{ /* Auxiliary variables. */
+  double ddum;			/* Double dummy */
+  MKL_INT idum;			/* Integer dummy. */
+  MKL_INT maxfct, mnum, phase, error, msglvl;
+  MKL_INT nrhs = 1;		/* Number of right hand sides. */
+
+  phase = -1;
+  PARDISO (S->pt, &maxfct, &mnum, &idum, &phase,
+	   &S->N, S->A, S->IA, S->JA, &idum, &nrhs, S->iparm, &msglvl, &ddum, &ddum, &error);
+}
+
+#else
+void mkl_factor(struct linsys *S, int mtype)
+{ kb_error(6010,"This Evolver not enabled for MKL.\n",RECOVERABLE);
+}
+void mkl_solve(struct linsys *S, REAL *b, REAL *x, int mtype)
+{ kb_error(6011,"This Evolver not enabled for MKL.\n",RECOVERABLE);
+}
+void mkl_solve_multi(struct linsys *S, REAL **b, REAL **x, int nrhs, int mtype)
+{ kb_error(6012,"This Evolver not enabled for MKL.\n",RECOVERABLE);
+}
+void mkl_free(struct linsys *S)
+{ kb_error(6013,"This Evolver not enabled for MKL.\n",RECOVERABLE);
+}
+#endif
 

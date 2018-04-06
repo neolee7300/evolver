@@ -9,31 +9,30 @@
 *  File:  torvol.c
 *
 *  Purpose: find volumes of bodies in toroidal domain
-*              and volume gradients.
+*              and volume gradients if everything_quantities 
+*              not in effect.  Goes through torus volume method anyway.
 *
 */
 
 #include "include.h"
-
-#define NEWTORVOL    /* invokes named method */
 
 void torvol()
 {
   facet_id f_id;    /* main facet iterator */
   body_id b_id;
   body_id b0_id,b1_id;    /* facet adjacent bodies */
+  struct qinfo *f_info = &(GET_THREAD_DATA->q_info); /* for calling q_facet_torus_volume */
 
-#ifdef NEWTORVOL
-struct qinfo f_info; /* for calling q_facet_torus_volume */
-q_info_init(&f_info,METHOD_VALUE);
-#endif
+  if ( f_info->xx == NULL )
+    q_info_init(f_info,METHOD_GRADIENT);
 
   /* adjust body volumes to the invariant constant for each */
   FOR_ALL_BODIES(b_id)
     set_body_volume(b_id,get_body_volconst(b_id),NOSETSTAMP);
   if ( web.representation == STRING )
-    FOR_ALL_FACETS(f_id)
+  { FOR_ALL_FACETS(f_id)
       set_facet_area(f_id,0.0);
+  }
 
   FOR_ALL_FACETS(f_id)
   {
@@ -46,52 +45,16 @@ q_info_init(&f_info,METHOD_VALUE);
     b1_id = get_facet_body(facet_inverse(f_id));
     if ( !valid_id(b0_id) && !valid_id(b1_id) ) continue;
 
-#ifdef NEWTORVOL
-    f_info.id = f_id;
-    q_facet_setup(NULL,&f_info,NEED_SIDE|TORUS_MODULO_MUNGE|ORIENTABLE_METHOD);
-    t = q_facet_torus_volume(&f_info);
+    f_info->id = f_id;
+    q_facet_setup(NULL,f_info,NEED_SIDE|TORUS_MODULO_MUNGE|ORIENTABLE_METHOD);
+    t = q_facet_torus_volume(f_info);
     if ( valid_id(b0_id) )
         add_body_volume(b0_id,t);
     if ( valid_id(b1_id) )
         add_body_volume(b1_id,-t);
-#else
-    REAL *v[FACET_VERTS];  /* pointers to three vertex coordinates */
-    facetedge_id fe;
-    int i;
-    REAL adj[FACET_EDGES][MAXCOORD];  /* torus wrap adjustments for edge */
-    /* get basic info */
-    fe = get_facet_fe(f_id);
-    for ( i = 0 ; i < FACET_EDGES ; i ++ )
-    {
-      v[i] = get_coord(get_fe_tailv(fe));
-      get_edge_adjust(get_fe_edge(fe),adj[i]); 
-      fe = get_next_edge(fe);
-    }
 
-    /* basic tetrahedron */
-    t = triple_prod(v[0],v[1],v[2]);
-
-    /* torus wrap corrections */
-    for ( i = 0 ; i < FACET_EDGES ; i++ )
-    {
-      /* two-vertex term */
-      t += triple_prod(adj[(i+1)%FACET_EDGES],v[i],v[(i+1)%FACET_EDGES])/2;
-      t -= triple_prod(adj[(i+2)%FACET_EDGES],v[i],v[(i+1)%FACET_EDGES])/2;
-
-      /* one-vertex term */
-      t += triple_prod(v[i],adj[(i+2)%FACET_EDGES],adj[i]);
-    }
-
-    if ( valid_id(b0_id) )
-       add_body_volume(b0_id,t/6);
-    if ( valid_id(b1_id) )
-       add_body_volume(b1_id,-t/6);
-#endif
-        }
-#ifdef NEWTORVOL
-q_info_free(&f_info);
-#endif
-}
+  }
+} // end torvol()
 
 
 
@@ -106,8 +69,7 @@ q_info_free(&f_info);
 *  purpose: value of volume integral on facet
 */
 
-REAL q_facet_torus_volume(f_info)
-struct qinfo *f_info;
+REAL q_facet_torus_volume(struct qinfo *f_info)
 { REAL **x;
   REAL vol;
   int i;
@@ -197,7 +159,7 @@ if ( f_info->wraps[0] )
      vol *= web.torusv;
  
   return vol;
-}
+} // end q_facet_torus_volume()
 
 /**********************************************************************
 *
@@ -206,8 +168,7 @@ if ( f_info->wraps[0] )
 *  purpose: gradient and value of volume integral on quadratic facet
 */
 
-REAL q_facet_torus_volume_grad(f_info)
-struct qinfo *f_info;
+REAL q_facet_torus_volume_grad(struct qinfo *f_info)
 { REAL **x;
   REAL zsum,ssum;
   int i,j;
@@ -318,7 +279,7 @@ struct qinfo *f_info;
           ugrad[i][j] *= web.torusv;
      mat_mult(ugrad,dx,f_info->grad,FACET_VERTS,SDIM,SDIM);
      return vol;
-}
+} // end q_facet_torus_volume_grad()
 
 /**********************************************************************
 *
@@ -327,8 +288,7 @@ struct qinfo *f_info;
 *  purpose: hessian, gradient and value of volume integral on quadratic facet
 */
 
-REAL q_facet_torus_volume_hess(f_info)
-struct qinfo *f_info;
+REAL q_facet_torus_volume_hess(struct qinfo *f_info)
 { REAL **x;
   REAL zsum,ssum;
   int i,j,ii,jj;
@@ -516,31 +476,38 @@ struct qinfo *f_info;
           tr_mat_mul(dx,temph,f_info->hess[i][ii],SDIM,SDIM,SDIM);
         }
   return vol;
-}
+} // end q_facet_torus_volume_hess()
 
 
 /**********************************************************************
                     Quadratic torus volume quantity
 **********************************************************************/
 
-REAL cut_int ARGS((REAL**));
-void cut_grad ARGS((REAL**,REAL**,int));
-void cut_hess ARGS((REAL**,REAL**,REAL****,int));
 
-REAL cut_int(u)
-REAL **u; /* coefficients of the 3 vertices along edge */
+/************************************************************************
+* function: cut_int()
+* purpose: integral of wrap volume along edge, in affine coord
+*          for quadratic torus volume.
+*/
+REAL cut_int(REAL **u /* coefficients of the 3 vertices along edge */)
 { REAL area = 0.0;
   int i,j;
   for ( i = 0 ; i < EDGE_CTRL ; i++ )
      for ( j = 0 ; j < EDGE_CTRL ; j ++ )
         area += scoeff[i][j]*u[i][0]*u[j][1];
   return area;
-}
+} // end cut_int()
 
-void cut_grad(u,ugrad,sign)
-REAL **u;
-REAL **ugrad; /* gradients to increment */
-int sign;  /* +1 or -1 */
+/************************************************************************
+* function: cut_grad()
+* purpose: grads of integral of wrap volume along edge, in affine coord
+*          for quadratic torus volume.
+*/
+void cut_grad(
+  REAL **u,
+  REAL **ugrad, /* gradients to increment */
+  int sign  /* +1 or -1 */
+)
 {
   int i,j;
   for ( i = 0 ; i < EDGE_CTRL ; i++ )
@@ -548,13 +515,19 @@ int sign;  /* +1 or -1 */
      { ugrad[i][0] += sign*scoeff[i][j]*u[j][1];
        ugrad[j][1] += sign*scoeff[i][j]*u[i][0];
      }
-}
+} // end cut_grad()
 
-void cut_hess(u,ugrad,uhess,sign)
-REAL **u;
-REAL **ugrad; /* gradients to increment */
-REAL ****uhess; /* hessians to increment */
-int sign;  /* +1 or -1 */
+/************************************************************************
+* function: cut_hess()
+* purpose: second derivs of integral of wrap volume along edge, 
+*          for quadratic torus volume, in affine coord.
+*/
+void cut_hess(
+  REAL **u,
+  REAL **ugrad, /* gradients to increment */
+  REAL ****uhess, /* hessians to increment */
+  int sign  /* +1 or -1 */
+)
 {
   int i,j;
   for ( i = 0 ; i < EDGE_CTRL ; i++ )
@@ -564,7 +537,8 @@ int sign;  /* +1 or -1 */
        uhess[i][j][0][1] += sign*scoeff[i][j];
        uhess[j][i][1][0] += sign*scoeff[i][j];
      }
-}
+} // end cut_hess()
+
 /**********************************************************************
 *
 *  function: q_facet_torus_volume_q()
@@ -572,8 +546,7 @@ int sign;  /* +1 or -1 */
 *  purpose: value of volume integral on facet, quadratic
 */
 
-REAL q_facet_torus_volume_q(f_info)
-struct qinfo *f_info;
+REAL q_facet_torus_volume_q(struct qinfo *f_info)
 { REAL **x;
   REAL vol;
   int i,j,k;
@@ -649,7 +622,7 @@ struct qinfo *f_info;
   vol *= web.torusv;
  
   return vol;
-}
+} // end  q_facet_torus_volume_q()
 
 /**********************************************************************
 *
@@ -658,8 +631,7 @@ struct qinfo *f_info;
 *  purpose: gradient and value of volume integral on quadratic facet
 */
 
-REAL q_facet_torus_volume_q_grad(f_info)
-struct qinfo *f_info;
+REAL q_facet_torus_volume_q_grad(struct qinfo *f_info)
 { REAL **x;
   REAL vol;
   int i,j,k;
@@ -767,7 +739,7 @@ struct qinfo *f_info;
   mat_mult(ugrad,dx,f_info->grad,FACET_CTRL,SDIM,SDIM);
  
   return vol;
-}
+} // end q_facet_torus_volume_q_grad()
 
 
 /**********************************************************************
@@ -777,8 +749,7 @@ struct qinfo *f_info;
 *  purpose: gradient and value of volume integral on quadratic facet
 */
 
-REAL q_facet_torus_volume_q_hess(f_info)
-struct qinfo *f_info;
+REAL q_facet_torus_volume_q_hess(struct qinfo *f_info)
 { REAL **x;
   REAL vol;
   int i,j,k;
@@ -926,19 +897,19 @@ struct qinfo *f_info;
      }
  
   return vol;
-}
+} // end q_facet_torus_volume_q_hess()
 
 
 /**********************************************************************
                     Lagrange torus volume quantity
 **********************************************************************/
 
-REAL lagr_cut_int ARGS((REAL**));
-void lagr_cut_grad ARGS((REAL**,REAL**,int));
-void lagr_cut_hess ARGS((REAL**,REAL**,REAL****,int));
-
-REAL lagr_cut_int(u)
-REAL **u; /* coefficients of the vertices along edge */
+/************************************************************************
+* function: lagr_cut_int()
+* purpose: integral of wrap volume along edge, in affine coord
+*          for Lagrange torus volume.  
+*/
+REAL lagr_cut_int(REAL **u /* coefficients of the vertices along edge */)
 { 
   REAL area;
   struct gauss_lag *gl = &gauss_lagrange[1][web.gauss1D_order];
@@ -956,12 +927,18 @@ REAL **u; /* coefficients of the vertices along edge */
     area -= gl->gausswt[m]*x*dy;
   }
   return area;
-}
+} // end lagr_cut_int()
 
-void lagr_cut_grad(u,ugrad,sign)
-REAL **u;
-REAL **ugrad; /* gradients to increment */
-int sign;  /* +1 or -1 */
+/************************************************************************
+* function: lagr_cut_grad()
+* purpose: grads of integral of wrap volume along edge, in affine coord
+*          for Lagrange torus volume.
+*/
+void lagr_cut_grad(
+  REAL **u,
+  REAL **ugrad, /* gradients to increment */
+  int sign  /* +1 or -1 */
+)
 {
   int m,k;
   struct gauss_lag *gl = &gauss_lagrange[1][web.gauss1D_order];
@@ -978,13 +955,19 @@ int sign;  /* +1 or -1 */
       ugrad[k][0] -= sign*gl->gausswt[m]*dy*gl->gpoly[m][k];
     }
   }
-}
+} // end lagr_cut_grad()
 
-void lagr_cut_hess(u,ugrad,uhess,sign)
-REAL **u;
-REAL **ugrad; /* gradients to increment */
-REAL ****uhess; /* hessians to increment */
-int sign;  /* +1 or -1 */
+/************************************************************************
+* function: lagr_cut_hess()
+* purpose: second derivs of integral of wrap volume along edge, 
+*          for Lagrange torus volume, in affine coord.
+*/
+void lagr_cut_hess(
+  REAL **u,
+  REAL **ugrad, /* gradients to increment */
+  REAL ****uhess, /* hessians to increment */
+  int sign  /* +1 or -1 */
+)
 {
   int m,k,kk;
   struct gauss_lag *gl = &gauss_lagrange[1][web.gauss1D_order];
@@ -1005,8 +988,8 @@ int sign;  /* +1 or -1 */
       }
     }
   }
+} // end lagr_cut_hess()
 
-}
 /**********************************************************************
 *
 *  function: q_facet_torus_volume_lagr()
@@ -1014,8 +997,7 @@ int sign;  /* +1 or -1 */
 *  purpose: value of volume integral on facet, quadratic
 */
 
-REAL q_facet_torus_volume_lagr(f_info)
-struct qinfo *f_info;
+REAL q_facet_torus_volume_lagr(struct qinfo *f_info)
 { REAL **x;
   REAL vol;
   int i,m;
@@ -1108,7 +1090,7 @@ struct qinfo *f_info;
   vol *= web.torusv;
  
   return vol;
-}
+} // end q_facet_torus_volume_lagr()
 
 /**********************************************************************
 *
@@ -1117,8 +1099,7 @@ struct qinfo *f_info;
 *  purpose: gradient and value of volume integral on quadratic facet
 */
 
-REAL q_facet_torus_volume_lagr_grad(f_info)
-struct qinfo *f_info;
+REAL q_facet_torus_volume_lagr_grad(struct qinfo *f_info)
 { REAL **x;
   REAL vol;
   int i,j,k;
@@ -1237,7 +1218,7 @@ struct qinfo *f_info;
   mat_mult(ugrad,dx,f_info->grad,ctrl,SDIM,SDIM);
  
   return vol;
-}
+} // end q_facet_torus_volume_lagr_grad()
 
 
 /**********************************************************************
@@ -1247,8 +1228,7 @@ struct qinfo *f_info;
 *  purpose: gradient and value of volume integral on quadratic facet
 */
 
-REAL q_facet_torus_volume_lagr_hess(f_info)
-struct qinfo *f_info;
+REAL q_facet_torus_volume_lagr_hess(struct qinfo *f_info)
 { REAL **x;
   REAL vol;
   int i,j,k,kk,m;
@@ -1437,5 +1417,5 @@ struct qinfo *f_info;
      }
  
   return vol;
-}
+} // end q_facet_torus_volume_lagr_hess()
 

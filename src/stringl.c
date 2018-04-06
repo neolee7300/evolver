@@ -23,8 +23,7 @@
 *
 */
 
-void edge_energy_l(e_id)
-edge_id e_id;
+void edge_energy_l(edge_id e_id)
 {
   REAL energy;
   vertex_id v[2];
@@ -81,7 +80,7 @@ edge_id e_id;
 
   web.total_energy = web.total_energy + energy;
 
-}
+} // end edge_energy_l()
 
 /************************************************************************
 *
@@ -89,8 +88,7 @@ edge_id e_id;
 *  accumulates them at each control point.
 */
 
-void edge_force_l(e_id)
-edge_id e_id;
+void edge_force_l(edge_id e_id)
 {
   REAL len;
   REAL side[MAXCOORD];
@@ -135,9 +133,6 @@ edge_id e_id;
   else len = sqrt(SDIM_dot(side,side));
 
   set_edge_length(e_id,len);
-  /* add to endpoint stars */
-  add_vertex_star(tv,len);
-  add_vertex_star(hv,len);
 
   if ( !web.metric_flag ) 
     if ( len != 0.0 ) 
@@ -180,7 +175,7 @@ edge_id e_id;
     for ( i = 0 ; i < 2 ; i++ )
       for ( j = 0 ; j < SDIM ; j++ )
               force[i][j] += forces[i][j];
-}
+} // end edge_force_l()
 
 /******************************************************************
 *
@@ -190,8 +185,7 @@ edge_id e_id;
 *              an edge in the string model. Includes grav const.
 */
 
-REAL edge_grav_density(e_id)
-edge_id e_id;
+REAL edge_grav_density(edge_id e_id)
 {
   facetedge_id fe,first_fe;
   body_id  b_id;
@@ -215,7 +209,7 @@ edge_id e_id;
   }
 
   return web.grav_const*density;
-}
+} // end edge_grav_density()
  
 /**********************************************************************
 *
@@ -224,8 +218,7 @@ edge_id e_id;
 *
 */
 
-void edge_area_l(fe_id)
-facetedge_id fe_id;
+void edge_area_l(facetedge_id fe_id)
 {
   REAL *xt,*xh;
   REAL area;
@@ -283,7 +276,7 @@ facetedge_id fe_id;
   
   if ( valid_id(b_id2) )
      add_body_volume(b_id2,-area);
-}
+} // end  edge_area_l()
 
 /***********************************************************************
 *
@@ -292,7 +285,6 @@ facetedge_id fe_id;
 *  Purpose:  construct vertex area gradients
 *            Note: force is local, so toroidal wrappings don't matter,
 *            as long as we get the edges right, which get_edge_side() does.
-*
 */
 
 void string_grad_l()
@@ -379,7 +371,7 @@ void string_grad_l()
     }
   }
 
-}
+} // end string_grad_l()
 
 /*******************************************************************
 *
@@ -455,7 +447,7 @@ void string_bdry_grad()
       } while ( vgptri );
     } while ( !equal_id(next_e,start_e) );
   }
-}
+} // end string_bdry_grad()
 
 /*******************************************************************
 *
@@ -529,7 +521,7 @@ void string_constr_grad()
     }
     while ( !equal_id(next_e,start_e) );
   }
-}
+} // end string_constr_grad()
 
 
 /*********************************************************************
@@ -543,18 +535,18 @@ void string_constr_grad()
 * function: edge_general_init()
 *
 * purpose:  check dimension of edge
-*
 */
 
-void edge_general_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void edge_general_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   if ( web.dimension > 2 ) 
      kb_error(2189,
         "Can only do edge_general_integral if edges are 1 dimensional.\n",
         RECOVERABLE);
-}
+} // end edge_general_init()
 
 /*********************************************************************
 *
@@ -564,8 +556,7 @@ struct method_instance *mi;
 *
 */
 
-REAL edge_general_value(e_info)
-struct qinfo *e_info;
+REAL edge_general_value(struct qinfo *e_info)
 { int m,k;
   REAL value = 0.0;
   REAL z[2*MAXCOORD+1];  /*  pointers to coord and tangent */
@@ -582,19 +573,16 @@ struct qinfo *e_info;
      value += weight*eval(METH_INSTANCE(e_info->method)->expr[0],z,e_info->id,NULL);
   }
   return value;
-}
+} // end edge_general_value()
 
 /*********************************************************************
 *
 * function: edge_general_grad()
 *
 * purpose:  method gradient
-*
 */
 
-
-REAL edge_general_grad(e_info)
-struct qinfo *e_info;
+REAL edge_general_grad(struct qinfo *e_info)
 { int m,j,k;
   REAL value = 0.0;
   REAL val;
@@ -619,18 +607,16 @@ struct qinfo *e_info;
   }
 
   return value;
-}
+} // end edge_general_grad()
 
 /*********************************************************************
 *
 * function: edge_general_hess()
 *
 * purpose:  method hessian
-*
 */
 
-REAL edge_general_hess(e_info)
-struct qinfo *e_info;
+REAL edge_general_hess(struct qinfo *e_info)
 { int m,j,jj,k,kk;
   REAL value = 0.0;
   REAL val;
@@ -664,18 +650,16 @@ struct qinfo *e_info;
               gauss1polyd[k][m]*gauss1polyd[kk][m]*second[j+SDIM][jj+SDIM]);
   }
   return value;
-}
+} // end edge_general_hess()
 
 /*********************************************************************
 *
 * function: edge_general_value_lagrange()
 *
 * purpose:  method value
-*
 */
 
-REAL edge_general_value_lagrange(e_info)
-struct qinfo *e_info;
+REAL edge_general_value_lagrange(struct qinfo *e_info)
 { int m,k;
   REAL value = 0.0;
   REAL z[2*MAXCOORD+1];  /*  pointers to coord and tangent */
@@ -691,18 +675,16 @@ struct qinfo *e_info;
      value += gl->gausswt[m]*eval(METH_INSTANCE(e_info->method)->expr[0],z,e_info->id,NULL);
   }
   return value;
-}
+} // end edge_general_value_lagrange()
 
 /*********************************************************************
 *
 * function: edge_general_grad_lagrange()
 *
 * purpose:  method gradient
-*
 */
 
-REAL edge_general_grad_lagrange(e_info)
-struct qinfo *e_info;
+REAL edge_general_grad_lagrange(struct qinfo *e_info)
 { int m,j,k;
   REAL value = 0.0;
   REAL val;
@@ -726,18 +708,16 @@ struct qinfo *e_info;
                                    + gl->gpolypart[m][0][k]*derivs[j+SDIM]);
   }
   return value;
-}
+} // end edge_general_grad_lagrange()
 
 /*********************************************************************
 *
 * function: edge_general_hess_lagrange()
 *
 * purpose:  method hessian
-*
 */
 
-REAL edge_general_hess_lagrange(e_info)
-struct qinfo *e_info;
+REAL edge_general_hess_lagrange(struct qinfo *e_info)
 { int m,j,jj,k,kk;
   REAL value = 0.0;
   REAL val;
@@ -771,4 +751,4 @@ struct qinfo *e_info;
               gl->gpolypart[m][0][k]*gl->gpolypart[m][0][kk]*second[j+SDIM][jj+SDIM]);
   }
   return value;
-}
+} // end edge_general_hess_lagrange()

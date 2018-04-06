@@ -46,3 +46,8 @@ zebra := {
 
    } // end valence 2 vertex loop
 } // end zebra
+
+// End zebra.cmd
+
+// Usage: zebra
+

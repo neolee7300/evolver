@@ -3,14 +3,39 @@
 // Surface Evolver command to put tubes around certain edges, for more
 // reliable display of chosen edges.  Note that this procedure does
 // modify the current surface, rather than write a datafile.
+// Also note the tubes created are just separate tubes for each
+// edge; they are not connected to each other in any way,  so
+// they are really meant just for display. 
 
-// Usage:  Define the "intube" edge attribute to be 1 for the edges
-//         you want tubed, and call "tuber" with appropriate parameters, i.e.
-//         Enter command:  set edge intube 0
-//         Enter command:  set edge intube 1 where on_constraint 1
-//         Enter command:  tuber(0.01,4,1)
+// "tuber" works in the torus model, a new body is created for all
+// the tube facets to be on, so they will display when "connected"
+// display mode is in effect.  However, the tubes are displayed
+// independently of the other bodies, and tend to stick out in 
+// various directions.
+
 
 // Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
+
+/* Usage:  Define the "intube" edge attribute to be 1 for the edges
+           you want tubed (simply reading in this file automatically
+           creates the intube attribute for you), set the edge colors 
+           to the colors you want the tubes to be, and call "tuber" 
+           with appropriate parameters,
+                 real tube_radius,   // radius of tube
+                 integer tube_sides, // how many sides on each tube, >= 3
+                 integer tube_caps   // 0 for no caps, 1 for cone caps
+
+           For example, 
+
+    Enter command: set edge intube 0
+    Enter command: set edge intube 1 where valence != 2;
+    Enter command: set edge color green where intube==1;   
+    Enter command: tuber(0.01,4,1)
+
+ If you want to display just the tubes, you can do
+    Enter command: show facet where color == green
+
+*/
 
 define edge attribute intube integer  // set positive if want tube
 
@@ -23,6 +48,7 @@ procedure tuber (real tube_radius,   // radius of tube
   local ee1,start_tailcape,start_headcape,prev_tailcape,prev_headcape;
   local vstart,wstart,starte,inx,vv2,ww2,ee2,vend,wend,diag,newf;
   local tailcape,headcape;
+  local newb;
 
   // Some parameter checking
   if tube_sides < 3 then tube_sides := 3;
@@ -30,6 +56,11 @@ procedure tuber (real tube_radius,   // radius of tube
   { errprintf "tuber: tube_radius is %f; must be positive.\n",tube_radius;
     return;
   };
+
+  // Make a new body for the tubes to be on, so they
+  // show up in "connected" mode.
+  if torus then
+     newb := new_body;
 
   // Now the tubes.
   foreach edge ee where intube > 0 do
@@ -134,12 +165,15 @@ procedure tuber (real tube_radius,   // radius of tube
       fix facet[newf];
       set facet[newf] no_refine;
       set facet[newf] tension 0;
+      if torus then set facet[newf] frontbody newb;
+
 
       newf := new_facet(ee2,-wend,-diag);
       set facet[newf] color ee.color;
       fix facet[newf];
       set facet[newf] no_refine;
       set facet[newf] tension 0;
+      if torus then set facet[newf] frontbody newb;
 
       if tube_caps then
       { if inx == tube_sides then
@@ -159,11 +193,13 @@ procedure tuber (real tube_radius,   // radius of tube
         fix facet[newf];
         set facet[newf] no_refine;
         set facet[newf] tension 0;
+        if torus then set facet[newf] frontbody newb;
         newf := new_facet(headcape,-prev_headcape,wend);
         set facet[newf] color ee.color;
         fix facet[newf];
         set facet[newf] no_refine;
         set facet[newf] tension 0;
+        if torus then set facet[newf] frontbody newb;
 
         prev_tailcape := tailcape;
         prev_headcape := headcape;
@@ -172,5 +208,15 @@ procedure tuber (real tube_radius,   // radius of tube
       vv1 := vv2; ww1 := ww2; ee1 := ee2;
     }
   }
+ 
 } // end tuber()
-    
+   
+
+// End tuber.cmd
+
+/* Usage:
+     set edge intube  (boolean expression for the edges you want tubed)
+     tuber(real tube_radius,integer tube_sides, integer tube_caps) 
+
+*/
+

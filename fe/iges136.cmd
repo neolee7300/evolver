@@ -8,11 +8,62 @@
 // FEM types included under "non-geometry taxonomy'.
 // Also not listed in Table 3 on p. 38 of IGES-6 documentation.
 
-// Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
-
+/*
+   Assumptions: 3D soapfilm model, linear model, not torus or symmetry group
+    (use the "detorus" command if necessary to convert torus or symmetry
+     to unwrapped surface, but remember that detorus alters the surface)
+   Does facets only, not edges. 
+   Does facets satisfying "show" criterion.
+   Facet color is frontcolor on both sides.
+*/
 // usage: iges >>> "filename.igs"
 
-iges := { 
+iges136 := { 
+
+  // Check assumptions
+
+  if torus then
+  { errprintf "Cannot run 'iges136' command in torus mode. Do 'detorus' first.\n";
+    abort;
+  };
+
+  if symmetry_group then
+  { errprintf "Cannot run 'iges136' command in symmetry group mode. Do 'detorus' first.\n";
+    abort;
+  };
+
+  if space_dimension != 3 then
+  { errprintf "The 'iges136' command must be run in three-dimensional space.\n";
+    abort;
+  };
+
+  if surface_dimension == 1 then
+  { errprintf "The 'iges136' command is not meant for the string model.\n";
+    abort;
+  };
+
+  if simplex_representation then
+  { errprintf "The 'iges136' command is not meant for the simplex model.\n";
+    abort;
+  };
+
+  if lagrange_order > 3 then
+  { errprintf "The 'iges136' command is meant for the linear model, quadratic or cubic Lagrange.\n";
+    abort;
+  };
+
+  if rgb_colors then
+  { errprintf "The 'iges136' command does not do RGB colors; do rgb_colors off.\n";
+    abort;
+  };
+
+  local    start_counter, global_counter, message, xmax, ymax, zmax, maxsize;
+  local    entype, paramdata, structure, linefont, level, view, transmat, label;
+  local    status, directory_counter, lineweight, colornum,  paramcount, form;
+  local    reserved, entlabel, entsubscr, parameter_counter, itop, etyp;
+  local    numnodes, line, subcount;
+
+
   // Flag section
   // Don't need this since not doing binary or compressed format.
 
@@ -90,7 +141,7 @@ iges := {
  
 
   // Vertices as "node" types
-  entype := 135;
+  entype := 134;
   status := "00010401";
   paramcount := 1;
   entlabel := "  VERTEX";
@@ -113,7 +164,7 @@ iges := {
   entlabel := "   FACET";
   define facet attribute fpdata integer;
   define facet attribute fdir integer;
-  foreach facet ff do 
+  foreach facet ff where show do 
   { paramdata += 1;   ff.fpdata := paramdata;
     entsubscr  := ff.id; 
     directory_counter += 1;  ff.fdir := directory_counter;
@@ -158,7 +209,7 @@ iges := {
   itop := 2;  // Linear TRIAngle
   etyp := "5HLTRIA";
   numnodes := 3;
-  foreach facet ff do
+  foreach facet ff where show do
   { parameter_counter += 1;
     if ff.fpdata != parameter_counter then
        errprintf
@@ -171,7 +222,7 @@ iges := {
   // Geometry element
   line := sprintf "402,%d,",facet_count;
   subcount := 0;
-  foreach facet ff do
+  foreach facet ff where show do
   { if subcount == 10 then
     { 
       parameter_counter += 1;
@@ -190,4 +241,7 @@ iges := {
      directory_counter,parameter_counter," ";
 }
 
+// End iges136.cmd
+
+// Usage: iges136 >>> "filename.iges"
 

@@ -2,7 +2,7 @@
 *  This file is part of the Surface Evolver source code.     *
 *  Programmer:  Ken Brakke, brakke@susqu.edu                 *
 *************************************************************/ 
-  
+       
 /********************************************************************* 
 *
 *  file: alice.c                         
@@ -11,14 +11,14 @@
 *           Also Craig Carter's energy method.
 *
 */
- 
+  
 #include "include.h"
   
 REAL xalice[MAXCOORD+4];  /* center of test bump */
 REAL valice[MAXCOORD+4] = { 0.0, 0.0, 1.0 };  /* vector of test bump */
 REAL radius;               /* characteristic scale of bump */
 
-REAL calc_bump ARGS((REAL*));
+REAL calc_bump(REAL*);
 
 REAL calc_bump(pt)
 REAL *pt;  /* coordinates */
@@ -128,7 +128,7 @@ void alice()
 
   sprintf(msg,"Variation: %f\n",(DOUBLE)(sum/radius/radius));
   outstring(msg);
-}
+}  // end alice()
 
 
 
@@ -161,9 +161,10 @@ where $A_1$ and $A_2$ are unnormalized area vectors for the facets.
 
 #define CARTER_POWER_NAME "carter_power"
 REAL carter_power;
-void carter_energy_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void carter_energy_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 { int param;
   param = lookup_global(CARTER_POWER_NAME);
   if ( param < 0 ) /* missing, so add */
@@ -173,7 +174,7 @@ struct method_instance *mi;
         }
   carter_power = globals(param)->value.real;
 
-}
+}  // end carter_energy_init()
 
 /**************************************************************
 *
@@ -185,8 +186,7 @@ struct method_instance *mi;
 *
 */
 
-REAL carter_energy(f_info)
-struct qinfo *f_info;
+REAL carter_energy(struct qinfo *f_info)
 { facet_id f1 = f_info->id,f2;
   REAL **x=f_info->x;
   MAT2D(y,FACET_VERTS,MAXCOORD); /* vertex coordinates */
@@ -216,8 +216,10 @@ struct qinfo *f_info;
               - SDIM_dot(f_info->sides[0][0],t2)*SDIM_dot(f_info->sides[0][1],t1);
       energy += det/pow(rj,carter_power/2-1);
     }
+
   return energy/(3-carter_power)/(2-carter_power)/4;
-}
+
+} // end carter_energy()
 
 /**************************************************************
 *
@@ -230,8 +232,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL carter_energy_gradient(f_info)
-struct qinfo *f_info;
+REAL carter_energy_gradient(struct qinfo *f_info)
 { facet_id f1 = f_info->id,f2;
   REAL **x=f_info->x;
   MAT2D(y,FACET_VERTS,MAXCOORD); /* vertex coordinates */
@@ -290,5 +291,7 @@ struct qinfo *f_info;
             f_info->grad[k][j] /= (3-carter_power)*(2-carter_power)*4 ;
 
   return energy/(3-carter_power)/(2-carter_power)/4/2;
-}
 
+} // end carter_energy_gradient()
+
+void strerror_test() { }

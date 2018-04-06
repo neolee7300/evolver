@@ -74,6 +74,7 @@ void pix_start()
       { outstring("No colormap used.\n"); colorflag = 0; }
     }
 
+    if ( overall_size <= 0 ) resize();
     thickness = overall_size/1000;
     sprintf(msg,"Thicken(n | y [thickness(%g)])? ",(DOUBLE)thickness);
     prompt(msg,response,sizeof(response));
@@ -105,7 +106,7 @@ void pix_start()
   }
   fprintf(pfd,"\n");
   verts = dmatrix(0,2,0,2);
-}
+} // end pix_start()
 
 /************************************************************************
 *
@@ -114,9 +115,10 @@ void pix_start()
 *  Purpose:  Accepts facets from graphgen() and plots them.
 */
 
-void pix_facet(gdata,f_id)
-struct graphdata *gdata;
-facet_id f_id;
+void pix_facet(
+  struct graphdata *gdata,
+  facet_id f_id
+)
 {
   int i,j;
   REAL map[4];  /* color of this vertex */
@@ -189,7 +191,7 @@ facet_id f_id;
     } /* end thickenflag */
 
   fprintf(pfd,"\n");
-}
+} // end pix_facet()
 
 /*******************************************************************
 *
@@ -203,7 +205,7 @@ void pix_end()
 {
   fclose(pfd);
   free_matrix(verts);
-}
+} // end pix_end()
 
 
 

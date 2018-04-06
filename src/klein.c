@@ -13,7 +13,7 @@
 #undef SQR
 #define SQR(a) ((a)*(a))
 
-REAL coshKleinLength ARGS((REAL*,REAL*));
+REAL coshKleinLength (REAL*,REAL*);
 
 /*****************************************************************
 * This function takes the inverse hyperbolic cosine of a number
@@ -21,24 +21,24 @@ REAL coshKleinLength ARGS((REAL*,REAL*));
 * positive answer.  Included here since some libraries don't
 * have it or long double version.
 */
-REAL kb_acosh ARGS((REAL)); /* prototype */
-REAL kb_acosh(value)
-REAL value;     /* the value who's acosh is being taken */
+
+REAL kb_acosh(REAL value /* the value who's acosh is being taken */)
 {
   if(value>=1)
      return(log(value + sqrt(SQR(value) - 1)));
   else
      return(0);
-}
+} // end kb_acosh()
 
 /****************************************************************
 * This function finds the hyperbolic cosine of an edge in the Klein
 * model of the hyperbolic plane. It is used to calculate edge
 * lengths and angles in the model.
 */
-REAL coshKleinLength(head, tail)
-REAL *head;     /* coordinates of edge */
-REAL *tail;
+REAL coshKleinLength(
+  REAL *head,     /* coordinates of edge */
+  REAL *tail
+)
 {
   REAL num;     /* numerator and den0minator of returned value */
   REAL den;
@@ -58,15 +58,16 @@ REAL *tail;
   if ( retval < 1.0 )
      kb_error(2087,"Points outside unit disk in Klein model.\n",RECOVERABLE);
   return(retval);
-}
+} // end coshKleinLength()
 
 /***********************************************************************
 * This function finds the length of an edge in the klein model of
 * hyperbolic space.
 */
-REAL klein_length(head, tail)
-REAL *head;      /* coordinates of edge */
-REAL *tail;
+REAL klein_length(
+  REAL *head,      /* coordinates of edge */
+  REAL *tail
+)
 {
   return(kb_acosh(coshKleinLength(head, tail)));
 }
@@ -76,9 +77,12 @@ REAL *tail;
 * endpoints tail and head at those endpoints.
 * Actually, this adds neg grad to output.
 */
-void klein_length_grad(head, tail, head_grad, tail_grad)
-REAL *head, *tail;        /* coordinates of edge */
-REAL *head_grad, *tail_grad;  /* gradients of head and tail */
+void klein_length_grad(
+  REAL *head,
+  REAL *tail,       /* coordinates of edge */
+  REAL *head_grad, 
+  REAL *tail_grad  /* gradients of head and tail */
+)
 {
   int i;
   REAL aa,bb,ab,den,disc;
@@ -98,7 +102,7 @@ REAL *head_grad, *tail_grad;  /* gradients of head and tail */
   { head_grad[i] -= (ab*head[i]/aa- tail[i])/den;
     tail_grad[i] -= (ab*tail[i]/bb - head[i])/den;
   }
-}
+} // end klein_length_grad()
 
 /***********************************************************************
 * This function finds the area of a triangle in the klein model of the
@@ -109,8 +113,7 @@ REAL *head_grad, *tail_grad;  /* gradients of head and tail */
 *    
 *      cosh(C) = cosh(A)cosh(B) + sinh(A)sinh(B)cos(c)
 */
-REAL klein_area(triangle)
-REAL **triangle;
+REAL klein_area(REAL **triangle)
 {
   REAL area;         /* returned area */
   int i;             /* loop iterator */
@@ -135,14 +138,15 @@ REAL **triangle;
      area -= acos(coss[i]);
 
   return(area);
-}
+} // end klein_area()
 
 /**************************************************************************
 * This function calculates the area gradient at the vertices of a triangle.
 */
-void klein_area_grad(triangle, force)
-REAL **triangle;        /* the face */
-REAL **force;     /* the gradients */
+void klein_area_grad(
+REAL **triangle,   /* the face */
+REAL **force       /* the gradients */
+)
 {
   int     v;          /* loop iterator */
   int     s;         /* side opposite vertex */
@@ -184,7 +188,7 @@ REAL **force;     /* the gradients */
          + coeffa*ngrad[v][k][j];
     }
   }
-}
+} // end klein_area_grad()
 
 /**************************************************************************
 
@@ -196,23 +200,21 @@ REAL **force;     /* the gradients */
 * This function finds the length of an edge in the klein model of
 * hyperbolic space.
 */
-REAL klein_length_method(e_info)
-struct qinfo *e_info;
+REAL klein_length_method(struct qinfo *e_info)
 { REAL area;
   area = kb_acosh(coshKleinLength(e_info->x[1], e_info->x[0]));
   if ( everything_quantities_flag  && 
-      (METH_INSTANCE(e_info->method)->quant == default_area_quant_num) )
+      (METH_INSTANCE(e_info->method)->quants[0] == default_area_quant_num) )
      area *= get_edge_density(e_info->id);
 
   return(area);
-}
+} // end klein_length_method()
 
 /**********************************************************************
 * This function finds the contribution to the gradient of the edge with
 * endpoints tail and head at those endpoints.
 */
-REAL klein_length_method_grad(e_info)
-struct qinfo *e_info;
+REAL klein_length_method_grad(struct qinfo *e_info)
 {
   int i;
   REAL aa,bb,ab,den,disc;
@@ -220,7 +222,7 @@ struct qinfo *e_info;
   REAL *tail = e_info->x[0];
   REAL fudge;
   if ( everything_quantities_flag  && 
-      (METH_INSTANCE(e_info->method)->quant == default_area_quant_num) )
+      (METH_INSTANCE(e_info->method)->quants[0] == default_area_quant_num) )
      fudge = get_edge_density(e_info->id);
   else fudge = 1.0;
 
@@ -242,15 +244,14 @@ struct qinfo *e_info;
     e_info->grad[0][i] += fudge*(ab*tail[i]/bb - head[i])/den;
   }
   return(fudge*kb_acosh(coshKleinLength(head, tail)));
-}
+} // end klein_length_method_grad()
 
 /***********************************************************************
 * This function finds the area of a triangle in the klein model of the
 * hyperbolic plane by using the formula:
 *     AREA = PI - angle1 - angle2 - angle3
 */
-REAL klein_area_method(f_info)
-struct qinfo *f_info;
+REAL klein_area_method(struct qinfo *f_info)
 {
   REAL area;         /* returned area */
   int i;             /* loop iterator */
@@ -276,17 +277,16 @@ struct qinfo *f_info;
      area -= acos(coss[i]);
 
   if ( everything_quantities_flag  && 
-      (METH_INSTANCE(f_info->method)->quant == default_area_quant_num) )
+      (METH_INSTANCE(f_info->method)->quants[0] == default_area_quant_num) )
      area *= get_facet_density(f_info->id);
 
   return(area);
-}
+} // end klein_area_method()
 
 /**************************************************************************
 * This function calculates the area gradient at the vertices of a triangle.
 */
-REAL klein_area_method_grad(f_info)
-struct qinfo *f_info;
+REAL klein_area_method_grad(struct qinfo *f_info)
 { REAL area;
   int     v;          /* loop iterator */
   int     s;         /* side opposite vertex */
@@ -300,7 +300,7 @@ struct qinfo *f_info;
        ngrad[3][3][MAXCOORD];      /* neg grad of side wrt vertex */
   REAL fudge;
   if ( everything_quantities_flag  && 
-      (METH_INSTANCE(f_info->method)->quant == default_area_quant_num) )
+      (METH_INSTANCE(f_info->method)->quants[0] == default_area_quant_num) )
      fudge = get_facet_density(f_info->id);
   else fudge = 1.0;
 
@@ -341,5 +341,5 @@ struct qinfo *f_info;
      area -= acos(coss[i]);
 
   return(fudge*area);
-}
+} // end klein_area_method_grad()
 

@@ -32,8 +32,7 @@
 *  Lagrange version.
 */
 
-REAL lagrange_edge_tension_value(e_info)
-struct qinfo *e_info;
+REAL lagrange_edge_tension_value(struct qinfo *e_info)
 {
   REAL value = 0.0;
   int m,i,j;
@@ -66,7 +65,7 @@ struct qinfo *e_info;
       value *= get_edge_density(e_info->id);
   return value;
 
-}
+} // end lagrange_edge_tension_value()
 
 /*********************************************************************
 *
@@ -74,8 +73,7 @@ struct qinfo *e_info;
 *  Lagrange version.
 */
 
-REAL lagrange_edge_tension_grad(e_info)
-struct qinfo *e_info;
+REAL lagrange_edge_tension_grad(struct qinfo *e_info)
 {
   REAL value = 0.0;
   int i,ii,m,j,k;
@@ -111,7 +109,7 @@ struct qinfo *e_info;
 
   return density*value/factorial[dim];
 
-}
+} // end lagrange_edge_tension_grad()
 
 
 /*********************************************************************
@@ -120,8 +118,7 @@ struct qinfo *e_info;
 *  Lagrange version.
 */
 
-REAL lagrange_edge_tension_hess(e_info)
-struct qinfo *e_info;
+REAL lagrange_edge_tension_hess(struct qinfo *e_info)
 {
   REAL value = 0.0;
   int i,ii,m,j,k,jj,kk;
@@ -231,7 +228,7 @@ struct qinfo *e_info;
 
   return density*value/factorial[dim];
 
-}
+} // end lagrange_edge_tension_hess()
 
 /*********************************************************************
                      Film area quantity
@@ -246,8 +243,7 @@ struct qinfo *e_info;
 *  Lagrange version.
 */
 
-REAL lagrange_facet_tension_value(f_info)
-struct qinfo *f_info;
+REAL lagrange_facet_tension_value(struct qinfo *f_info)
 {
   REAL value = 0.0;
   int m,i,j;
@@ -281,7 +277,7 @@ struct qinfo *f_info;
       value *= get_facet_density(f_info->id);
   return value;
 
-}
+} // end lagrange_facet_tension_value()
 
 /*********************************************************************
 *
@@ -289,8 +285,7 @@ struct qinfo *f_info;
 *  Lagrange version.
 */
 
-REAL lagrange_facet_tension_grad(f_info)
-struct qinfo *f_info;
+REAL lagrange_facet_tension_grad(struct qinfo *f_info)
 {
   REAL value = 0.0;
   int i,ii,m,j,k;
@@ -327,7 +322,7 @@ struct qinfo *f_info;
 
   return density*value/factorial[dim];
 
-}
+} // end lagrange_facet_tension_grad()
 
 /*********************************************************************
 *
@@ -335,8 +330,7 @@ struct qinfo *f_info;
 *  Lagrange version.
 */
 
-REAL lagrange_facet_tension_hess(f_info)
-struct qinfo *f_info;
+REAL lagrange_facet_tension_hess(struct qinfo *f_info)
 {
   REAL value = 0.0;
   int i,ii,m,j,k,jj,kk;
@@ -468,7 +462,7 @@ struct qinfo *f_info;
 
   return density*value/factorial[dim];
 
-}
+} // end lagrange_facet_tension_hess()
 
 
 /*********************************************************************
@@ -486,8 +480,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL edge_vector_integral_lagrange(e_info)
-struct qinfo *e_info;
+REAL edge_vector_integral_lagrange(struct qinfo *e_info)
 { int m,j,k;
   REAL value=0.0;
   REAL tang[MAXCOORD];
@@ -506,7 +499,7 @@ struct qinfo *e_info;
      }
   }
   return value;
-}
+} // end edge_vector_integral_lagrange()
 
 /*********************************************************************
 *
@@ -516,9 +509,7 @@ struct qinfo *e_info;
 *
 */
 
-
-REAL edge_vector_integral_lagrange_grad(e_info)
-struct qinfo *e_info;
+REAL edge_vector_integral_lagrange_grad(struct qinfo *e_info)
 { int m,j,k,i;
   REAL value = 0.0;
   REAL val[MAXCOORD];
@@ -550,7 +541,7 @@ struct qinfo *e_info;
      }
 
   return value;
-}
+} // end edge_vector_integral_lagrange_grad()
 
 /*********************************************************************
 *
@@ -560,9 +551,7 @@ struct qinfo *e_info;
 *
 */
 
-
-REAL edge_vector_integral_lagrange_hess(e_info)
-struct qinfo *e_info;
+REAL edge_vector_integral_lagrange_hess(struct qinfo *e_info)
 { int m,i,j,k,ii,kk;
   REAL value = 0.0;
   REAL val[MAXCOORD];
@@ -608,7 +597,7 @@ struct qinfo *e_info;
      }
 
   return value;
-}
+} // end edge_vector_integral_lagrange_hess()
 
 
 
@@ -620,7 +609,7 @@ Integral of vectorfield over facet.  nD facet in (n+1)D only.
 Lagrange model
 
 *********************************************************************/
-REAL lagrange_vector_integral_all ARGS((struct qinfo*,int));
+REAL lagrange_vector_integral_all(struct qinfo*,int);
 
 /*********************************************************************
 *
@@ -630,8 +619,7 @@ REAL lagrange_vector_integral_all ARGS((struct qinfo*,int));
 *
 */
 
-REAL lagrange_vector_integral(f_info)
-struct qinfo *f_info;
+REAL lagrange_vector_integral(struct qinfo *f_info)
 { int i,m,j;
   REAL value=0.0;
   MAT2D(mat,MAXCOORD,MAXCOORD);
@@ -652,7 +640,7 @@ struct qinfo *f_info;
      value += gl->gausswt[m]*det_adjoint(mat,SDIM);
   }
   return sign*value/factorial[dim]; 
-}
+} // end lagrange_vector_integral()
 
 /*********************************************************************
 *
@@ -662,9 +650,7 @@ struct qinfo *f_info;
 *
 */
 
-
-REAL lagrange_vector_integral_grad(f_info)
-struct qinfo *f_info;
+REAL lagrange_vector_integral_grad(struct qinfo *f_info)
 { int i,m,j,k,jj;
   REAL value = 0.0;
   REAL val[MAXCOORD];
@@ -700,7 +686,7 @@ struct qinfo *f_info;
         }
   }
   return value;  
-}
+} // end lagrange_vector_integral_grad()
 
 /*********************************************************************
 *
@@ -709,13 +695,21 @@ struct qinfo *f_info;
 * purpose:  method hessian
 *
 */
-REAL lagrange_vector_integral_hess(f_info)
-struct qinfo *f_info;
+REAL lagrange_vector_integral_hess(struct qinfo *f_info)
 { return lagrange_vector_integral_all(f_info,METHOD_HESSIAN);
 }
-REAL lagrange_vector_integral_all(f_info,mode)
-struct qinfo *f_info;
-int mode;
+
+/***************************************************************************
+*
+* function: lagrange_vector_integral_all()
+*
+* purpose:  Implementation of lagrange_vector_integral value, grad, hessian
+*
+*/
+REAL lagrange_vector_integral_all(
+  struct qinfo *f_info,
+  int mode
+)
 { int i,m,j,k,jj,ii,kk;
   REAL value = 0.0;
   REAL val[MAXCOORD];
@@ -790,9 +784,7 @@ int mode;
   }
 
   return value;  
-}
-
-
+} // end lagrange_vector_integral_all()
 
 /*********************************************************************
 
@@ -802,7 +794,7 @@ Integral of simple k-vectorfield over element. Edges and facets.
 Lagrange model
 
 *********************************************************************/
-REAL lagrange_k_vector_integral_all ARGS((struct qinfo*,int));
+REAL lagrange_k_vector_integral_all (struct qinfo*,int);
 
 /*********************************************************************
 *
@@ -812,8 +804,7 @@ REAL lagrange_k_vector_integral_all ARGS((struct qinfo*,int));
 *
 */
 
-REAL lagrange_k_vector_integral(f_info)
-struct qinfo *f_info;
+REAL lagrange_k_vector_integral(struct qinfo *f_info)
 { int i,m,j,k;
   REAL value=0.0;
   MAT2D(mat,MAXCOORD,MAXCOORD);
@@ -838,7 +829,7 @@ struct qinfo *f_info;
     value += gl->gausswt[m]*det_adjoint(mat,SDIM);
   }
   return sign*value/factorial[dim]; 
-}
+} // end lagrange_k_vector_integral()
 
 /*********************************************************************
 *
@@ -848,9 +839,7 @@ struct qinfo *f_info;
 *
 */
 
-
-REAL lagrange_k_vector_integral_grad(f_info)
-struct qinfo *f_info;
+REAL lagrange_k_vector_integral_grad(struct qinfo *f_info)
 { int i,m,j,k,jj;
   REAL value = 0.0;
   REAL val[MAXCOORD];
@@ -892,7 +881,7 @@ struct qinfo *f_info;
         }
   }
   return value;  
-}
+} // end lagrange_k_vector_integral_grad()
 
 /*********************************************************************
 *
@@ -901,13 +890,22 @@ struct qinfo *f_info;
 * purpose:  method hessian
 *
 */
-REAL lagrange_k_vector_integral_hess(f_info)
-struct qinfo *f_info;
+REAL lagrange_k_vector_integral_hess(struct qinfo *f_info)
 { return lagrange_k_vector_integral_all(f_info,METHOD_HESSIAN);
 }
-REAL lagrange_k_vector_integral_all(f_info,mode)
-struct qinfo *f_info;
-int mode;
+
+/*********************************************************************
+*
+* function: lagrange_k_vector_integral_all()
+*
+* purpose:  Implementation of lagrange_k_vector_integral
+*             value, gradient, and hessian.
+*
+*/
+REAL lagrange_k_vector_integral_all(
+  struct qinfo *f_info,
+  int mode
+)
 { int i,m,j,k,jj,ii,kk;
   REAL value = 0.0;
   REAL val[MAXCOORD];
@@ -992,7 +990,7 @@ int mode;
   }
 
   return value;  
-}
+} // end lagrange_k_vector_integral_all()
 
 
 
@@ -1004,7 +1002,7 @@ Integral of vectorfield over facet.  nD facet in (n+1)D only.
 Lagrange model
 
 *********************************************************************/
-REAL lagrange_facet_volume_all ARGS((struct qinfo*,int));
+REAL lagrange_facet_volume_all (struct qinfo*,int);
 
 /*********************************************************************
 *
@@ -1014,8 +1012,7 @@ REAL lagrange_facet_volume_all ARGS((struct qinfo*,int));
 *
 */
 
-REAL lagrange_facet_volume(f_info)
-struct qinfo *f_info;
+REAL lagrange_facet_volume(struct qinfo *f_info)
 { int i,m,j;
   REAL value = 0.0;
   MAT2D(mat,MAXCOORD,MAXCOORD);
@@ -1030,7 +1027,7 @@ struct qinfo *f_info;
     value += gl->gausswt[m]*det_adjoint(mat,dim)*f_info->gauss_pt[m][dim];
   }
   return sign*value/factorial[dim]; 
-}
+} // end lagrange_facet_volume()
 
 /*********************************************************************
 *
@@ -1040,9 +1037,7 @@ struct qinfo *f_info;
 *
 */
 
-
-REAL lagrange_facet_volume_grad(f_info)
-struct qinfo *f_info;
+REAL lagrange_facet_volume_grad(struct qinfo *f_info)
 { int i,m,j,k;
   REAL value = 0.0;
   MAT2D(mat,MAXCOORD,MAXCOORD);
@@ -1067,7 +1062,7 @@ struct qinfo *f_info;
         f_info->grad[k][dim] += weight*gl->gpoly[m][k]*det;
   }
   return value;  
-}
+} // end lagrange_facet_volume_grad()
 
 /*********************************************************************
 *
@@ -1076,13 +1071,21 @@ struct qinfo *f_info;
 * purpose:  method hessian
 *
 */
-REAL lagrange_facet_volume_hess(f_info)
-struct qinfo *f_info;
+REAL lagrange_facet_volume_hess(struct qinfo *f_info)
 { return lagrange_facet_volume_all(f_info,METHOD_HESSIAN);
 }
-REAL lagrange_facet_volume_all(f_info,mode)
-struct qinfo *f_info;
-int mode;
+
+/*********************************************************************
+*
+* function: lagrange_facet_volume_all()
+*
+* purpose:  lagrande_facet_volume method value, gradient, and hessian
+*
+*/
+REAL lagrange_facet_volume_all(
+  struct qinfo *f_info,
+  int mode
+)
 { int i,m,j,k,jj,ii,kk;
   REAL sum,value = 0.0;
   MAT2D(mat,MAXCOORD,MAXCOORD);
@@ -1153,5 +1156,5 @@ int mode;
   }
 
   return value;  
-}
+} // end lagrange_facet_volume_all()
 

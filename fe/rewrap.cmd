@@ -1,7 +1,7 @@
 // rewrap.cmd
 
 // Commands to rewrap torus vertices and edges to get them nicely
-// within unit cell.  This version does 3D; for 2D see rewrap2.cmd.
+// within unit cell.  This version does 3D and 2D. 
 // Moves vertices at most one period at a time, so you may have to
 // repeat if things are very bad to start with.
 
@@ -16,30 +16,30 @@ rewrap := {
   { errprintf"rewrap is for space dimension 3; for 2D use rewrap2.cmd.\n";
     return;
   };
+  local ucoord, dim, ups, downs;
+  define ucoord real[space_dimension];  // period-based coordinates
   define body attribute old_volume real; // so can adjust volconst
+  define ups integer[3]; // numeric torus wraps
+  define downs integer[3];
+  ups := { 1, 64, 4096 };
+  downs := { 31, 1984, 126976 };
+
   set body old_volume volume;
-  foreach vertex vv where vv.x*inverse_periods[1][1]+vv.y*inverse_periods[1][2]
-      + vv.z*inverse_periods[1][3] < 0 do wrap_vertex(vv.id,1);
-  foreach vertex vv where vv.x*inverse_periods[1][1]+vv.y*inverse_periods[1][2]
-      + vv.z*inverse_periods[1][3] >= 1 do wrap_vertex(vv.id,31);
-  foreach vertex vv where vv.x*inverse_periods[2][1]+vv.y*inverse_periods[2][2]
-      + vv.z*inverse_periods[2][3] < 0 do wrap_vertex(vv.id,64);
-  foreach vertex vv where vv.x*inverse_periods[2][1]+vv.y*inverse_periods[2][2]
-      + vv.z*inverse_periods[2][3] >= 1 do wrap_vertex(vv.id,1984);
-  foreach vertex vv where vv.x*inverse_periods[3][1]+vv.y*inverse_periods[3][2]
-      + vv.z*inverse_periods[3][3] < 0 do wrap_vertex(vv.id,4096);
-  foreach vertex vv where vv.x*inverse_periods[3][1]+vv.y*inverse_periods[3][2]
-      + vv.z*inverse_periods[3][3] >= 1 do wrap_vertex(vv.id,126976);
-  recalc;
-  // Adjust volconst
+  foreach vertex vv do
+  { ucoord := vv.__x * inverse_periods;
+    for ( dim := 1; dim <= space_dimension ; dim++ )
+    { if ucoord[dim] < 0 then wrap_vertex(vv.id,ups[dim])
+      else if ucoord[dim] > 1 then wrap_vertex(vv.id,downs[dim]);
+    };
+  };
   local torvol;
-  torvol :=  abs((torus_periods[1][1]*torus_periods[2][2]
-               - torus_periods[1][2]*torus_periods[2][1])*torus_periods[3][3]
-          + (torus_periods[1][2]*torus_periods[2][3]
-               - torus_periods[1][3]*torus_periods[2][2])*torus_periods[3][1] 
-          + (torus_periods[1][3]*torus_periods[2][1]
-               - torus_periods[1][1]*torus_periods[2][3])*torus_periods[3][2]);
+  torvol :=  abs(matrix_determinant(torus_periods));
   set body volconst floor((old_volume - volume - volconst)/torvol+.5)*torvol;
 
 }
+
+// End rewrap.cmd
+
+// Usage: rewrap
+
 

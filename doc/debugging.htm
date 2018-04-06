@@ -1,17 +1,22 @@
-<HTML>
+<!DOCTYPE HTML>
 <HEAD><TITLE>Surface Evolver Documentation: Debugging
-</title></head>
+</title>
+<link rel="stylesheet" type="text/css" href="evdoc-style.css" />
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+</head>
 
 <BODY>
-<center>
-<h1><a href="http://www.susqu.edu/brakke/evolver/evolver.htm">
+
+<h1 class="center">
+<a href="http://www.susqu.edu/brakke/evolver/evolver.htm" class="comic">
 Surface Evolver</a> Documentation</h1>
-</center>
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
+
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 
 
-<hr><a name="debugging"> </a>
+<hr><a   id="debugging"> </a>
 <h1>Surface Evolver Debugging</h1>
 
 There are several debugging features built into Evolver. Script 
@@ -19,28 +24,28 @@ debugging is meant for ordinary users; the others are meant mostly
 for Evolver developers (me).
 
 <ul>
-<li><a href="#script debugging">Script debugging</a>
-<li><a href="#syntax debugging">Syntax debugging</a>
-<li><a href="#memory debugging">Memory debugging</a>
-<li><a href="#gradient debugging">Gradient debugging</a>
-<li><a href="#Hessian debugging">Hessian debugging</a>
-<li><a href="#iteration debugging">Iteration debugging</a>
+<li><a href="#script-debugging">Script debugging</a>
+<li><a href="#syntax-debugging">Syntax debugging</a>
+<li><a href="#memory-debugging">Memory debugging</a>
+<li><a href="#gradient-debugging">Gradient debugging</a>
+<li><a href="#Hessian-debugging">Hessian debugging</a>
+<li><a href="#iteration-debugging">Iteration debugging</a>
 </ul>
 
 <hr>
-<a name="script debugging"><h2>Script Debugging</h2></a>
+<a   id="script-debugging"><h2>Script Debugging</h2></a>
 
 A 'script' here refers to any Evolver commands, whether
 they be in procedures or functions.
 <p>
 Debugging may be done the old-fashioned way, by putting print
 statments in code.  Another alternative is to put
-<a href="commands.htm#subcommand"><tt>subcommand</tt></a> in a script
+<a href="commands.htm#subcommand"><code>subcommand</code></a> in a script
 to let the user explore the state of the surface at a given 
 point in a script.  If you can't or don't want to modify
 the script, then you can set breakpoints.
 
-<h3> <a name="breakpoints">Breakpoints</a></h3>
+<h3> <a   id="breakpoints">Breakpoints</a></h3>
 The user may set a breakpoint in an already loaded script
 with the "set breakpoint" command.  The syntax is 
 <pre>
@@ -63,25 +68,25 @@ or as a group with
 <p>
 When a breakpoint is reached, Evolver will enter into a subcommand prompt,
 at which the user may enter any Evolver commands (although some commands,
-such as <tt>load</tt> would be very unwise).  
+such as <code>load</code> would be very unwise).  
 To exit from the
-subcommand prompt, use <tt>q</tt> or <tt>exit</tt> or <tt>quit</tt>.
+subcommand prompt, use <code>q</code> or <code>exit</code> or <code>quit</code>.
 <p>
-<a name="single-stepping"></a>
+<a   id="single-stepping"></a>
 <b>Single-stepping:</b> At the debug prompt, there is a special
-single-step command <tt>n</tt>. which will continue execution to the next line
+single-step command <code>n</code>. which will continue execution to the next line
 (to be precise, until the line number changes).  
 
 <p>
-<a name="stack trace"></a> <a name="whereami"></a>
-<b>Stack trace:</b> At the debug prompt, the <tt>whereami</tt> command
+<a   id="stack-trace"></a> <a   id="whereami"></a>
+<b>Stack trace:</b> At the debug prompt, the <code>whereami</code> command
  will print
  a stack trace, showing the sequence of function or procedure calls made to
 reach the current spot.
 
 
 <hr>
-<a name="syntax debugging"><h2>Syntax Debugging</h2></a>
+<a   id="syntax-debugging"><h2>Syntax Debugging</h2></a>
 The error messages produced by Evolver's command parser try to
 be helpful, but sometimes are rather cryptic.  Frequent errors
 are misspelled keywords, variables that are spelled the same
@@ -92,7 +97,7 @@ print out the parsing steps, but this is not for the faint of heart,
 since it the printout is in very unfriendly YACC format. You will
 have to have an understanding of how shift-reduce parsing works
 to have a chance at understanding the output.  The
-toggle <tt>debug</tt> controls the YACC trace feature.
+toggle <code>debug</code> controls the YACC trace feature.
 Example:
 <pre>
 
@@ -132,8 +137,8 @@ print asdf
 
 
 <hr>
-<a name="memory debugging"><h2>Memory Debugging</h2></a>
-The <tt><a href="single.htm#c">c</a></tt> command gives a brief printout of
+<a   id="memory-debugging"><h2>Memory Debugging</h2></a>
+The <code><a href="single.htm#c">c</a></code> command gives a brief printout of
 memory usage, including element memory as calculated for the 
 number of existing elements, and total allocated data memory.
  For example, on Windows:
@@ -144,7 +149,7 @@ Vertices: 50  Edges: 144  Facets: 96  Bodies: 1  Facetedges: 288
 Element memory: 40280
 Total data memory: 302122 bytes.
 </pre>
-If the <tt>verbose</tt> toggle is on, then more detailed information
+If the <code>verbose</code> toggle is on, then more detailed information
 (which may depend on your system) is printed:
 <pre>
 
@@ -175,21 +180,21 @@ Total data memory: 81 blocks, 302122 bytes.
 <p>
 
 
-<b>For gurus only.</b> The <a href="toggle.htm#memdebug">memdebug</a>
+<b>For gurus only.</b> The <a href="toggle.htm#memdebug" class="keyword">memdebug</a>
 command causes verbose information to be printed at every memory allocation,
 reallocation, or deallocation.   Meant for me to use debugging Evolver itself.
-If Evolver was compiled with MEMSTRINGS defined, then the file and line
+If Evolver was compiled with <code>MEMSTRINGS</code> defined, then the file and line
 location of each memory operation is also printed.
 It also causes heap checking
 to be done on some systems at each memory operation.
 
 <hr>
-<a name="gradient debugging"><h2>Gradient Debugging</h2></a>
+<a   id="gradient-debugging"><h2>Gradient Debugging</h2></a>
 
 <b>For gurus mostly.</b>
-The <a href="toggle.htm#estimate"><tt>estimate</tt></a> toggle can be used
+The <a href="toggle.htm#estimate"><code>estimate</code></a> toggle can be used
 to verify that gradients are being calculated correctly.
-When on, <tt>estimate</tt> will, for each 'g' step, print
+When on, <code>estimate</code> will, for each '<code>g</code>' step, print
 the energy change based on the gradient, that is, calculate the
 inner product of the velocity and energy gradient at each vertex
 and sum the products, and then also pring the actual energy 
@@ -265,16 +270,19 @@ Enter command:
 </pre>
 <p>
 Beware that non-smooth evolution, for example with one-sided
-constraints, can invalidate the assumptions behind <tt>estimate</tt>.
+constraints, can invalidate the assumptions behind <code>estimate</code>.
 
 
 <hr>
-<a name="hessian debugging"><h2>Hessian Debugging</h2></a>
+<a   id="hessian-debugging"><h2>Hessian Debugging</h2></a>
 
-The <a href="toggle.htm#hessian_quiet">hessian_quiet</a> toggle
+The <a href="toggle.htm#hessian_quiet" class="keyword">hessian_quiet</a> toggle
 can be turned off to print information on memory usage and 
-workload during Hessian factoring (hessian, hessian_seek, ritz,
-eigenprobe commands).  For example,
+workload during Hessian factoring (
+<a href="commands.htm#hessian">hessian</a>, 
+<a href="commands.htm#hessian_seek">hessian_seek</a>, 
+<a href="commands.htm#ritz">ritz</a>,
+<a href="commands.htm#eigenprobe">eigenprobe</a> commands).  For example,
 <pre>
 
 Enter command: hessian_quiet off
@@ -289,16 +297,17 @@ Workspace: 8 bytes
 Passes through main loop: 34
 Total_fill:  538907
 Total_flops: 7.25226e+007
-Eigencounts:    3 <,  0 ==,  12286 >
+Eigencounts:    3 &lt;,  0 ==,  12286 >
 </pre>
 There are some differences in output depending on whether
-the ysmp toggle is on (using the Yale Sparse Matrix Package) or off
+the <a href="toggle.htm#ysmp" class="keyword">ysmp</a>
+ toggle is on (using the Yale Sparse Matrix Package) or off
 (using my home-grown minimal degree algorithm).
 <p>
 <b>For gurus only.</b>
 Evolver has a feature that permits numerical checking of the 
 correctness of the named-quantity Hessian-calculating routines.  The
-<a href="toggle.htm#hessian_diff">hessian_diff</a> toggle causes
+<a href="toggle.htm#hessian_diff" class="keyword">hessian_diff</a> toggle causes
 Hessians to be calculated with finite differences of gradients
 rather than the routines in question.  
   There are some limitations on what
@@ -307,15 +316,15 @@ it won't work with volume or quantity constraints.  But since
 any quantity can be tested as an energy, that does not affect
 its main purpose.
 <p>
-<a name="mindeg_debug_level"></a>
-<a name="mindeg_min_region_size"></a>
-<a name="mindeg_margin"></a>
-Some items for debugging and tweaking of my minimal degree algorithm:
+<a   id="mindeg_debug_level"></a>
+<a   id="mindeg_min_region_size"></a>
+<a   id="mindeg_margin"></a>
+Some internal variables for debugging and tweaking of my minimal degree algorithm:
 <dl>
-<dt>mindeg_debug_level</dt><dd> Controls verbosity of debug messages.</dd>
-<dt>mindeg_min_region_size</dt><dd> Smallest size region desired; smaller
+<dt><code>mindeg_debug_level</code></dt><dd> Controls verbosity of debug messages.</dd>
+<dt><code>mindeg_min_region_size</code></dt><dd> Smallest size region desired; smaller
 regions will be merged with parent node. Default 0.</dd>
-<dt>mindeg_margin</dt><dd> How high to go above minimum degree in seeking
+<dt><code>mindeg_margin</code></dt><dd> How high to go above minimum degree in seeking
   good elimination.  Default 5. </dd>
 </dl>
 
@@ -323,9 +332,9 @@ regions will be merged with parent node. Default 0.</dd>
 
 
 <hr>
-<a name="iteration debugging"><h2>Iteration Debugging</h2></a>
-The <a href="toggle.htm#itdebug">itdebug</a> command toggles the printing
-of information during a '<a href="single.htm#g">g</a>' command.
+<a   id="iteration-debugging"><h2>Iteration Debugging</h2></a>
+The <a href="toggle.htm#itdebug" class="keyword">itdebug</a> command toggles the printing
+of information during a '<a href="single.htm#g" class="keyword">g</a>' command.
 It prints the scale factor for the move, the progress in convergence
 of the volume or fixed quantity constraints (in terms of the total
 error as a multiple of the tolerance), then the energy and volumes
@@ -387,7 +396,8 @@ Enter command:
 </pre>
 
 <hr>
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 </body>
 </html>

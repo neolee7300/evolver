@@ -23,8 +23,7 @@
 *
 */
 
-REAL johndust_energy(v_info)
-struct qinfo *v_info;
+REAL johndust_energy(struct qinfo *v_info)
 { vertex_id v_id;
   int i;
   REAL energy = 0.0;
@@ -40,7 +39,7 @@ struct qinfo *v_info;
     else  energy += (M_PI - asin(d/2))/d;    
   }
   return energy;
-}
+} // end johndust_energy()
 
 /**************************************************************
 *
@@ -52,8 +51,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL johndust_gradient(v_info)
-struct qinfo *v_info;
+REAL johndust_gradient(struct qinfo *v_info)
 { REAL *x = get_coord(v_info->id);
   REAL energy = 0.0;  /* for this vertex */
   vertex_id v_id;
@@ -76,7 +74,7 @@ struct qinfo *v_info;
       v_info->grad[0][i] += dp/d*r[i];
   }
   return energy;
-}
+} // end REAL johndust_gradient()
 
 
 /******************************************************************************
@@ -93,15 +91,16 @@ struct qinfo *v_info;
 *  purpose: initialization for gravity method
 */
 
-void string_gravity_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void string_gravity_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 {
   /* method modulus is gravitation constant */
   if ( gravity_quantity_num >= 0 )
      GEN_QUANT(gravity_quantity_num)->modulus =
          web.gravflag ? web.grav_const : 0.0;
-}
+} // end string_gravity_init()
 
 /**************************************************************
 *
@@ -114,13 +113,12 @@ struct method_instance *mi;
 *
 */
 
-REAL string_gravity_all_q ARGS((struct qinfo *,int));
-REAL string_gravity_all_lagrange ARGS((struct qinfo *,int));
-REAL get_edge_gdensity ARGS((edge_id));
-REAL string_gravity_all ARGS((struct qinfo *,int));
+REAL string_gravity_all_q(struct qinfo *,int);
+REAL string_gravity_all_lagrange(struct qinfo *,int);
+REAL get_edge_gdensity(edge_id);
+REAL string_gravity_all(struct qinfo *,int);
 
-REAL get_edge_gdensity(e_id)
-edge_id e_id;
+REAL get_edge_gdensity(edge_id e_id)
 { REAL gdensity;
   facetedge_id fe,ffe;
   facet_id f_id;
@@ -146,11 +144,12 @@ edge_id e_id;
           gdensity -= get_body_density(b_id);
   }
   return gdensity;
-}
+} // end get_edge_gdensity()
 
-REAL string_gravity_all(e_info,mode)
-struct qinfo *e_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL string_gravity_all(
+  struct qinfo *e_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */ 
+)
 {
   int i,j;
   REAL jac; /* jacobian */
@@ -205,7 +204,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
        e_info->hess[i][j][1][1] = jac*c;
      }
   return jac*sum*c;
-}
+} // end string_gravity_all()
 
 /**************************************************************
 *
@@ -218,9 +217,10 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 *
 */
 
-REAL string_gravity_all_q(e_info,mode)
-struct qinfo *e_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL string_gravity_all_q(
+  struct qinfo *e_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 {
   int i,k,kk,m;
   REAL **g=NULL,****h=NULL;
@@ -265,7 +265,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
       }
   }
   return value;
-}
+} // end string_gravity_all_q()
 
 
 
@@ -280,9 +280,10 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 *
 */
 
-REAL string_gravity_all_lagrange(e_info,mode)
-struct qinfo *e_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL string_gravity_all_lagrange(
+  struct qinfo *e_info,
+  int mode  /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 {
   REAL gdensity;
   REAL sum,y;
@@ -326,7 +327,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
    }
 
   return value;
-}
+} // end string_gravity_all_lagrange()
 
 
 
@@ -340,8 +341,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 *
 */
 
-REAL string_gravity_energy(e_info)
-struct qinfo *e_info;
+REAL string_gravity_energy(struct qinfo *e_info)
 {
  return string_gravity_all(e_info,METHOD_VALUE);
 }
@@ -358,8 +358,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL string_gravity_grads(e_info)
-struct qinfo *e_info;
+REAL string_gravity_grads(struct qinfo *e_info)
 {
  return string_gravity_all(e_info,METHOD_GRADIENT);
 }
@@ -375,8 +374,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL string_gravity_hessian(e_info)
-struct qinfo *e_info;
+REAL string_gravity_hessian(struct qinfo *e_info)
 {
  return string_gravity_all(e_info,METHOD_HESSIAN);
 }
@@ -390,19 +388,18 @@ struct qinfo *e_info;
 
 ***************************************************************************/
 
-void curvature_binormal_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void curvature_binormal_init(
+  int mode,
+  struct method_instance *mi
+) 
 {
 }
 
-REAL curvature_binormal_energy(v_info)
-struct qinfo *v_info;
+REAL curvature_binormal_energy(struct qinfo *v_info)
 { return 0.0;
 }
 
-REAL curvature_binormal_force(v_info)
-struct qinfo *v_info;
+REAL curvature_binormal_force(struct qinfo *v_info)
 { 
   vertex_id v_id = v_info->id;
   edge_id e1,e2;
@@ -425,7 +422,7 @@ struct qinfo *v_info;
   for ( i = 0 ; i < SDIM ; i++ )
      v_info->grad[0][i] /= denom;
   return 0.0; /* energy */
-}
+} // end curvature_binormal_force()
 
 
 
@@ -442,14 +439,14 @@ struct qinfo *v_info;
     Third deriv of curve position as function of arclength, squared.
 ****************************************************************************/
 
-void ddd_gamma_sq_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void ddd_gamma_sq_init(
+  int mode,
+  struct method_instance *mi
+)
 {
 }
 
-REAL ddd_gamma_sq_energy(e_info)
-struct qinfo *e_info;
+REAL ddd_gamma_sq_energy(struct qinfo *e_info)
 { REAL *side1,*side2,*side3;
   REAL s1,s2,s3;
   REAL dddgamma[MAXCOORD];
@@ -466,10 +463,9 @@ struct qinfo *e_info;
                       - (side1[i]+side2[i])/s2/s3/(s1+s2)
                       + (side1[i]+side2[i]+side3[i])/s3/(s2+s3)/(s1+s2+s3);
   return 36*SDIM_dot(dddgamma,dddgamma)*s2;
-}
+} // end ddd_gamma_sq_energy()
 
-REAL ddd_gamma_sq_gradient(e_info)
-struct qinfo *e_info;
+REAL ddd_gamma_sq_gradient(struct qinfo *e_info)
 { REAL *side1,*side2,*side3;
   REAL s1,s2,s3;
   REAL dddgamma[MAXCOORD];
@@ -542,7 +538,7 @@ struct qinfo *e_info;
      e_info->grad[1][j] += energy*side2[j]/s2/s2;
   }
   return energy;
-}
+} // end ddd_gamma_sq_gradient()
 
 
 /*********************************************************************
@@ -560,14 +556,13 @@ struct qinfo *e_info;
 *                of true area.
 */
 
-REAL gap_energy(e_info)
-struct qinfo *e_info;
+REAL gap_energy(struct qinfo *e_info)
 {
   edge_id e_id = e_info->id;
   REAL sprenergy = 0.0;
   REAL *s;
   REAL ss;
-  struct constraint *constr[MAXCONPER];
+  struct constraint *constr[MAXCONHIT];
   int concount;
   conmap_t * conmap;
   int i,j; 
@@ -579,8 +574,8 @@ struct qinfo *e_info;
   conmap = get_e_constraint_map(e_id);
   for ( j = 1,i = 0 ; j <= (int)conmap[0] ; j++ )
   { constr[i] = get_constraint(conmap[j]);
-    if ( constr[i]->attr & B_CONVEX ) 
-            i++;    /* keep this one */
+    if ( (constr[i]->attr & B_CONVEX) && ( i < MAXCONHIT-1) ) 
+      i++;    /* keep this one */
   }
   if ( i == 0 ) return 0.0;
   concount = i;  
@@ -619,7 +614,7 @@ struct qinfo *e_info;
 
   sprenergy *= web.spring_constant;
   return sprenergy;
-}
+} // end gap_energy()
 
 /****************************************************************
 *
@@ -638,14 +633,12 @@ struct qinfo *e_info;
 *                ends of the side.
 */
 
-
-REAL  gap_grads(e_info)
-struct qinfo *e_info;
+REAL  gap_grads(struct qinfo *e_info)
 {
   edge_id e_id = e_info->id;
   REAL *s;
   REAL ss; /* square lengths */
-  struct constraint *constr[MAXCONPER];
+  struct constraint *constr[MAXCONHIT];
   int concount;
   conmap_t * conmap;
   int i,j; 
@@ -660,7 +653,7 @@ struct qinfo *e_info;
   for ( j = 1,i=0 ; j <= (int)conmap[0] ; j++ )
   {
     constr[i] = get_constraint(conmap[j]);
-    if ( constr[i]->attr & B_CONVEX ) i++;    /* keep this one */
+    if ( (constr[i]->attr & B_CONVEX) && (i < MAXCONHIT-1) ) i++;    /* keep this one */
   }
   if ( i == 0 ) return 0.0;
   concount = i;  
@@ -747,9 +740,10 @@ int form_factors_attr; /* number of form_factors extra attribute */
 *
 */
 
-void linear_elastic_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void linear_elastic_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 { 
 
   if ( web.modeltype != LINEAR )
@@ -771,7 +765,7 @@ struct method_instance *mi;
   if ( EXTRAS(FACET)[form_factors_attr].array_spec.datacount != 3 )
      kb_error(2153,"Facet extra attribute form_factors must have size 3.\n",
         RECOVERABLE);
-}
+} // end linear_elastic_init()
 
 /************************************************************************
 *
@@ -779,11 +773,12 @@ struct method_instance *mi;
 *
 * purpose: energy, gradient, and hessian for linear_elastic method.
 */
-REAL linear_elastic_all ARGS((struct qinfo *,int));
+REAL linear_elastic_all (struct qinfo *,int);
 
-REAL linear_elastic_all(f_info,mode)
-struct qinfo *f_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL linear_elastic_all(
+  struct qinfo *f_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 {
   REAL *s;  /* pointer to extra attributes */
   REAL **side; 
@@ -932,7 +927,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
          }
 
   return energy;
-}
+} // end linear_elastic_all()
 
 /**************************************************************
 *
@@ -944,8 +939,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 *
 */
 
-REAL linear_elastic_energy(f_info)
-struct qinfo *f_info;
+REAL linear_elastic_energy(struct qinfo *f_info)
 {
  return linear_elastic_all(f_info,METHOD_VALUE);
 }
@@ -962,8 +956,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL linear_elastic_gradient(f_info)
-struct qinfo *f_info;
+REAL linear_elastic_gradient(struct qinfo *f_info)
 {
  return linear_elastic_all(f_info,METHOD_GRADIENT);
 }
@@ -979,8 +972,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL linear_elastic_hessian(f_info)
-struct qinfo *f_info;
+REAL linear_elastic_hessian(struct qinfo *f_info)
 {
  return linear_elastic_all(f_info,METHOD_HESSIAN);
 }
@@ -1020,9 +1012,10 @@ int LEBweight_attr; /* optional per-facet weight factor */
 *
 */
 
-void linear_elastic_B_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void linear_elastic_B_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 { 
 
   if ( web.modeltype != LINEAR )
@@ -1037,7 +1030,7 @@ struct method_instance *mi;
 
   if ( web.dimension != 2 )
      kb_error(2157,"linear_elastic_B method only for SOAPFILM model.\n",RECOVERABLE);
-}
+} // end linear_elastic_B_init()
 
 /************************************************************************
 *
@@ -1045,11 +1038,12 @@ struct method_instance *mi;
 *
 * purpose: energy, gradient, and hessian for linear_elastic_B method.
 */
-REAL linear_elastic_B_all ARGS((struct qinfo *,int));
+REAL linear_elastic_B_all (struct qinfo *,int);
 
-REAL linear_elastic_B_all(f_info,mode)
-struct qinfo *f_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL linear_elastic_B_all(
+  struct qinfo *f_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 {
   REAL q11,q12,q22;  /* Q entries */
   REAL Q[2][2];
@@ -1337,7 +1331,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
      f_info->hess[0][0][i][j] -= term;
    }
   return energy;
-}
+} // end linear_elastic_B_all()
 
 /**************************************************************
 *
@@ -1349,8 +1343,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 *
 */
 
-REAL linear_elastic_B_energy(f_info)
-struct qinfo *f_info;
+REAL linear_elastic_B_energy(struct qinfo *f_info)
 {
  return linear_elastic_B_all(f_info,METHOD_VALUE);
 }
@@ -1367,8 +1360,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL linear_elastic_B_gradient(f_info)
-struct qinfo *f_info;
+REAL linear_elastic_B_gradient(struct qinfo *f_info)
 {
  return linear_elastic_B_all(f_info,METHOD_GRADIENT);
 }
@@ -1384,8 +1376,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL linear_elastic_B_hessian(f_info)
-struct qinfo *f_info;
+REAL linear_elastic_B_hessian(struct qinfo *f_info)
 {
  return linear_elastic_B_all(f_info,METHOD_HESSIAN);
 }
@@ -1431,9 +1422,10 @@ struct qinfo *f_info;
 *
 */
 
-void relaxed_elastic_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void relaxed_elastic_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 { 
 
   if ( web.modeltype != LINEAR )
@@ -1449,7 +1441,7 @@ struct method_instance *mi;
 
   LEBweight_attr = find_attribute(FACET,LEBWEIGHT_NAME); /* optional */
 
-}
+} // end relaxed_elastic_init()
 
 /************************************************************************
 *
@@ -1458,14 +1450,15 @@ struct method_instance *mi;
 * purpose: energy, gradient, and hessian for relaxed_elastic_method.
 */
 
-REAL relaxed_elastic_all ARGS((struct qinfo *,int,int));
+REAL relaxed_elastic_all(struct qinfo *,int,int);
 #define ONE_STRESS 1
 #define TWO_STRESS 2
 
-REAL relaxed_elastic_all(f_info,mode,part)
-struct qinfo *f_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
-int part; /* flag for one stress, two stress, or both parts */
+REAL relaxed_elastic_all(
+  struct qinfo *f_info,
+  int mode, /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+  int part  /* flag for one stress, two stress, or both parts */
+)
 {
   REAL q11,q12,q22;  /* Q entries */
   REAL Q[2][2];
@@ -1840,7 +1833,7 @@ int part; /* flag for one stress, two stress, or both parts */
      f_info->hess[0][0][i][j] -= term;
    }
   return energy;
-}
+} // end relaxed_elastic_all()
 
 /**************************************************************
 *
@@ -1852,8 +1845,7 @@ int part; /* flag for one stress, two stress, or both parts */
 *
 */
 
-REAL relaxed_elastic_energy(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic_energy(struct qinfo *f_info)
 {
  return relaxed_elastic_all(f_info,METHOD_VALUE,ONE_STRESS|TWO_STRESS);
 }
@@ -1870,8 +1862,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL relaxed_elastic_gradient(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic_gradient(struct qinfo *f_info)
 {
  return relaxed_elastic_all(f_info,METHOD_GRADIENT,ONE_STRESS|TWO_STRESS);
 }
@@ -1887,36 +1878,29 @@ struct qinfo *f_info;
 *
 */
 
-REAL relaxed_elastic_hessian(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic_hessian(struct qinfo *f_info)
 {
  return relaxed_elastic_all(f_info,METHOD_HESSIAN,ONE_STRESS|TWO_STRESS);
 }
 
 /* Partial relaxed energy methods */
 
-REAL relaxed_elastic1_energy(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic1_energy(struct qinfo *f_info)
 { return relaxed_elastic_all(f_info,METHOD_VALUE,ONE_STRESS); }
 
-REAL relaxed_elastic1_gradient(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic1_gradient(struct qinfo *f_info)
 { return relaxed_elastic_all(f_info,METHOD_GRADIENT,ONE_STRESS); }
 
-REAL relaxed_elastic1_hessian(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic1_hessian(struct qinfo *f_info)
 { return relaxed_elastic_all(f_info,METHOD_HESSIAN,ONE_STRESS); }
 
-REAL relaxed_elastic2_energy(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic2_energy(struct qinfo *f_info)
 { return relaxed_elastic_all(f_info,METHOD_VALUE,TWO_STRESS); }
 
-REAL relaxed_elastic2_gradient(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic2_gradient(struct qinfo *f_info)
 { return relaxed_elastic_all(f_info,METHOD_GRADIENT,TWO_STRESS); }
 
-REAL relaxed_elastic2_hessian(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic2_hessian(struct qinfo *f_info)
 { return relaxed_elastic_all(f_info,METHOD_HESSIAN,TWO_STRESS); }
 
 /************************************************************************
@@ -1960,9 +1944,10 @@ struct qinfo *f_info;
 *
 */
 
-void relaxed_elastic_A_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void relaxed_elastic_A_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 { 
 
   if ( web.modeltype != LINEAR )
@@ -1986,7 +1971,7 @@ struct method_instance *mi;
 
   LEBweight_attr = find_attribute(FACET,LEBWEIGHT_NAME); /* optional */
 
-}
+} // end relaxed_elastic_A_init()
 
 /************************************************************************
 *
@@ -1995,14 +1980,15 @@ struct method_instance *mi;
 * purpose: energy, gradient, and hessian for relaxed_elastic_A_method.
 */
 
-REAL relaxed_elastic_A_all ARGS((struct qinfo *,int,int));
+REAL relaxed_elastic_A_all(struct qinfo *,int,int);
 #define ONE_STRESS 1
 #define TWO_STRESS 2
 
-REAL relaxed_elastic_A_all(f_info,mode,part)
-struct qinfo *f_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
-int part; /* flag for one stress, two stress, or both parts */
+REAL relaxed_elastic_A_all(
+  struct qinfo *f_info,
+  int mode, /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+  int part /* flag for one stress, two stress, or both parts */
+)
 {
   REAL q11,q12,q22;  /* Q entries */
   REAL Q[2][2];
@@ -2254,7 +2240,7 @@ int part; /* flag for one stress, two stress, or both parts */
           f_info->hess[0][0][i][j] += term;
         }
   return energy;
-}
+} // end relaxed_elastic_A_all()
 
 /**************************************************************
 *
@@ -2266,8 +2252,7 @@ int part; /* flag for one stress, two stress, or both parts */
 *
 */
 
-REAL relaxed_elastic_A_energy(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic_A_energy(struct qinfo *f_info)
 {
  return relaxed_elastic_A_all(f_info,METHOD_VALUE,ONE_STRESS|TWO_STRESS);
 }
@@ -2284,8 +2269,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL relaxed_elastic_A_gradient(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic_A_gradient(struct qinfo *f_info)
 {
  return relaxed_elastic_A_all(f_info,METHOD_GRADIENT,ONE_STRESS|TWO_STRESS);
 }
@@ -2301,36 +2285,29 @@ struct qinfo *f_info;
 *
 */
 
-REAL relaxed_elastic_A_hessian(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic_A_hessian(struct qinfo *f_info)
 {
  return relaxed_elastic_A_all(f_info,METHOD_HESSIAN,ONE_STRESS|TWO_STRESS);
 }
 
 /* Partial relaxed energy methods */
 
-REAL relaxed_elastic1_A_energy(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic1_A_energy(struct qinfo *f_info)
 { return relaxed_elastic_A_all(f_info,METHOD_VALUE,ONE_STRESS); }
 
-REAL relaxed_elastic1_A_gradient(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic1_A_gradient(struct qinfo *f_info)
 { return relaxed_elastic_A_all(f_info,METHOD_GRADIENT,ONE_STRESS); }
 
-REAL relaxed_elastic1_A_hessian(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic1_A_hessian(struct qinfo *f_info)
 { return relaxed_elastic_A_all(f_info,METHOD_HESSIAN,ONE_STRESS); }
 
-REAL relaxed_elastic2_A_energy(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic2_A_energy(struct qinfo *f_info)
 { return relaxed_elastic_A_all(f_info,METHOD_VALUE,TWO_STRESS); }
 
-REAL relaxed_elastic2_A_gradient(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic2_A_gradient(struct qinfo *f_info)
 { return relaxed_elastic_A_all(f_info,METHOD_GRADIENT,TWO_STRESS); }
 
-REAL relaxed_elastic2_A_hessian(f_info)
-struct qinfo *f_info;
+REAL relaxed_elastic2_A_hessian(struct qinfo *f_info)
 { return relaxed_elastic_A_all(f_info,METHOD_HESSIAN,TWO_STRESS); }
 
 /***************************************************************************
@@ -2351,8 +2328,7 @@ facets.  Actually, e = (1 - cos(angle))*length.
 *
 */
 
-REAL dihedral_hooke_energy(e_info)
-struct qinfo *e_info;
+REAL dihedral_hooke_energy(struct qinfo *e_info)
 { 
   REAL s1[MAXCOORD],s2[MAXCOORD],t2[MAXCOORD];
   REAL s1s1,s1s2,s1t2,s2s2,t2t2,s2t2;
@@ -2387,7 +2363,7 @@ struct qinfo *e_info;
   cos_th = (s1s2*s1t2 - s2t2*s1s1)/a1/a2;
 
   return sqrt(s1s1)*(1 - cos_th);
-}
+} // end dihedral_hooke_energy()
 
 
 /************************************************************************
@@ -2398,8 +2374,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL dihedral_hooke_grad(e_info)
-struct qinfo *e_info;
+REAL dihedral_hooke_grad(struct qinfo *e_info)
 { 
   REAL s1[MAXCOORD],s2[MAXCOORD],t2[MAXCOORD];
   REAL s1s1,s1s2,s1t2,s2s2,t2t2,s2t2;
@@ -2471,7 +2446,7 @@ struct qinfo *e_info;
     e_info->grad[0][i] -= f;
   }
   return sqrt(s1s1)*(1 - cos_th);
-}
+} // end dihedral_hooke_grad()
 
 
 /************************************************************************
@@ -2486,22 +2461,25 @@ static REAL Gtemp[6];
 static REAL Ltemp[6][6];
 static REAL Htemp[6][6];
 static int  Lcount;
-void gradList ARGS((REAL,REAL,REAL,REAL,REAL,REAL));
-void LList ARGS((REAL*,REAL*,REAL*,REAL*,REAL*,REAL*));
-REAL *List ARGS((REAL,REAL,REAL,REAL,REAL,REAL));
+void gradList(REAL,REAL,REAL,REAL,REAL,REAL);
+void LList(REAL*,REAL*,REAL*,REAL*,REAL*,REAL*);
+REAL *List(REAL,REAL,REAL,REAL,REAL,REAL);
 
 /* utility functions for deciphering Mathematica output */
-void gradList(a,b,c,d,e,f)
-REAL a,b,c,d,e,f;
+void gradList(
+  REAL a, REAL b,REAL c,REAL d,REAL e,REAL f
+)
 { Gtemp[0] = a;
   Gtemp[1] = b;
   Gtemp[2] = c;
   Gtemp[3] = d;
   Gtemp[4] = e;
   Gtemp[5] = f;
-}
-void LList(a,b,c,d,e,f)
-REAL *a,*b,*c,*d,*e,*f;
+} //end gradList()
+
+void LList(
+  REAL *a,REAL *b,REAL *c,REAL *d,REAL *e,REAL *f
+)
 { int i;
   for ( i = 0 ; i < 6 ; i++ ) 
   { Htemp[0][i] = a[i];
@@ -2511,9 +2489,11 @@ REAL *a,*b,*c,*d,*e,*f;
      Htemp[4][i] = e[i];
      Htemp[5][i] = f[i];
   }
-}
-REAL * List(a,b,c,d,e,f)
-REAL a,b,c,d,e,f;
+} // end LList()
+
+REAL * List(
+  REAL a,REAL b,REAL c,REAL d,REAL e,REAL f
+)
 { Ltemp[Lcount][0] = a;
   Ltemp[Lcount][1] = b;
   Ltemp[Lcount][2] = c;
@@ -2521,15 +2501,14 @@ REAL a,b,c,d,e,f;
   Ltemp[Lcount][4] = e;
   Ltemp[Lcount][5] = f;
   return Ltemp[Lcount++];
-}
+} // end List()
 
 /* This has a really long expression in it, which some
     compilers may not be able to handle.  If so, just
     use gcc instead of cc, or #ifdef out the bulk of the function, 
     since you're probably not going to use it anyway.
     */
-REAL dihedral_hooke_hess(e_info)
-struct qinfo *e_info;
+REAL dihedral_hooke_hess(struct qinfo *e_info)
 {  
 #ifndef MAC_CW
   int i,j,k,n,jj,nn;
@@ -3005,5 +2984,5 @@ struct qinfo *e_info;
     kb_error(2169,"dihedral_hooke hessian not implemented on Mac 68K.\n",WARNING);
     return 0.0;
 #endif
-}
+} // end dihedral_hooke_hess()
 

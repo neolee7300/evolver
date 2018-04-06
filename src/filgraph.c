@@ -45,7 +45,7 @@ void fil_init()
      else return;
   }
 
-}
+} // end fil_init()
 
 /************************************************************
 *
@@ -54,14 +54,14 @@ void fil_init()
 *  Purpose: Graphs one edge, already transformed.
 */
 
-void fil_edge(t)
-struct tsort *t;
+void fil_edge(struct tsort *t)
 {
   fprintf(fd,"  %f %f  ",(DOUBLE)t->x[0][0],(DOUBLE)t->x[0][1]);
   fprintf(fd,"  %f %f  ",(DOUBLE)t->x[1][0],(DOUBLE)t->x[1][1]);
   fprintf(fd,"  %f %f  ",(DOUBLE)t->x[1][0],(DOUBLE)t->x[1][1]);
   fprintf(fd,"  0.03  0.03  0.03  0.0 \n");
-}
+
+} // end fil_edge()
 
 
 /************************************************************
@@ -71,8 +71,7 @@ struct tsort *t;
 *  Purpose: Graphs one facet, already transformed.
 */
 
-void fil_facet(t)
-struct tsort *t;
+void fil_facet(struct tsort *t)
 {
   REAL cosine;
   edge_id e_id;
@@ -107,7 +106,8 @@ struct tsort *t;
      }
   else cosine = 0.0;
   fprintf(fd," %f\n",(DOUBLE)cosine);
-}
+
+} // end fil_facet()
 
 /*************************************************************
 *
@@ -142,6 +142,7 @@ int OFF_edges_alloc;
 struct OFF_facet_t {
    int v[3];
    int color;
+   float opacity;
 } *OFF_facets;
 int OFF_facets_alloc;
 
@@ -150,25 +151,42 @@ int OFF_edge_count;
 int OFF_facet_count;
 
 REAL OFF_eps = 1e-6;
-int OFF_comp(a,b)
-struct OFF_vertex_t *a,*b;
+
+/****************************************************************
+*
+* function: OFF_comp()
+*
+* purpose: comparison for sorting vertices
+*/
+int OFF_comp(
+  struct OFF_vertex_t *a,
+  struct OFF_vertex_t *b
+)
 { int i;
   for ( i = 0 ; i < 3; i++ )
   { if ( a->x[i] < b->x[i] - OFF_eps ) return -1;
     if ( a->x[i] > b->x[i] + OFF_eps ) return  1;
   }
   return 0;
-}
+} // end OFF_comp()
 
-int OFF_edge_comp(a,b)
-struct OFF_edge_t *a,*b;
+/****************************************************************
+*
+* function: OFF_edge_comp()
+*
+* purpose: comparison for sorting edges
+*/
+int OFF_edge_comp(
+  struct OFF_edge_t *a,
+  struct OFF_edge_t *b
+)
 { int i;
   for ( i = 0 ; i < EDGE_VERTS ; i++ )
   { if ( a->v[i] < b->v[i] ) return -1;
     if ( a->v[i] > b->v[i] ) return 1;
   }
   return 0;
-}
+} // end OFF_edge_comp()
 
 /*****************************************************************
 *
@@ -191,7 +209,7 @@ void OFF_start()
     fd = fopen(file_name,"w");
     if ( fd == NULL )
     { perror(file_name);
-      kb_error(1034,"",RECOVERABLE);
+      kb_error(1906,"",RECOVERABLE);
     }
     else break;
   }
@@ -205,7 +223,7 @@ void OFF_start()
   OFF_facets_alloc = 3*web.skel[FACET].count;
   OFF_facets = (struct OFF_facet_t *)temp_calloc(OFF_facets_alloc,
                   sizeof(struct OFF_facet_t));
-}
+} // end OFF_start()
 
 /************************************************************
 *
@@ -214,9 +232,10 @@ void OFF_start()
 *  Purpose: Graphs one edge, already transformed.
 */
 
-void OFF_edge(g,e_id)
-struct graphdata *g;
-edge_id e_id;
+void OFF_edge(
+  struct graphdata *g,
+  edge_id e_id
+  )
 {
  
   int e_color;
@@ -225,7 +244,8 @@ edge_id e_id;
   if ( e_color == CLEAR ) return;
   if ( (e_color < 0) || (e_color >= IRIS_COLOR_MAX) )
     e_color = DEFAULT_EDGE_COLOR;
-}
+
+} // end OFF_edge()
 
 /******************************************************************
 *
@@ -234,9 +254,10 @@ edge_id e_id;
 * purpose:  graph one facet.
 */
 
-void OFF_facet(g,f_id)
-struct graphdata *g;
-facet_id f_id;
+void OFF_facet(
+  struct graphdata *g,
+  facet_id f_id
+)
 {
   int i,k;
 
@@ -259,8 +280,8 @@ facet_id f_id;
     OFF_vertex_count++;
   }
   OFF_facet_count++;
-}
 
+} // end OFF_facet()
 
 
 /*************************************************************
@@ -302,8 +323,8 @@ void OFF_end()
 
   fprintf(fd,"OFF\n%d %d %d\n",OFF_vertex_count,OFF_facet_count,OFF_edge_count);
   for ( i = 0 ; i < OFF_vertex_count ; i++ )
-    fprintf(fd,"%f %f %f\n",OFF_verts[i].x[0],OFF_verts[i].x[1],
-        OFF_verts[i].x[2]);
+    fprintf(fd,"%f %f %f\n",(DOUBLE)OFF_verts[i].x[0],
+        (DOUBLE)OFF_verts[i].x[1], (DOUBLE)OFF_verts[i].x[2]);
   for ( i = 0 ; i < OFF_facet_count ; i++ )
     fprintf(fd,"3 %d %d %d\n",OFF_facets[i].v[0],OFF_facets[i].v[1],
         OFF_facets[i].v[2]);
@@ -311,7 +332,8 @@ void OFF_end()
   temp_free((char*)OFF_verts);
   temp_free((char*)OFF_facets);
   temp_free((char*)translate);
-}
+
+} // end OFF_end()
 
 
 /***************************************************************************
@@ -330,8 +352,7 @@ void OFF_end()
 char *binary_off_filename; /* set by binary_off_file command */
 
 void binary_OFF_start()
-{
- 
+{ 
   OFF_vertex_count = 0;
   OFF_edge_count = 0;
   OFF_facet_count = 0;
@@ -345,7 +366,10 @@ void binary_OFF_start()
   OFF_facets_alloc = web.skel[FACET].count + 10;
   OFF_facets = (struct OFF_facet_t *)temp_calloc(OFF_facets_alloc,
                   sizeof(struct OFF_facet_t));
-}
+
+  OFF_eps = overall_size*1e-6;
+
+} // end binary_OFF_start()
 
 /************************************************************
 *
@@ -354,9 +378,10 @@ void binary_OFF_start()
 *  Purpose: Graphs one edge, already transformed.
 */
 
-void binary_OFF_edge(g,e_id)
-struct graphdata *g;
-edge_id e_id;
+void binary_OFF_edge(
+  struct graphdata *g,
+  edge_id e_id
+)
 {
   int i,k;
   int e_color;
@@ -385,7 +410,8 @@ edge_id e_id;
   }
   OFF_edges[OFF_facet_count].color = e_color;
   OFF_edge_count++;
-}
+
+} // end binary_OFF_edge()
 
 /******************************************************************
 *
@@ -394,9 +420,10 @@ edge_id e_id;
 * purpose:  graph one facet.
 */
 
-void binary_OFF_facet(gdata,f_id)
-struct graphdata *gdata;
-facet_id f_id;
+void binary_OFF_facet(
+  struct graphdata *gdata,
+  facet_id f_id
+)
 {
   int i,k;
   struct graphdata ggdata[2];
@@ -412,7 +439,6 @@ facet_id f_id;
     OFF_facets_alloc *= 2;
   }
 
-
   for ( i = 0 ; i < FACET_VERTS ; i++ )
   { for ( k = 0 ; k < 3 ; k++ )
       OFF_verts[OFF_vertex_count].x[k] = gdata[i].x[k];
@@ -420,6 +446,7 @@ facet_id f_id;
     OFF_vertex_count++;
   }
   OFF_facets[OFF_facet_count].color = gdata[0].color;
+  OFF_facets[OFF_facet_count].opacity = (float)gdata[0].opacity;
   OFF_facet_count++;
 
   /* do edges */
@@ -430,7 +457,7 @@ facet_id f_id;
     ggdata[1] = gdata[i==2 ? 0 : i+1];
     binary_OFF_edge(ggdata,NULLID);
   }
-}
+}  // end binary_OFF_facet()
 
 /**************************************************************************
 *
@@ -486,20 +513,18 @@ void binary_OFF_end()
   }
   OFF_edge_count = keep+1;
 
- 
-
   if ( binary_off_filename == NULL ) /* prompt for file name */
   for (;;)
   { char file_name[200];
     prompt("Enter file name (supply your own extension): ",file_name,sizeof(file_name));
     if ( file_name[0] == 0 )
-    { kb_error(4005,"File aborted.\n",RECOVERABLE);
+    { kb_error(1912,"File aborted.\n",RECOVERABLE);
     }
 
     fd = fopen(file_name,"wb");
     if ( fd == NULL )
     { perror(file_name);
-      kb_error(1034,"",RECOVERABLE);
+      kb_error(1907,"",RECOVERABLE);
     }
     else break;
   }
@@ -528,23 +553,29 @@ void binary_OFF_end()
   #else
   
   /* Binary version */
-  fprintf(fd,"OFF BINARY (by Surface Evolver, for evmovie)\n");
+  if ( opacity_attr )
+      fprintf(fd,"OFF BINARY OPACITY (by Surface Evolver, for evmovie)\n");
+  else 
+      fprintf(fd,"OFF BINARY (by Surface Evolver, for evmovie)\n");
   fwrite(&OFF_vertex_count,sizeof(int),1,fd);
   fwrite(&OFF_facet_count,sizeof(int),1,fd);
   fwrite(&OFF_edge_count,sizeof(int),1,fd);
   for ( i = 0 ; i < OFF_vertex_count ; i++ )
   { float xx[3];
     for ( k = 0 ; k < 3 ; k++ )
-      xx[k] = (float)(OFF_verts[i].x[k]);
+      xx[k] = (float)(OFF_verts[i].x[k]/overall_size);
     fwrite(xx,sizeof(float),3,fd);
   }
   for ( i = 0 ; i < OFF_facet_count ; i++ )
   { int data[5];
+
     data[0] = 3;
     for ( k = 0 ; k < 3 ; k++ )
       data[k+1] = OFF_facets[i].v[k];
     data[4] = OFF_facets[i].color;
     fwrite(data,sizeof(int),5,fd);
+    if ( opacity_attr )
+        fwrite(&OFF_facets[i].opacity,sizeof(float),1,fd);
   }
   for ( i = 0 ; i < OFF_edge_count ; i++ )
   { int data[4];
@@ -562,5 +593,6 @@ void binary_OFF_end()
   temp_free((char*)OFF_edges);
   temp_free((char*)OFF_facets);
   temp_free((char*)translate);
-}
+
+} // end binary_OFF_end()
 

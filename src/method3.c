@@ -30,9 +30,10 @@ i.e. 01,02,03,12,13,23.
 *
 */
 
-void facet_2form_integral_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void facet_2form_integral_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   if ( web.dimension != 2 )
      kb_error(1778,"facet_2form_integral method only for 2D facets.\n",RECOVERABLE);
@@ -40,7 +41,7 @@ struct method_instance *mi;
   if ( web.modeltype == QUADRATIC )
      kb_error(1779,"facet_2form_integral method only for LINEAR and LAGRANGE models.\n",RECOVERABLE);
 
-}
+} // end facet_2form_integral_init()
 
 /*********************************************************************
 *
@@ -50,11 +51,11 @@ struct method_instance *mi;
 *
 */
 
-REAL facet_2form_integral(f_info)
-struct qinfo *f_info;
+REAL facet_2form_integral(struct qinfo *f_info)
 { int m,i,j,k;
   REAL value=0.0;
   REAL sign = (get_fattr(f_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
   if ( web.modeltype == LAGRANGE ) return facet_2form_integral_lagrange(f_info);
 
@@ -64,13 +65,13 @@ struct qinfo *f_info;
     for ( i = 0, k = 0 ; i < SDIM ; i++ )
       for ( j = i+1 ; j < SDIM ; j++,k++ )
       { REAL  form = gauss2Dwt[m]*
-           eval(METH_INSTANCE(f_info->method)->expr[k],f_info->gauss_pt[m],f_info->id,NULL);
+           eval(mi->expr[k],f_info->gauss_pt[m],f_info->id,NULL);
         value += (f_info->sides[0][0][i]*f_info->sides[0][1][j]
                  - f_info->sides[0][0][j]*f_info->sides[0][1][i])*form;
       }
   }
   return sign*value/2;  /* 2 is triangle factor for normal */
-}
+} // end facet_2form_integral()
 
 /*********************************************************************
 *
@@ -80,14 +81,14 @@ struct qinfo *f_info;
 *
 */
 
-REAL facet_2form_integral_grad(f_info)
-struct qinfo *f_info;
+REAL facet_2form_integral_grad(struct qinfo *f_info)
 { int m,n,i,j,k;
   REAL value = 0.0;
   REAL form[MAXCOORD][MAXCOORD]; /* as antisymmetric matrix */
   REAL derivs[MAXCOORD][MAXCOORD][MAXCOORD]; /* coord is last index */
   REAL sum;
   REAL sign = (get_fattr(f_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
   if ( web.modeltype == LAGRANGE )
     return facet_2form_integral_lagrange_grad(f_info);
@@ -99,7 +100,7 @@ struct qinfo *f_info;
     for ( i = 0, k = 0 ; i < SDIM ; i++ ) 
     { for ( n = 0 ; n < SDIM ;n++ ) derivs[i][i][n] = 0.0;
       for ( j = i+1 ; j < SDIM ; j++,k++ ) 
-      { eval_all(METH_INSTANCE(f_info->method)->expr[k],f_info->gauss_pt[m],SDIM,
+      { eval_all(mi->expr[k],f_info->gauss_pt[m],SDIM,
               form[i]+j, derivs[i][j],f_info->id);
         form[j][i] = - form[i][j];
         for ( n = 0 ; n < SDIM ;n++ )
@@ -125,7 +126,7 @@ struct qinfo *f_info;
   }
 
   return value/2;
-}
+} // end facet_2form_integral_grad()
 
 
 /*********************************************************************
@@ -140,8 +141,7 @@ struct qinfo *f_info;
 int sign1[FACET_VERTS] = { -1, 1, 0 };
 int sign2[FACET_VERTS] = { -1, 0, 1 };
 
-REAL facet_2form_integral_hess(f_info)
-struct qinfo *f_info;
+REAL facet_2form_integral_hess(struct qinfo *f_info)
 { int m,n,i,j,k,p,q;
   REAL value = 0.0;
   REAL form[MAXCOORD][MAXCOORD]; /* as antisymmetric matrix */
@@ -152,6 +152,7 @@ struct qinfo *f_info;
   REAL *s2 = f_info->sides[0][1];
   REAL s1Fu,s2Fu,Fvs1,Fvs2,s1Fuvs2;
   REAL sign = (get_fattr(f_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
   if ( web.modeltype == LAGRANGE ) 
      return facet_2form_integral_lagrange_hess(f_info);
@@ -169,7 +170,7 @@ struct qinfo *f_info;
     f_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
     for ( i = 0, k = 0 ; i < SDIM ; i++ ) 
     { for ( j = i+1 ; j < SDIM ; j++,k++ ) 
-      { eval_second(METH_INSTANCE(f_info->method)->expr[k],f_info->gauss_pt[m],SDIM,
+      { eval_second(mi->expr[k],f_info->gauss_pt[m],SDIM,
                          form[i]+j, derivs[i][j],second[i][j],f_info->id);
         form[j][i] = - form[i][j];
         for ( n = 0 ; n < SDIM ;n++ )
@@ -221,7 +222,7 @@ struct qinfo *f_info;
   }
 
   return value/2;
-}
+} // end facet_2form_integral_hess()
 
 /******************************************************************************
                          facet_2form_integral Lagrangian model
@@ -235,13 +236,13 @@ struct qinfo *f_info;
 *
 */
 
-REAL facet_2form_integral_lagrange(f_info)
-struct qinfo *f_info;
+REAL facet_2form_integral_lagrange(struct qinfo *f_info)
 { int m,i,j,k;
   REAL value=0.0,form;
   REAL sign = (get_fattr(f_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
   int dim = web.dimension;
   struct gauss_lag *gl = &gauss_lagrange[dim][web.gauss2D_order];
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
   for ( i = 0, k = 0 ; i < SDIM ; i++ )
      for ( j = i+1 ; j < SDIM ; j++,k++ )
@@ -249,13 +250,13 @@ struct qinfo *f_info;
        {
           f_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
           form = gl->gausswt[m]*
-             eval(METH_INSTANCE(f_info->method)->expr[k],f_info->gauss_pt[m],f_info->id,NULL);
+             eval(mi->expr[k],f_info->gauss_pt[m],f_info->id,NULL);
           value += (f_info->sides[m][0][i]*f_info->sides[m][1][j]
                  - f_info->sides[m][0][j]*f_info->sides[m][1][i])*form;
         }
      }
   return sign*value/2;  /* 2 is triangle factor */
-}
+} // end facet_2form_integral_lagrange()
 
 /*********************************************************************
 *
@@ -265,9 +266,7 @@ struct qinfo *f_info;
 *
 */
 
-
-REAL facet_2form_integral_lagrange_grad(f_info)
-struct qinfo *f_info;
+REAL facet_2form_integral_lagrange_grad(struct qinfo *f_info)
 { int m,n,i,j,k;
   REAL value = 0.0;
   REAL form[MAXCOORD][MAXCOORD]; /* as antisymmetric matrix */
@@ -277,6 +276,7 @@ struct qinfo *f_info;
   REAL sign = (get_fattr(f_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
   struct gauss_lag *gl = &gauss_lagrange[dim][web.gauss2D_order];
   int ctrl = web.skel[FACET].ctrlpts;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
   for ( i = 0 ; i < SDIM  ; i++ ) 
   { form[i][i] = 0.0;
@@ -287,7 +287,7 @@ struct qinfo *f_info;
     f_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
     for ( i = 0, k = 0 ; i < SDIM ; i++ ) 
     { for ( j = i+1 ; j < SDIM ; j++,k++ ) 
-      { eval_all(METH_INSTANCE(f_info->method)->expr[k],f_info->gauss_pt[m],SDIM,
+      { eval_all(mi->expr[k],f_info->gauss_pt[m],SDIM,
               form[i]+j, derivs[i][j],f_info->id);
         form[j][i] = - form[i][j];
         for ( n = 0 ; n < SDIM ;n++ )
@@ -313,7 +313,7 @@ struct qinfo *f_info;
   }
 
   return value;
-}
+} // end facet_2form_integral_lagrange_grad()
 
 
 /*********************************************************************
@@ -324,8 +324,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL facet_2form_integral_lagrange_hess(f_info)
-struct qinfo *f_info;
+REAL facet_2form_integral_lagrange_hess(struct qinfo *f_info)
 { int m,n,i,j,k,p;
   REAL value = 0.0;
   REAL form[MAXCOORD][MAXCOORD]; /* as antisymmetric matrix */
@@ -336,6 +335,7 @@ struct qinfo *f_info;
   int dim = web.dimension;
   struct gauss_lag *gl = &gauss_lagrange[dim][web.gauss2D_order];
   int ctrl = web.skel[FACET].ctrlpts;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
   for ( i = 0; i < SDIM ; i++ )
   { form[i][i] = 0.0;
@@ -350,7 +350,7 @@ struct qinfo *f_info;
       f_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
       for ( i = 0, k = 0 ; i < SDIM ; i++ ) 
         { for ( j = i+1 ; j < SDIM ; j++,k++ ) 
-          { eval_second(METH_INSTANCE(f_info->method)->expr[k],f_info->gauss_pt[m],
+          { eval_second(mi->expr[k],f_info->gauss_pt[m],
                 SDIM, form[i]+j, derivs[i][j],second[i][j],f_info->id);
              form[j][i] = - form[i][j];
              for ( n = 0 ; n < SDIM ;n++ )
@@ -408,7 +408,7 @@ struct qinfo *f_info;
      }
 
   return value;
-}
+} // end facet_2form_integral_lagrange_hess()
 
 /*********************************************************************
 
@@ -427,9 +427,10 @@ i.e. 01,02,03,12,13,23.  For Andy Hanson's symplectic area minimization.
 *
 */
 
-void facet_2form_sq_integral_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void facet_2form_sq_integral_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   if ( web.dimension != 2 )
      kb_error(2412,"facet_2form_sq_integral method only for 2D facets.\n",RECOVERABLE);
@@ -437,7 +438,7 @@ struct method_instance *mi;
   if ( web.modeltype != LINEAR )
      kb_error(2413,"facet_2form_sq_integral method only for LINEAR model.\n",RECOVERABLE);
 
-}
+} // end facet_2form_sq_integral_init()
 
 /*********************************************************************
 *
@@ -447,10 +448,10 @@ struct method_instance *mi;
 *
 */
 
-REAL facet_2form_sq_integral(f_info)
-struct qinfo *f_info;
+REAL facet_2form_sq_integral(struct qinfo *f_info)
 { int m,i,j,k;
   REAL value=0.0;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
   for ( m = 0 ; m < gauss2D_num ; m++ )
   { 
@@ -458,14 +459,13 @@ struct qinfo *f_info;
     for ( i = 0, k = 0 ; i < SDIM ; i++ )
       for ( j = i+1 ; j < SDIM ; j++,k++ )
       { REAL  form = gauss2Dwt[m]*
-         eval(METH_INSTANCE(f_info->method)->expr[k],f_info->gauss_pt[m],
-            f_info->id,NULL);
+           eval(mi->expr[k],f_info->gauss_pt[m],f_info->id,NULL);
         value += (f_info->sides[0][0][i]*f_info->sides[0][1][j]
                  - f_info->sides[0][0][j]*f_info->sides[0][1][i])*form;
       }
   }
   return value*value/4;  /* 2 is triangle factor for normal */
-}
+} // end facet_2form_sq_integral()
 
 /*********************************************************************
 *
@@ -475,13 +475,13 @@ struct qinfo *f_info;
 *
 */
 
-REAL facet_2form_sq_integral_grad(f_info)
-struct qinfo *f_info;
+REAL facet_2form_sq_integral_grad(struct qinfo *f_info)
 { int m,n,i,j,k;
   REAL value = 0.0;
   REAL form[MAXCOORD][MAXCOORD]; /* as antisymmetric matrix */
   REAL derivs[MAXCOORD][MAXCOORD][MAXCOORD]; /* coord is last index */
   REAL sum;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
   for ( i = 0 ; i < SDIM  ; i++ ) form[i][i] = 0.0;
   for ( m = 0 ; m < gauss2D_num ; m++ )
@@ -490,7 +490,7 @@ struct qinfo *f_info;
     for ( i = 0, k = 0 ; i < SDIM ; i++ ) 
     { for ( n = 0 ; n < SDIM ;n++ ) derivs[i][i][n] = 0.0;
       for ( j = i+1 ; j < SDIM ; j++,k++ ) 
-      { eval_all(METH_INSTANCE(f_info->method)->expr[k],f_info->gauss_pt[m],SDIM,
+      { eval_all(mi->expr[k],f_info->gauss_pt[m],SDIM,
               form[i]+j, derivs[i][j],f_info->id);
         form[j][i] = - form[i][j];
         for ( n = 0 ; n < SDIM ;n++ )
@@ -520,7 +520,7 @@ struct qinfo *f_info;
       f_info->grad[i][k] *= value;
 
   return value*value/4;
-}
+} // end facet_2form_sq_integral_grad()
 
 
 /******************************************************************************
@@ -537,15 +537,16 @@ struct qinfo *f_info;
 *  purpose: initialization for gravity method
 */
 
-void gravity_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void gravity_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 {
   /* method modulus is gravitation constant */
   if ( gravity_quantity_num >= 0 )
      GEN_QUANT(gravity_quantity_num)->modulus = 
          web.gravflag ? web.grav_const : 0.0;
-}
+} // end gravity_init()
 
 /**********************************************************************************
 *
@@ -554,15 +555,16 @@ struct method_instance *mi;
 *  purpose: initialization for gravity method using built-in G and body densities
 */
 
-void full_gravity_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void full_gravity_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 {
   /* method modulus is gravitation constant */
   mi->flags &= FAKE_IMPLICIT;
   GEN_QUANT(gravity_quantity_num)->modulus = 
          web.gravflag ? web.grav_const : 0.0;
-}
+} // end full_gravity_init()
 
 /**************************************************************
 *
@@ -575,12 +577,13 @@ struct method_instance *mi;
 *
 */
 
-REAL gravity_all_q ARGS((struct qinfo *,int));
-REAL gravity_all_lagrange ARGS((struct qinfo *,int));
+REAL gravity_all_q(struct qinfo *,int);
+REAL gravity_all_lagrange(struct qinfo *,int);
 
-REAL gravity_all(f_info,mode)
-struct qinfo *f_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL gravity_all(
+  struct qinfo *f_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 {
   int i,j;
   REAL jac; /* jacobian */
@@ -589,13 +592,14 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
   REAL c = 1/24.;  /* coefficient */
   body_id b_id;
   REAL gdensity;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
   if ( web.modeltype == QUADRATIC ) return gravity_all_q(f_info,mode);
   if ( web.modeltype == LAGRANGE )  
       return gravity_all_lagrange(f_info,mode);
 
   b_id = get_facet_body(f_info->id);
-  if ( METH_INSTANCE(f_info->method)->flags & (IMPLICIT_INSTANCE|FAKE_IMPLICIT) )
+  if ( mi->flags & (IMPLICIT_INSTANCE|FAKE_IMPLICIT) )
   { /* include density difference */
      gdensity = 0.0;
      if ( valid_id(b_id) )
@@ -657,7 +661,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
         f_info->hess[i][j][2][2] = jac*c;
      }
   return jac*sum*c;
-}
+} // end gravity_all()
 
 /**************************************************************
 *
@@ -670,9 +674,10 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 *
 */
 
-REAL gravity_all_q(f_info,mode)
-struct qinfo *f_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL gravity_all_q(
+  struct qinfo *f_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 {
   int k,kk,m;
   REAL jac; /* jacobian */
@@ -681,6 +686,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
   REAL value = 0.0;
   body_id b_id;
   REAL gdensity = 1.0;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
   x = f_info->x;
 
@@ -692,7 +698,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
     h = f_info->hess;
   }
 
-  if ( METH_INSTANCE(f_info->method)->flags & (IMPLICIT_INSTANCE|FAKE_IMPLICIT) )
+  if ( mi->flags & (IMPLICIT_INSTANCE|FAKE_IMPLICIT) )
   { /* include density difference */
      b_id = get_facet_body(f_info->id);
      gdensity = 0.0;
@@ -747,7 +753,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 
   }
   return value;
-}
+} // end gravity_all_q()
 
 
 /**************************************************************
@@ -761,9 +767,10 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 *
 */
 
-REAL gravity_all_lagrange(f_info,mode)
-struct qinfo *f_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL gravity_all_lagrange(
+  struct qinfo *f_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 {
   REAL value = 0.0;
   body_id b_id;
@@ -776,8 +783,9 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
   int dim = web.dimension;
   struct gauss_lag *gl = &gauss_lagrange[dim][web.gauss2D_order];
   MAT4D(dethess,MAXCOORD,MAXCOORD,MAXCOORD,MAXCOORD);
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
-  if ( METH_INSTANCE(f_info->method)->flags & (IMPLICIT_INSTANCE|FAKE_IMPLICIT) )
+  if ( mi->flags & (IMPLICIT_INSTANCE|FAKE_IMPLICIT) )
   { /* include density difference */
      b_id = get_facet_body(f_info->id);
      gdensity = 0.0;
@@ -854,7 +862,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
   }
 
   return value;  
-}
+} // end gravity_all_lagrange()
 
 
 
@@ -868,8 +876,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 *
 */
 
-REAL gravity_energy(f_info)
-struct qinfo *f_info;
+REAL gravity_energy(struct qinfo *f_info)
 {
  return gravity_all(f_info,METHOD_VALUE);
 }
@@ -886,8 +893,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL gravity_grads(f_info)
-struct qinfo *f_info;
+REAL gravity_grads(struct qinfo *f_info)
 {
  return gravity_all(f_info,METHOD_GRADIENT);
 }
@@ -903,10 +909,9 @@ struct qinfo *f_info;
 *
 */
 
-REAL gravity_hessian(f_info)
-struct qinfo *f_info;
+REAL gravity_hessian(struct qinfo *f_info)
 {
- return gravity_all(f_info,METHOD_HESSIAN);
+  return gravity_all(f_info,METHOD_HESSIAN);
 }
 
 /******************************************************************
@@ -924,9 +929,10 @@ REAL gfa_2_coeff; /* term coefficient for part of hessian */
 REAL gfagfa_coeff; /* term coefficient for neg part of hessian */
 REAL gfaafg_coeff; /* term coefficient for correction */
 
-void pos_area_hess_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void pos_area_hess_init(
+  int mode,
+  struct method_instance *mi
+)
 { int k;
 
   k = lookup_global("gga_coeff");
@@ -954,10 +960,9 @@ struct method_instance *mi;
       gfaafg_coeff = globals(k)->value.real;
   else gfaafg_coeff = 0.0;
 
-}
+} // end pos_area_hess_init()
 
-REAL pos_area_hess(f_info)
-struct qinfo *f_info;
+REAL pos_area_hess(struct qinfo *f_info)
 {
   MAT2D(Ainv,MAXCOORD,MAXCOORD);
   MAT2D(FtAinv,MAXCOORD,MAXCOORD);
@@ -1003,22 +1008,22 @@ struct qinfo *f_info;
              f_info->hess[0][0][i][j] += val;
           }
   return area;
-}
+} // end pos_area_hess()
 
 /********************************************************************
       Sobolev area hessian, after Renka and Neuberger
 *********************************************************************/
 
-void sobolev_area_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void sobolev_area_init(
+  int mode,
+  struct method_instance *mi
+) 
 {
   if ( web.modeltype != LINEAR ) 
      kb_error(2146,"Sobolev_area only for LINEAR model.\n",RECOVERABLE);
-}
+} // end sobolev_area_init()
 
-REAL sobolev_area_hess(f_info)
-struct qinfo *f_info;
+REAL sobolev_area_hess(struct qinfo *f_info)
 {
   MAT2D(Ainv,MAXCOORD,MAXCOORD);
   MAT2D(FtAinv,MAXCOORD,MAXCOORD);
@@ -1061,22 +1066,22 @@ struct qinfo *f_info;
              f_info->hess[0][0][i][j] += val;
           }
   return area;
-}
+} // end sobolev_area_hess()
 
 
 /********************************************************************
       Dirichelt area hessian, after Polthier and Pinkall
 *********************************************************************/
-void dirichlet_area_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void dirichlet_area_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   if ( web.modeltype != LINEAR ) 
      kb_error(2147,"dirichlet_area only for LINEAR model.\n",RECOVERABLE);
-}
+} // end dirichlet_area_init()
 
-REAL dirichlet_area_hess(f_info)
-struct qinfo *f_info;
+REAL dirichlet_area_hess(struct qinfo *f_info)
 {
   MAT2D(Ainv,MAXCOORD,MAXCOORD);
   MAT2D(FtAinv,MAXCOORD,MAXCOORD);
@@ -1116,7 +1121,7 @@ struct qinfo *f_info;
              f_info->hess[0][0][i][i] += val;
           }
   return area;
-}
+} // end dirichlet_area_hess()
 
 /*********************************************************************
 
@@ -1132,9 +1137,10 @@ struct qinfo *f_info;
 *
 */
 
-void stress_integral_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void stress_integral_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   if ( web.dimension != 2 )
      kb_error(1781,"stress_integral method only for 2D facets.\n",RECOVERABLE);
@@ -1145,7 +1151,8 @@ struct method_instance *mi;
   if ( web.modeltype != LINEAR )
      kb_error(1783,"stress_integral method only for LINEAR model.\n",RECOVERABLE);
 
-}
+} // end stress_integral_init()
+
 /*********************************************************************
 *
 * function: stress_integral()
@@ -1154,14 +1161,15 @@ struct method_instance *mi;
 *
 */
 
-REAL stress_integral(f_info)
-struct qinfo *f_info;
+REAL stress_integral(struct qinfo *f_info)
 { REAL value = 0.0;
   REAL area;
   REAL ss,st,tt;
   int stress_comp;
   REAL un[MAXCOORD];
   REAL density = get_facet_density(f_info->id);
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
+
   ss = SDIM_dot(f_info->sides[0][0],f_info->sides[0][0]);
   st = SDIM_dot(f_info->sides[0][0],f_info->sides[0][1]);
   tt = SDIM_dot(f_info->sides[0][1],f_info->sides[0][1]);
@@ -1170,7 +1178,8 @@ struct qinfo *f_info;
   un[1] = f_info->normal[1]/(2*area);
   un[2] = f_info->normal[2]/(2*area);
 
-  stress_comp = (int)eval(METH_INSTANCE(f_info->method)->expr[0],NULL,f_info->id,NULL);
+
+  stress_comp = (int)eval(mi->expr[0],NULL,f_info->id,NULL);
 
   switch( stress_comp ) {
   case 11:
@@ -1211,7 +1220,7 @@ struct qinfo *f_info;
   value *= area;
   value *= density;
   return value;
-}
+} // end stress_integral()
 
 /*********************************************************************
 *
@@ -1221,12 +1230,10 @@ struct qinfo *f_info;
 *
 */
 
-
-REAL stress_integral_grad(f_info)
-struct qinfo *f_info;
+REAL stress_integral_grad(struct qinfo *f_info)
 {
   return 0.0;
-}
+} // end stress_integral_grad()
 
 
 /**********************************************************************
@@ -1240,9 +1247,10 @@ struct qinfo *f_info;
 *
 */
 
-void q_facet_volume_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void q_facet_volume_init(
+  int mode,
+  struct method_instance *mi
+)
 {
 
   if ( (web.representation == SIMPLEX) && !(web.modeltype == LAGRANGE) )
@@ -1250,7 +1258,7 @@ struct method_instance *mi;
   }
   else if ( (web.modeltype != LINEAR) && (web.gauss2D_order < 3) )
      { web.gauss2D_order = 3; gauss_setup(); }
-}
+} // end q_facet_volume_init()
 
 /**********************************************************************
 *
@@ -1259,8 +1267,7 @@ struct method_instance *mi;
 *  purpose: value of volume integral on facet
 */
 
-REAL q_facet_volume(f_info)
-struct qinfo *f_info;
+REAL q_facet_volume(struct qinfo *f_info)
 { REAL **x,**s;
   REAL vol;
 
@@ -1274,7 +1281,7 @@ struct qinfo *f_info;
   vol =  (x[0][2]+x[1][2]+x[2][2])*(s[0][0]*s[1][1] - s[0][1]*s[1][0])/6;
  
   return vol;
-}
+} // end q_facet_volume()
 
 /**********************************************************************
 *
@@ -1283,8 +1290,7 @@ struct qinfo *f_info;
 *  purpose: gradient and value of volume integral on quadratic facet
 */
 
-REAL q_facet_volume_grad(f_info)
-struct qinfo *f_info;
+REAL q_facet_volume_grad(struct qinfo *f_info)
 { REAL **x;
   REAL zsum,ssum;
 
@@ -1307,7 +1313,7 @@ struct qinfo *f_info;
    f_info->grad[2][1] = zsum*(x[1][0]-x[0][0]);
    f_info->grad[2][2] = ssum/6;
    return zsum*ssum;
-}
+} // end q_facet_volume_grad()
 
 /**********************************************************************
 *
@@ -1316,8 +1322,7 @@ struct qinfo *f_info;
 *  purpose: hessian, grad, and value of volume integral on quadratic facet
 */
 
-REAL q_facet_volume_hess(f_info)
-struct qinfo *f_info;
+REAL q_facet_volume_hess(struct qinfo *f_info)
 { REAL **x,****h;
   REAL zsum,ssum;
   int i;
@@ -1357,7 +1362,7 @@ struct qinfo *f_info;
   }
 
   return zsum*ssum;
-}
+} // end  q_facet_volume_hess()
 
 
 
@@ -1366,43 +1371,41 @@ struct qinfo *f_info;
                     Facet area upper bound quantity
 
 *********************************************************************/
-void q_facet_tension_u_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void q_facet_tension_u_init(
+int mode,
+struct method_instance *mi
+)
 { 
   if ( web.gauss2D_order < 5 ) 
      { web.gauss2D_order = 5; gauss_setup(); }
-}
+} // end q_facet_tension_u_init()
 
-REAL q_facet_tension_u_value(f_info)
-struct qinfo *f_info;
+REAL q_facet_tension_u_value(struct qinfo *f_info)
 {
   if ( web.modeltype == QUADRATIC ) return q_facet_tension_uq(f_info); 
   if ( web.modeltype == LAGRANGE ) 
      kb_error(1785,"Non-Lagrange quantity: facet_tension_u\n",RECOVERABLE);
 
   return q_facet_tension_value(f_info);
-}
+} // end q_facet_tension_u_value()
 
-REAL q_facet_tension_u_gradient(f_info)
-struct qinfo *f_info;
+REAL q_facet_tension_u_gradient(struct qinfo *f_info)
 {
   if ( web.modeltype == QUADRATIC ) return q_facet_tension_uq_grad(f_info); 
   if ( web.modeltype == LAGRANGE ) 
      kb_error(1786,"Non-Lagrange quantity: facet_tension_u\n",RECOVERABLE);
 
   return q_facet_tension_gradient(f_info);
-}
+} // end q_facet_tension_u_gradient()
 
-REAL q_facet_tension_u_hessian(f_info)
-struct qinfo *f_info;
+REAL q_facet_tension_u_hessian(struct qinfo *f_info)
 {
   if ( web.modeltype == QUADRATIC ) return q_facet_tension_uq_hess(f_info); 
   if ( web.modeltype == LAGRANGE ) 
      kb_error(1787,"Non-Lagrange quantity: facet_tension_u\n",RECOVERABLE);
 
   return q_facet_tension_hessian(f_info);
-}
+} // end q_facet_tension_u_hessian()
 
 
 
@@ -1428,17 +1431,15 @@ static REAL e[3][3][3] = { {{0.,0.,0.},{0.,0.,1.},{0.,-1.,0.}},
 *
 */
 
-void facet_general_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void facet_general_init(
+  int mode,
+  struct method_instance *mi
+)
 { 
   if ( web.dimension != 2 )
      kb_error(1788,"facet_general_integral method only for surface dimension 2.\n",RECOVERABLE);
-/*
-  if ( SDIM != 3 )
-     kb_error(1789,"facet_general_integral method only for space dimension 3.\n",RECOVERABLE);
-*/
-}
+
+} // end facet_general_init()
 
 /*********************************************************************
 *
@@ -1448,14 +1449,14 @@ struct method_instance *mi;
 *
 */
 
-REAL facet_general_value(f_info)
-struct qinfo *f_info;
+REAL facet_general_value(struct qinfo *f_info)
 { int m,k;
   REAL value = 0.0;
   REAL z[2*MAXCOORD+1];  /*  pointers to coord and tangent */
   REAL sign = (get_fattr(f_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
   REAL *normal = z+SDIM;
- 
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
+
   if ( web.modeltype == LAGRANGE )
      return facet_general_value_lagr(f_info);
 
@@ -1467,11 +1468,11 @@ struct qinfo *f_info;
     if ( sign == -1.0 ) 
         for ( k = 0 ; k < SDIM ; k++ ) z[k+SDIM] *= sign ; 
     z[2*SDIM] = m; /* kludge for attr interpolation. */
-    value += gauss2Dwt[m]*eval(METH_INSTANCE(f_info->method)->expr[0],z,f_info->id,NULL);
+    value += gauss2Dwt[m]*eval(mi->expr[0],z,f_info->id,NULL);
   }
   facet_general_flag = 0;
   return value/web.simplex_factorial;  /* triangle factor */
-}
+} // end facet_general_value()
 
 /*********************************************************************
 *
@@ -1481,9 +1482,7 @@ struct qinfo *f_info;
 *
 */
 
-
-REAL facet_general_grad(f_info)
-struct qinfo *f_info;
+REAL facet_general_grad(struct qinfo *f_info)
 { int m,j,k;
   REAL value = 0.0;
   REAL val;
@@ -1491,6 +1490,7 @@ struct qinfo *f_info;
   REAL z[2*MAXCOORD+1];  /*  pointers to coord and tangent */
   REAL sign = (get_fattr(f_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
   REAL *normal = z+SDIM;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
   if ( web.modeltype == LAGRANGE )
      return facet_general_grad_lagr(f_info);
@@ -1505,7 +1505,7 @@ struct qinfo *f_info;
      cross_prod(f_info->sides[m][0],f_info->sides[m][1],normal);
      if ( sign == -1.0 ) 
         for ( k = 0 ; k < SDIM ; k++ ) z[k+SDIM] *= sign ; 
-     eval_all(METH_INSTANCE(f_info->method)->expr[0],z,2*SDIM,&val,derivs,f_info->id);
+     eval_all(mi->expr[0],z,2*SDIM,&val,derivs,f_info->id);
      value += coeff*val;
      for ( j = 0 ; j < 3 ; j++ )
       { int jj = (j+1)%3;
@@ -1520,8 +1520,8 @@ struct qinfo *f_info;
   }
   facet_general_flag = 0;
   return value; 
-}
-
+} // end facet_general_grad()
+ 
 /*********************************************************************
 *
 * function: facet_general_hess()
@@ -1530,9 +1530,7 @@ struct qinfo *f_info;
 *
 */
 
-
-REAL facet_general_hess(f_info)
-struct qinfo *f_info;
+REAL facet_general_hess(struct qinfo *f_info)
 { int m,j,k,kk,J;
   REAL value = 0.0;
   REAL val;
@@ -1541,6 +1539,7 @@ struct qinfo *f_info;
   MAT2D(second,2*MAXCOORD,2*MAXCOORD); /* second derivatives */
   REAL sign = (get_fattr(f_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
   REAL *normal = z+SDIM;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
   if ( web.modeltype == LAGRANGE )
      return facet_general_hess_lagr(f_info);
@@ -1556,7 +1555,7 @@ struct qinfo *f_info;
      cross_prod(f_info->sides[m][0],f_info->sides[m][1],normal);
      if ( sign == -1.0 ) 
         for ( k = 0 ; k < SDIM ; k++ ) z[k+SDIM] *= sign ; 
-     eval_second(METH_INSTANCE(f_info->method)->expr[0],z,2*SDIM,&val,derivs,second,f_info->id);
+     eval_second(mi->expr[0],z,2*SDIM,&val,derivs,second,f_info->id);
      value += coeff*val;
      /* gradients */
      for ( j = 0 ; j < 3 ; j++ )
@@ -1613,7 +1612,7 @@ struct qinfo *f_info;
   }
   facet_general_flag = 0;
   return value; 
-}
+} // end facet_general_hess()
 
 /********************************************************************
              Lagrange version of facet_general_integral
@@ -1627,8 +1626,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL facet_general_value_lagr(f_info)
-struct qinfo *f_info;
+REAL facet_general_value_lagr(struct qinfo *f_info)
 { int m,k;
   REAL value = 0.0;
   REAL z[2*MAXCOORD+1];  /*  pointers to coord and tangent */
@@ -1636,7 +1634,8 @@ struct qinfo *f_info;
   int dim = web.dimension;
   struct gauss_lag *gl = &gauss_lagrange[dim][web.gauss2D_order];
   REAL *normal = z+SDIM;
- 
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
+
   facet_general_flag = 1;
   for ( m = 0 ; m < gl->gnumpts ; m++ )
   { for ( k = 0 ; k < SDIM ; k++ ) z[k] = f_info->gauss_pt[m][k]; 
@@ -1644,11 +1643,11 @@ struct qinfo *f_info;
     if ( sign == -1.0 ) 
         for ( k = 0 ; k < SDIM ; k++ ) z[k+SDIM] *= sign ; 
     z[2*SDIM] = m; /* kludge for attr interpolation. */
-    value += gl->gausswt[m]*eval(METH_INSTANCE(f_info->method)->expr[0],z,f_info->id,NULL);
+    value += gl->gausswt[m]*eval(mi->expr[0],z,f_info->id,NULL);
   }
   facet_general_flag = 0;
   return value/web.simplex_factorial; 
-}
+} // end facet_general_value_lagr()
 
 /*********************************************************************
 *
@@ -1658,9 +1657,7 @@ struct qinfo *f_info;
 *
 */
 
-
-REAL facet_general_grad_lagr(f_info)
-struct qinfo *f_info;
+REAL facet_general_grad_lagr(struct qinfo *f_info)
 { int m,j,k;
   REAL value = 0.0;
   REAL val;
@@ -1670,6 +1667,7 @@ struct qinfo *f_info;
   int dim = web.dimension;
   struct gauss_lag *gl = &gauss_lagrange[dim][web.gauss2D_order];
   REAL *normal = z+SDIM;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
   facet_general_flag = 1;
   for ( m = 0 ; m < gl->gnumpts ; m++ )
@@ -1681,7 +1679,7 @@ struct qinfo *f_info;
      cross_prod(f_info->sides[m][0],f_info->sides[m][1],normal);
      if ( sign == -1.0 ) 
         for ( k = 0 ; k < SDIM ; k++ ) z[k+SDIM] *= sign ; 
-     eval_all(METH_INSTANCE(f_info->method)->expr[0],z,2*SDIM,&val,derivs,f_info->id);
+     eval_all(mi->expr[0],z,2*SDIM,&val,derivs,f_info->id);
      value += coeff*val;
      for ( j = 0 ; j < SDIM ; j++ )
       { int jj = (j+1)%3;
@@ -1696,7 +1694,7 @@ struct qinfo *f_info;
   }
   facet_general_flag = 0;
   return value; 
-}
+} // end facet_general_grad_lagr()
 
 /*********************************************************************
 *
@@ -1706,9 +1704,7 @@ struct qinfo *f_info;
 *
 */
 
-
-REAL facet_general_hess_lagr(f_info)
-struct qinfo *f_info;
+REAL facet_general_hess_lagr(struct qinfo *f_info)
 { int m,j,k,kk,J;
   REAL value = 0.0;
   REAL val;
@@ -1719,6 +1715,7 @@ struct qinfo *f_info;
   int dim = web.dimension;
   struct gauss_lag *gl = &gauss_lagrange[dim][web.gauss2D_order];
   REAL *normal = z+SDIM;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
 
   facet_general_flag = 1;
   for ( m = 0 ; m < gl->gnumpts ; m++ )
@@ -1731,7 +1728,7 @@ struct qinfo *f_info;
      cross_prod(f_info->sides[m][0],f_info->sides[m][1],normal);
      if ( sign == -1.0 ) 
         for ( k = 0 ; k < SDIM ; k++ ) z[k+SDIM] *= sign ; 
-     eval_second(METH_INSTANCE(f_info->method)->expr[0],z,2*SDIM,&val,derivs,
+     eval_second(mi->expr[0],z,2*SDIM,&val,derivs,
           second,f_info->id);
      value += coeff*val;
      /* gradients */
@@ -1789,8 +1786,210 @@ struct qinfo *f_info;
   }
   facet_general_flag = 0;
   return value; 
-}
+} // end facet_general_hess_lagr()
 
+/*********************************************************************
+
+                    facet_general_hi_d method, linear 
+
+    Integrand is general function of position and facet 2-vector.
+
+*********************************************************************/
+
+/*********************************************************************
+*
+* function: facet_general_hi_d_init()
+*
+* purpose:  check illegalities
+*
+*/
+
+void facet_general_hi_d_init(
+  int mode,
+  struct method_instance *mi
+)
+{ 
+  if ( web.dimension != 2 )
+     kb_error(3788,"facet_general_hi_d_integral method only for surface dimension 2.\n",RECOVERABLE);
+  
+  if ( web.modeltype == LAGRANGE )
+      kb_error(3679,"facet_general_hi_d_integral method does not do Lagrange model.\n",RECOVERABLE);
+
+} // end facet_general_init()
+
+/*********************************************************************
+*
+* function: facet_general_hi_d_value()
+*
+* purpose:  method value
+*
+*/
+
+REAL facet_general_hi_d_value(struct qinfo *f_info)
+{ int m,k,kk,j;
+  REAL value = 0.0;
+  REAL z[MAXCOORD+(MAXCOORD*(MAXCOORD-1))/2+1];  /* coords and 2-vector components */
+  REAL sign = (get_fattr(f_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
+
+  facet_general_flag = 1;
+
+  for ( m = 0 ; m < gauss2D_num ; m++ )
+  { REAL **s = f_info->sides[m];
+    for ( k = 0 ; k < SDIM ; k++ ) z[k] = f_info->gauss_pt[m][k]; 
+    for ( k = 0, j = SDIM ; k < SDIM ; k++ )
+      for ( kk = k+1 ; kk < SDIM ; kk++, j++ )
+      { z[j] = sign*(s[0][k]*s[1][kk] - s[0][kk]*s[1][k]);
+      } 
+    z[SDIM+(SDIM*(SDIM-1))/2] = m; /* kludge for attr interpolation. */
+    value += gauss2Dwt[m]*eval(mi->expr[0],z,f_info->id,NULL);
+  }
+  facet_general_flag = 0;
+  return value/web.simplex_factorial;  /* triangle factor */
+} // end facet_general_hi_d_value()
+
+/*********************************************************************
+*
+* function: facet_general_hi_d_grad()
+*
+* purpose:  method gradient
+*
+*/
+
+REAL facet_general_hi_d_grad(struct qinfo *f_info)
+{ int m,j,k,kk,n;
+  REAL value = 0.0;
+  REAL val;
+  REAL derivs[MAXCOORD+(MAXCOORD*(MAXCOORD-1))/2];
+  REAL z[MAXCOORD+(MAXCOORD*(MAXCOORD-1))/2+1];  /*  pointers to coord and tangent */
+  REAL sign = (get_fattr(f_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
+
+  facet_general_flag = 1;
+  for ( m = 0 ; m < gauss2D_num ; m++ )
+  { REAL **gpd = gpolypartial[m];
+    REAL coeff = gauss2Dwt[m]/web.simplex_factorial; 
+    REAL **s = f_info->sides[m]; 
+
+    for ( k = 0 ; k < SDIM ; k++ ) z[k] = f_info->gauss_pt[m][k]; 
+    for ( k = 0, j = SDIM ; k < SDIM ; k++ )
+      for ( kk = k+1 ; kk < SDIM ; kk++, j++ )
+      { z[j] = sign*(s[0][k]*s[1][kk] - s[0][kk]*s[1][k]);
+      } 
+    z[SDIM+(SDIM*(SDIM-1))/2] = m; /* kludge for attr interpolation. */
+
+     eval_all(mi->expr[0],z,SDIM+(SDIM*(SDIM-1))/2,&val,derivs,f_info->id);
+     value += coeff*val;
+     
+     for ( n = 0 ; n < ctrl_num ; n++ )
+     { for ( k = 0 ; k < SDIM ; k++ )
+         f_info->grad[n][k] += coeff*gpoly[m][n]*derivs[k];
+       for ( k = 0, j = SDIM ; k < SDIM ; k++ )
+         for ( kk = k+1 ; kk < SDIM ; kk++,j++ )
+           { 
+             f_info->grad[n][k] += coeff*sign*derivs[j]*(s[1][kk]*gpd[0][n]-s[0][kk]*gpd[1][n]);
+             f_info->grad[n][kk] += coeff*sign*derivs[j]*(s[0][k]*gpd[1][n]-s[1][k]*gpd[0][n]);
+         }
+      }
+  }
+  facet_general_flag = 0;
+  return value; 
+} // end facet_general_hi_d_grad()
+ 
+/*********************************************************************
+*
+* function: facet_general_hi_d_hess()
+*
+* purpose:  method gradient and hessian
+*
+*/
+
+REAL facet_general_hi_d_hess(struct qinfo *f_info)
+{ int m,j,k,kk,J,n,K,I,N,i;
+  REAL value = 0.0;
+  REAL val;
+  REAL derivs[MAXCOORD+(MAXCOORD*(MAXCOORD-1))/2];
+  REAL z[MAXCOORD+(MAXCOORD*(MAXCOORD-1))/2+1];  /*  pointers to coord and tangent */
+  MAT2D(second,MAXCOORD+(MAXCOORD*(MAXCOORD-1))/2,MAXCOORD+(MAXCOORD*(MAXCOORD-1))/2); /* second derivatives */
+  REAL sign = (get_fattr(f_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
+  struct method_instance *mi = METH_INSTANCE(f_info->method);
+
+  for ( m = 0 ; m < gauss2D_num ; m++ )
+  { REAL **gpd = gpolypartial[m];
+    REAL coeff = gauss2Dwt[m]/web.simplex_factorial; 
+    REAL **s = f_info->sides[m]; 
+
+    for ( k = 0 ; k < SDIM ; k++ ) z[k] = f_info->gauss_pt[m][k]; 
+    for ( k = 0, j = SDIM ; k < SDIM ; k++ )
+      for ( kk = k+1 ; kk < SDIM ; kk++, j++ )
+      { z[j] = sign*(s[0][k]*s[1][kk] - s[0][kk]*s[1][k]);
+      } 
+    z[SDIM+(SDIM*(SDIM-1))/2] = m; /* kludge for attr interpolation. */
+
+    eval_second(mi->expr[0],z,SDIM+(SDIM*(SDIM-1))/2,&val,derivs,second,f_info->id);
+    value += coeff*val;
+     
+     for ( n = 0 ; n < ctrl_num ; n++ )
+     {  
+
+       for ( k = 0 ; k < SDIM ; k++ )
+         f_info->grad[n][k] += coeff*gpoly[m][n]*derivs[k];
+       for ( k = 0, j = SDIM ; k < SDIM ; k++ )
+         for ( kk = k+1 ; kk < SDIM ; kk++,j++ )
+         { 
+             f_info->grad[n][k] += coeff*sign*derivs[j]*(s[1][kk]*gpd[0][n]-s[0][kk]*gpd[1][n]);
+             f_info->grad[n][kk] += coeff*sign*derivs[j]*(s[0][k]*gpd[1][n]-s[1][k]*gpd[0][n]);
+         }
+      
+ 
+#define INX(i,j) (SDIM + i*SDIM -(i*(i+1))/2 + j - i - 1)
+#define ziknk(i,k,n) (s[0][i]*gpd[1][n]-s[1][i]*gpd[0][n])
+#define zkjnk(j,k,n) (s[1][j]*gpd[0][n]-s[0][j]*gpd[1][n])
+
+       /* hessian, see facet_general_hi_d.tex */
+       for ( n = 0 ; n < ctrl_num ; n++ )
+         for ( N = 0 ; N < ctrl_num ; N++ )
+           for ( k = 0 ; k < SDIM ; k++ )
+             for ( K = 0 ; K < SDIM ; K++ )
+             { REAL sum = 0.0, sum1 = 0,sum2 = 0;
+       
+               sum1 = gpoly[m][N]*second[k][K];
+               for ( J = K+1 ; J < SDIM ; J++ )
+                 sum1 += second[k][INX(K,J)]*zkjnk(J,K,N);
+               for ( I = 0 ; I < K ; I++ )
+                 sum1 += second[k][INX(I,K)]*ziknk(I,K,N);
+               sum += gpoly[m][n]*sum1;
+
+               for ( j = k+1 ; j < SDIM ; j++ )
+               { sum2 = second[K][INX(k,j)]*gpoly[m][N];
+                 for ( J = K+1 ; J < SDIM ; J++ )
+                   sum2 += second[INX(k,j)][INX(K,J)]*zkjnk(J,K,N);
+                 for ( I = 0 ; I < K ; I++ )
+                   sum2 += second[INX(k,j)][INX(I,K)]*ziknk(I,K,N);
+                 sum += sum2*zkjnk(j,k,n);
+               }
+
+               for ( i = 0 ; i < k ; i++ )
+               { sum2 = second[K][INX(i,k)]*gpoly[m][N];
+                 for ( J = K+1 ; J < SDIM ; J++ )
+                   sum2 += second[INX(i,k)][INX(K,J)]*zkjnk(J,K,N);
+                 for ( I = 0 ; I < K ; I++ )
+                   sum2 += second[INX(i,k)][INX(I,K)]*ziknk(I,K,N);
+                 sum += sum2*ziknk(i,k,n);
+               }
+               if ( k < K ) 
+                 sum += derivs[INX(k,K)]*(gpd[1][N]*gpd[0][n] - gpd[1][n]*gpd[0][N]);
+               if ( K < k )
+                 sum += derivs[INX(K,k)]*(gpd[1][n]*gpd[0][N] - gpd[1][N]*gpd[0][n]);
+
+               f_info->hess[n][N][k][K] += coeff*sum;
+                              
+         }
+     }
+  }
+  facet_general_flag = 0;
+  return value; 
+} // end facet_general_hi_d_hess()
 
 /*********************************************************************
 
@@ -1806,14 +2005,13 @@ struct qinfo *f_info;
 *  purpose:  General quantity value of facet tension.
 */
 
-REAL area_square_value(f_info)
-struct qinfo *f_info;
+REAL area_square_value(struct qinfo *f_info)
 { REAL energy;
 
   mat_tsquare(f_info->sides[0],f_info->ss,web.dimension,SDIM);
   energy = det_adjoint(f_info->ss,web.dimension);
   return energy/web.simplex_factorial/web.simplex_factorial;
-}
+} // end area_square_value()
 
 /*********************************************************************
 *
@@ -1822,8 +2020,7 @@ struct qinfo *f_info;
 *  purpose:  General quantity value and gradient 
 */
 
-REAL area_square_gradient(f_info)
-struct qinfo *f_info;
+REAL area_square_gradient(struct qinfo *f_info)
 { REAL energy;
   int i,j;
 
@@ -1838,5 +2035,5 @@ struct qinfo *f_info;
   for ( i = 0 ; i < web.dimension ; i++ )  /* tail forces */
      vector_sub(f_info->grad[0],f_info->grad[i+1],SDIM);
   return energy/web.simplex_factorial/web.simplex_factorial;
-}
+} // end area_square_gradient()
 

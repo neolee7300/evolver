@@ -16,7 +16,7 @@
 /* symbol table variables */
 #define SYMMAX 200
 struct sym symtable[SYMMAX];    /* symbol table */
-#define MAXSYMDEPTH 10
+#define MAXSYMDEPTH 1000
 int symsave[MAXSYMDEPTH];  /* start of scope pointers */
 int symdepth;  /* depth of symbol table */
 int symtop;  /* current stack top, index of first empty spot */
@@ -35,7 +35,7 @@ int begin_scope()
 
   symsave[symdepth++] = symtop;
   return symdepth;
-}
+} // end begin_scope()
 
 
 /**********************************************************************
@@ -51,7 +51,7 @@ void end_scope()
       symtop = symsave[--symdepth];
   if ( oldsymtop > symtop )
      memset((char*)(symtable+symtop),0,(oldsymtop-symtop)*sizeof(struct sym));
-}
+} // end end_scope()
 
 /**********************************************************************
 *
@@ -60,8 +60,7 @@ void end_scope()
 *  purpose:  chop symbol stack after error
 */
 
-void set_scope(depth)
-int depth;
+void set_scope(int depth)
 { int oldsymtop = symtop;
   symdepth = depth-1;
   if ( symdepth > 0 )
@@ -69,7 +68,7 @@ int depth;
   else symtop = 0;
   if ( oldsymtop > symtop )
      memset((char*)(symtable+symtop),0,(oldsymtop-symtop)*sizeof(struct sym));
-}
+} // end set_scope()
 
 
 
@@ -82,11 +81,10 @@ int depth;
 
 void clear_symtable()
 { 
-  
   symdepth = 0;
   symtop = 0;
   memset((char*)symtable,0,SYMMAX*sizeof(struct sym));
-}
+} // end clear_symtable()
 
 /**********************************************************************
 *
@@ -95,14 +93,8 @@ void clear_symtable()
 *  purpose: add symbol to symbol table
 *
 */
-#ifdef __WIN32__
-struct sym * symbol_add(char * name,int type)
-#else
-struct sym * symbol_add(name,type)
-char *name;
-int type;
-#endif
 
+struct sym * symbol_add(char * name,int type)
 { int i;
 
   /* check for duplication in scope */
@@ -118,7 +110,7 @@ int type;
   strncpy(symtable[symtop].name,name,SYMNAMESIZE);
   symtable[symtop].type = type;
   return symtable + symtop++;
-}
+} // end symbol_add()
 
 /**********************************************************************
 *
@@ -128,12 +120,7 @@ int type;
 *              symbol structure if found, NULL if not.
 */
 
-#ifdef __WIN32__
 struct sym *symbol_lookup(char *name)
-#else
-struct sym *symbol_lookup(name)
-char *name;
-#endif
 {
   int i;
 
@@ -142,18 +129,14 @@ char *name;
         return symtable + i;  /* success */
 
   return NULL; /* failure */
-}
+} // end symbol_lookup()
 
 /**********************************************************************
   Global variable runtime table.  Implemented as a hash table. 
-  Hash table itself only has indices into true global table, so 
+  Hash table itself only has indices into true global tables, so 
   parsed expressions can have permanent indices into global table, 
   but hash table can expand. Hash table is twice the size of global
-  table to keep sparsity and simplicity.   Hash entry -1 denotes unused.
-  For distributed processing convenience, hash table and global table
-  kept in dymem, so dy_globals and dy_globalshash are actually offsets
-  in dymem, and globals and globalshash are macros for pointers to
-  start of the tables.
+  table to keep sparsity and simplicity.  
 
   Table hashes global variable names, quantity names, and method
   instance names.  Hash table entry is integer, with high two bits
@@ -162,8 +145,10 @@ char *name;
 
 **********************************************************************/
 
-int global_hash ARGS((char*));
-void expand_global_hash ARGS((void));
+typedef unsigned int hash_t;
+
+hash_t global_hash(char*);
+void expand_global_hash(void);
 
 /**********************************************************************
 *
@@ -174,16 +159,57 @@ void expand_global_hash ARGS((void));
 
 #define HASHSTRIDE (2*3*5*7*11*13*17*19 + 1)
 
-int global_hash(name)
-char *name;
-{ int hashval = 0;  
+hash_t global_hash(char *name)
+{ hash_t hashval = 0;  
   size_t len = strlen(name);
   size_t i;
  
   for ( i = 0; i < len ; i++ )
     hashval = (hashval + tolower(name[i])) * HASHSTRIDE;
-  return abs(hashval);
-}
+  return hashval;
+} // end global_hash()
+
+// Hash table stuff
+struct hash_entry_t { int key;   // index into global table
+                hash_t hashval; // full hash value
+                int next;  // link to next bucket
+};
+struct hash_entry_t *hash_list;   // main list
+struct hash_entry_t *bucket_list;  // overflow list
+int hash_alloc;  // hash_list allocated size
+int bucket_alloc;  // bucket_list size
+int hash_used;     // total entries in both lists
+int bucket_free_head;  // start of bucket free list
+
+/**********************************************************************
+*
+* function: insert_hash_entry()
+*
+* purpose: add given entry to table, assuming it is not there
+*/
+void insert_hash_entry(int hashval, int key)
+{ int spot;
+
+  if ( hash_used >= hash_alloc )
+    expand_global_hash();
+
+  spot = hashval % (unsigned int)hash_alloc;
+  if ( hash_list[spot].key )
+  { // to the bucket list
+    int bucket_spot = bucket_free_head;
+    bucket_free_head = bucket_list[bucket_free_head].next;
+    bucket_list[bucket_spot].next = hash_list[spot].next;
+    bucket_list[bucket_spot].key = key;
+    bucket_list[bucket_spot].hashval = hashval;
+    hash_list[spot].next = bucket_spot;
+  }
+  else
+  { hash_list[spot].key = key;
+    hash_list[spot].hashval = hashval;
+  }
+  hash_used++;
+
+} // end insert_hash_entry()
 
 /**********************************************************************
 *
@@ -194,46 +220,81 @@ char *name;
 */
 
 void expand_global_hash()
-{ int n;
+{ int old_hash_alloc, old_bucket_alloc;
+  struct hash_entry_t *old_hash_list, *old_bucket_list;
+  int i;
 
-  if ( dy_globalshash ) dy_free(dy_globalshash);
+  old_hash_alloc = hash_alloc;
+  old_bucket_alloc = bucket_alloc;
+  old_hash_list = hash_list;
+  old_bucket_list = bucket_list;
 
-  if ( dy_global_hash_max == 0 ) /* start up */
-    dy_global_hash_max = (web.perm_global_count < 50) ? 200 : 4*web.perm_global_count;
-  else dy_global_hash_max *= 2;
-  dy_globalshash = dy_calloc(dy_global_hash_max,sizeof(int));
-  dy_global_hash_maxfill = dy_global_hash_max/2;
-  dy_global_hash_used = 0;
+  if ( hash_alloc == 0 )
+    hash_alloc = 1000;
+  else
+  { 
+    hash_alloc *= 2;
+  }
 
-  /* rehash */
-  for ( n = 0 ; n < web.perm_global_count ; n++ )
-  { int spot = global_hash(perm_globals(n)->name) % dy_global_hash_max;
-    while ( globalshash[spot] ) 
-    { spot++; if ( spot == dy_global_hash_max ) spot = 0; }
-    globalshash[spot] = PERM_NAME | n;
-    dy_global_hash_used++;
+  hash_list = (struct hash_entry_t *)mycalloc(hash_alloc,sizeof(struct hash_entry_t));
+  bucket_alloc = hash_alloc;
+  bucket_list = (struct hash_entry_t *)mycalloc(bucket_alloc,sizeof(struct hash_entry_t));
+
+  hash_used = 0;
+  bucket_free_head = 1;  // not using index 0, so 0 denotes no "next"
+
+  // set up bucket free list
+  for ( i = 1 ; i < bucket_alloc-1 ; i++ )
+    bucket_list[i].next = i+1;
+
+  // copy over hashes
+  for ( i = 0 ; i < old_hash_alloc ; i++ )
+    if ( old_hash_list[i].key )
+      insert_hash_entry(old_hash_list[i].hashval,old_hash_list[i].key);
+  for ( i = 0 ; i < old_bucket_alloc ; i++ )
+    if ( old_bucket_list[i].key )
+      insert_hash_entry(old_bucket_list[i].hashval,old_bucket_list[i].key);
+
+  if ( old_hash_alloc )
+  {
+    myfree((char*)old_hash_list);
+    myfree((char*)old_bucket_list);
   }
-  for ( n = 0 ; n < web.global_count ; n++ )
-  { int spot = global_hash(globals(n)->name) % dy_global_hash_max;
-    while ( globalshash[spot] ) 
-    { spot++; if ( spot == dy_global_hash_max ) spot = 0; }
-    globalshash[spot] = VARIABLENAME | n;
-    dy_global_hash_used++;
+}
+
+/**********************************************************************
+*
+* function: hash_delete()
+*
+* purpose: delete entry from hash list
+*/
+void hash_delete(struct hash_entry_t *entry, struct hash_entry_t *prev_entry)
+{
+  if ( prev_entry )
+  { // in bucket_list
+    entry->key = 0;
+    entry->hashval = 0;
+    prev_entry->next = entry->next;
+    entry->next = bucket_free_head;
+    bucket_free_head = entry - bucket_list;
   }
-  for ( n = 0 ; n < gen_quant_count ; n++ )
-  { int spot = global_hash(GEN_QUANT(n)->name) % dy_global_hash_max;
-    while ( globalshash[spot] ) 
-    { spot++; if ( spot == dy_global_hash_max ) spot = 0; }
-    globalshash[spot] = QUANTITYNAME | n;
-    dy_global_hash_used++;
+  else
+  { // in main list
+    if ( entry->next )
+    { int next = entry->next;
+      *entry = bucket_list[next];
+      bucket_list[next].next = bucket_free_head;
+      bucket_list[next].key = 0;
+      bucket_list[next].hashval = 0;
+      bucket_free_head = next;
+    }
+    else
+    { entry->key = 0;
+      entry->next = 0;
+      entry->hashval = 0;
+    }
   }
-  for ( n = LOW_INST ; n < meth_inst_count ; n++ )
-  { int spot = global_hash(METH_INSTANCE(n)->name) % dy_global_hash_max;
-    while ( globalshash[spot] ) 
-    { spot++; if ( spot == dy_global_hash_max ) spot = 0; }
-    globalshash[spot] = METHODNAME | n;
-      dy_global_hash_used++;
-  }
+  hash_used--;
 }
 
 /**********************************************************************
@@ -247,74 +308,109 @@ void expand_global_hash()
 *          
 */
 
-int lookup_global_hash(name,inx,type,addflag)
-char *name;
-int inx;   /* index in appropriate table */
-int type;  /* type of table */
-int addflag; /* whether to add if not found, or delete */
-{ 
-  int hashval;
-  int spot;  /* in hash table */
-  int entry;   /* index in global table */
-  int *htable;  /* globalshash too buried in macros for debug */
-  
-  if ( dy_global_hash_used >= dy_global_hash_maxfill )
-      expand_global_hash();
-  htable = globalshash;
+int lookup_global_hash(
+  char *name,
+  int inx,   /* index in appropriate table */
+  int type,  /* type of table */
+  int addflag /* whether to add if not found, or delete */
+  )
+{ hash_t hashval;
+  int spot;
+  struct hash_entry_t *entry,*prev_entry;
+  int key = type | inx;
 
   hashval = global_hash(name);
-  spot = hashval % dy_global_hash_max;
+
+  if ( hash_alloc == 0 )
+  { if ( addflag == HASH_ADD )
+      insert_hash_entry(hashval,key);
+    return 0;
+  }
+
+  spot = hashval % (unsigned int)hash_alloc;
+  entry = hash_list + spot;
+  if ( entry->hashval == 0 )
+    { // empty slot
+       if ( addflag == HASH_ADD )
+         insert_hash_entry(hashval,key);
+       return 0;
+    }
+
+  prev_entry = NULL;
   for (;;)
-  { entry = htable[spot];
-    switch   ( entry & NAMETYPEMASK )
-    { 
-      case VARIABLENAME:
-        if ( stricmp(name,globals((entry & INDEXMASK)|EPHGLOBAL)->name) == 0 )
+  { 
+    if ( entry->hashval == hashval )
+      switch   ( entry->key & NAMETYPEMASK )
+      { 
+        case VARIABLENAME:
+        if ( stricmp(name,globals((entry->key & INDEXMASK)|EPHGLOBAL)->name) == 0 )
         { if ( addflag == HASH_DELETE )
-          { htable[spot] = 0; dy_global_hash_used--;} 
-          return entry;
+            hash_delete(entry,prev_entry);
+          return entry->key;       
         }
         break;
       
       case PERM_NAME:
-        if ( stricmp(name,perm_globals((entry & INDEXMASK)|PERMGLOBAL)->name) == 0 )
+        if ( stricmp(name,perm_globals((entry->key & INDEXMASK)|PERMGLOBAL)->name) == 0 )
         { if ( addflag == HASH_DELETE )
-          { htable[spot] = 0; dy_global_hash_used--;} 
-          return entry;
+             hash_delete(entry,prev_entry);
+          return entry->key;  
         }
         break;
 
       case QUANTITYNAME:
-        if ( stricmp(name,GEN_QUANT(entry & INDEXMASK)->name) == 0 )
+        if ( stricmp(name,GEN_QUANT(entry->key & INDEXMASK)->name) == 0 )
         { if ( addflag == HASH_DELETE )
-          { htable[spot] = 0; dy_global_hash_used--;} 
-          return entry;
+             hash_delete(entry,prev_entry);
+          return entry->key;  
         }
         break;
 
       case METHODNAME:
-        if ( stricmp(name,METH_INSTANCE(entry & INDEXMASK)->name) == 0 )
+        if ( stricmp(name,METH_INSTANCE(entry->key & INDEXMASK)->name) == 0 )
         { if ( addflag == HASH_DELETE ) 
-          { htable[spot] = 0; dy_global_hash_used--;} 
-          return entry;
+             hash_delete(entry,prev_entry);
+          return entry->key;  
         }
         break;
 
       default:  
-        if ( addflag == HASH_ADD )
-        { htable[spot] = type | inx;
-          dy_global_hash_used++;
-        }
-        return 0;
+
+       break;
           
+      } // end switch
+
+    // see if we need to keep going
+    if ( entry->next == 0 ) // empty slot
+    { if ( addflag == HASH_ADD )
+         insert_hash_entry(hashval,key);
+      return 0;
     }
     /* have to keep searching */
-    spot++;
-    if ( spot == dy_global_hash_max ) spot = 0;
-  } 
-  
-  /* can't get here */  
-}
+    prev_entry = entry;
+    entry = bucket_list + entry->next;
+
+  } // end for
+
+} // end lookup_global_hash
+
+/*****************************************************************
+*
+* function: clear_globals()
+*
+* purpose: Reset global name hash table to empty.
+*/
+
+void clear_globals()
+{
+  hash_list = NULL;   // main list
+  bucket_list = NULL;  // overflow list
+  hash_alloc = 0;  // hash_list allocated size
+  bucket_alloc = 0;  // bucket_list size
+  hash_used = 0;     // total entries in both lists
+  bucket_free_head = 0;  // start of bucket free list
+
+} // end clear_globals()
 
 /**********************************************************************
 *
@@ -325,8 +421,7 @@ int addflag; /* whether to add if not found, or delete */
 *  return:    index number in global list
 */
 
-int add_global(name)
-char *name;
+int add_global(char *name)
 { 
   int slot;
   int inx;   /* index in global table */
@@ -335,12 +430,13 @@ char *name;
 
   if ( web.maxglobals == 0 ) /* very first initialization */
   { web.maxglobals = 100;
-    dy_globals = dy_calloc(web.maxglobals,sizeof(struct global));
-    Globals = globals(0);  /* handy for debugging */
+    dy_globals = dy_calloc(web.maxglobals,sizeof(struct global*));
+    Globals = (struct global **)(dymem + dy_globals); 
   }
 
   slot = web.global_count;
   iid = slot | EPHGLOBAL;
+  Globals[slot] = (struct global*)mycalloc(1,sizeof(struct global));
   g = globals(iid);
   memset((char*)g,0,sizeof(struct global));
   strncpy(g->name,name,GLOBAL_NAME_SIZE);
@@ -367,12 +463,12 @@ char *name;
   if ( web.global_count == web.maxglobals )
   { 
      web.maxglobals *= 2;
-     dy_globals = dy_realloc(dy_globals,web.maxglobals,sizeof(struct global));
-     Globals = globals(0);  /* handy for debugging */
+     dy_globals = dy_realloc(dy_globals,web.maxglobals,sizeof(struct global *));
+     Globals = (struct global **)(dymem + dy_globals);
   }
 
   return iid; 
-}
+} // end add_global()
 
 
 /**********************************************************************
@@ -384,8 +480,7 @@ char *name;
 *  return:    index number in global list, -1 if not found
 */
 
-int lookup_global(name)
-char *name;
+int lookup_global(char *name)
 { 
   int inx;
 
@@ -398,40 +493,24 @@ char *name;
   if ( (inx & NAMETYPEMASK) == VARIABLENAME )
     return (inx & INDEXMASK) | EPHGLOBAL;
   return -1;
-}
+} // end lookup_global()
 
 /**************************************************************************
 *
 * function: rewind_globals()
 *
 * purpose: Delete globals added during failed parse.
-*
 */
 
-void rewind_globals(rewind_spot)
-int rewind_spot; /* where to rewind to */
+void rewind_globals(int rewind_spot /* where to rewind to */)
 {
   int k;
   /* unhash in reverse order of adding */
   for ( k = web.global_count-1 ; k >= rewind_spot ; k-- )
     lookup_global_hash(globals(k)->name,0,0,HASH_DELETE);
   web.global_count = rewind_spot;
-}
+} // end rewind_globals()
 
-/*****************************************************************
-*
-* function: clear_globals()
-*
-* purpose: Reset global name hash table to empty.
-*/
-
-void clear_globals()
-{
-  dy_globalshash = 0;
-  dy_global_hash_max = 0;
-  dy_global_hash_maxfill = 0;
-  dy_global_hash_used = 0;
-}
 
 /**********************************************************************
 
@@ -449,24 +528,24 @@ void clear_globals()
 *                -index - 1 if already there
 */
 
-int add_perm_global(name)
-char *name;
+int add_perm_global(char *name)
 { 
   int slot;
   int inx;   /* index in global table */
 
   if ( web.max_perm_globals == 0 ) /* very first initialization */
   { web.max_perm_globals = 100;
-    dy_perm_globals = calloc(web.max_perm_globals,sizeof(struct global));
-    perm_Globals = perm_globals(0);  /* handy for debugging */
+    dy_perm_globals = calloc(web.max_perm_globals,sizeof(struct global*));
+    perm_Globals = dy_perm_globals;  
   }
 
   slot = web.perm_global_count;
+  perm_Globals[slot] = calloc(1,sizeof(struct global));
   strncpy(perm_globals(slot)->name,name,GLOBAL_NAME_SIZE);
-  perm_globals(slot)->flags |= GLOB_USED;
+  perm_globals(slot)->flags |= GLOB_USED|PERMANENT;
   
   if ( strlen(name) > GLOBAL_NAME_SIZE )
-  { name[GLOBAL_NAME_SIZE] = 0;
+  { name[GLOBAL_NAME_SIZE] = 0; 
     sprintf(errmsg,"Name too long. Truncated to %s.\n",name);
     kb_error(2584,errmsg,WARNING);
   }
@@ -487,12 +566,12 @@ char *name;
   { 
      web.max_perm_globals *= 2;
      dy_perm_globals = 
-        realloc(dy_perm_globals,web.max_perm_globals*sizeof(struct global));
-     perm_Globals = perm_globals(0);  /* handy for debugging */
+        realloc(dy_perm_globals,web.max_perm_globals*sizeof(struct global*));
+     perm_Globals = dy_perm_globals;  /* handy for debugging */
   }
 
   return slot | PERMGLOBAL;
-}
+} // end add_perm_global()
 
 
 /**********************************************************************
@@ -504,8 +583,7 @@ char *name;
 *  return:    index number in global list, -1 if not found
 */
 
-int lookup_perm_global(name)
-char *name;
+int lookup_perm_global(char *name)
 { 
   int inx;
 
@@ -518,7 +596,7 @@ char *name;
   if ( (inx & NAMETYPEMASK) == PERM_NAME )
     return (inx & INDEXMASK) | PERMGLOBAL;
   return -1;
-}
+} // end lookup_perm_global()
 
 /**************************************************************************
 *
@@ -528,15 +606,14 @@ char *name;
 *
 */
 
-void perm_rewind_globals(perm_rewind_spot)
-int perm_rewind_spot; /* where to rewind to */
+void perm_rewind_globals(int perm_rewind_spot /* where to rewind to */)
 {
   int k;
   /* unhash in reverse order of adding */
   for ( k = web.perm_global_count-1 ; k >= perm_rewind_spot ; k-- )
     lookup_global_hash(perm_globals(k)->name,0,0,HASH_DELETE);
   web.perm_global_count = perm_rewind_spot;
-}
+} // end perm_rewind_globals()
 
 /**************************************************************************
    Local variable functions.
@@ -556,33 +633,34 @@ struct locallist_t *localbase;
 * purpose: Set up local scope structure for new command definition.
 */
 
-void init_local_scope(iid)
-ident_t iid;  /* identifier of procedure to begin new scope */
+void init_local_scope(
+  ident_t iid,  /* identifier of procedure to begin new scope */
+  int permmode /* PERMGLOBAL for permanent allocation */
+  )
 {
-  struct locallist_t *locals;
+  struct locallist_t *scope_locals;
     
-  locals = (iid & PERMGLOBAL ) ?
+  scope_locals = (permmode == PERMGLOBAL ) ?
        (struct locallist_t *)calloc(1,sizeof(struct locallist_t)) :
        (struct locallist_t *)mycalloc(1,sizeof(struct locallist_t)) ;
-  if ( iid & PERMGLOBAL ) 
-      locals->flags |= LL_PERMANENT;
+  if ( permmode == PERMGLOBAL ) 
+      scope_locals->flags |= LL_PERMANENT;
 
   if ( local_nest_depth < 0 ) 
      local_nest_depth = 0;
-  local_scope_bases[local_nest_depth] = locals;
+  local_scope_bases[local_nest_depth] = scope_locals;
   local_nest_depth++;
   
-  locals->iid = iid; 
-  locals->maxlist = 8;
-  locals->list = (locals->flags & LL_PERMANENT ) ?
-      (struct localvar_t*)calloc(locals->maxlist,
+  scope_locals->maxlist = 8;
+  scope_locals->list = (scope_locals->flags & LL_PERMANENT ) ?
+      (struct localvar_t*)calloc(scope_locals->maxlist,
                                  sizeof(struct localvar_t)) :
-      (struct localvar_t*)mycalloc(locals->maxlist,
+      (struct localvar_t*)mycalloc(scope_locals->maxlist,
                                  sizeof(struct localvar_t)) ;
-  localbase = locals;
-  locals->list[0].prev = -1;
+  localbase = scope_locals;
+  scope_locals->list[0].prev = -1;
 
-}
+} // end init_local_scope()
 
 /**************************************************************************
 *
@@ -609,7 +687,7 @@ void exit_local_scope()
   if ( local_nest_depth > 0 )
     localbase = local_scope_bases[local_nest_depth-1];
   else localbase = NULL;
-}
+} // end exit_local_scope()
 
 /**************************************************************************
 *
@@ -631,7 +709,7 @@ void begin_local_scope()
   locals = local_scope_bases[local_nest_depth-1]; 
   locals->list[locals->count].scope_depth++;
   locals->scope_depth++;
-}
+} // end begin_local_scope()
 
 /**************************************************************************
 *
@@ -658,7 +736,7 @@ void end_local_scope()
     locals->list[locals->count].scope_depth--;
   }
   locals->scope_depth--;
-}
+} // end end_local_scope()
 
 /**************************************************************************
 *
@@ -667,9 +745,10 @@ void end_local_scope()
 * purpose: add a local variable to procedure local variable list
 */
 
-ident_t add_local_var(name,size)
-char *name; /* NULL if just reserving space for anonymous value */
-int size;   /* in stack entries */
+ident_t add_local_var(
+  char *name, /* NULL if just reserving space for anonymous value */
+  int size   /* in stack entries */
+)
 { int n;
   struct localvar_t *v;
   int depth;
@@ -679,7 +758,7 @@ int size;   /* in stack entries */
   locals = local_scope_bases[local_nest_depth-1]; 
    
   depth = locals->scope_depth;
- 
+
   v = locals->list + locals->count;
 
   if ( name )
@@ -729,8 +808,7 @@ int size;   /* in stack entries */
 * purpose: lookup a local variable to procedure local variable list
 */
 
-ident_t lookup_local_var(name)
-char *name;
+ident_t lookup_local_var(char *name)
 { int n;
   struct localvar_t *v;
   struct locallist_t *locals;
@@ -748,7 +826,7 @@ char *name;
     }
 
   return 0; /* not found */
-}
+} // end lookup_local_var()
 
 /**************************************************************************
 *
@@ -757,9 +835,10 @@ char *name;
 * purpose: make a copy of local variable structure when assigning
 *          a code block in eval().
 */
-void locals_copy(dest,src)
-struct locallist_t **dest;
-struct locallist_t *src;
+void locals_copy(
+  struct locallist_t **dest,
+  struct locallist_t *src
+)
 {
   if ( *dest )
   { /* have old structure */
@@ -776,7 +855,7 @@ struct locallist_t *src;
   }
   else 
     memset((char*)(*dest),0,sizeof(struct locallist_t));
-} 
+} // end locals_copy()
 
 /**************************************************************************
 *
@@ -785,9 +864,10 @@ struct locallist_t *src;
 * purpose: make a copy of local variable structure when assigning
 *          a code block in eval().  Permanent procedure version.
 */
-void locals_copy_perm(dest,src)
-struct locallist_t **dest;
-struct locallist_t *src;
+void locals_copy_perm(
+  struct locallist_t **dest,
+  struct locallist_t *src
+  )
 {
   if ( *dest )
   { /* have old structure */
@@ -804,7 +884,7 @@ struct locallist_t *src;
   }
   else 
     memset((char*)(*dest),0,sizeof(struct locallist_t));
-} 
+} // end locals_copy_perm()
 
 
 /**************************************************************************
@@ -818,6 +898,7 @@ void initialize_perm_globals()
 { int k;
   struct global *g;
 
+
   k = add_perm_global("view_transform_swap_colors");
   view_transform_swap_colors_global = k;
   g = globals(k);
@@ -829,7 +910,49 @@ void initialize_perm_globals()
   g->attr.arrayptr->datacount = 0;
   g->attr.arrayptr->sizes[0] = 0;
   g->attr.arrayptr->datastart = 0; 
+  g->flags = INTERNAL_NAME|PERMANENT|ARRAY_PARAM;
+
+  k = add_perm_global("view_transforms_unique_point");
+  view_transforms_unique_point_global = k;
+  g = globals(k);
+  g->attr.arrayptr = 
+     (struct array*)calloc(sizeof(struct array)+MAXCOORD*sizeof(REAL),1); 
+  g->attr.arrayptr->dim = 1;
+  g->attr.arrayptr->itemsize = sizeof(REAL);
+  g->attr.arrayptr->datatype = REAL_TYPE;
+  g->attr.arrayptr->datacount = MAXCOORD;
+  g->attr.arrayptr->sizes[0] = MAXCOORD;
+  g->attr.arrayptr->datastart = sizeof(struct array); 
+  g->flags = INTERNAL_NAME|PERMANENT|ARRAY_PARAM;
+  view_transforms_unique_point = (REAL*)(g->attr.arrayptr + 1);
+
+  k = add_perm_global("view_transform_generators");
+  view_transform_generators_global = k;
+  g = globals(k);
+  g->attr.arrayptr = 
+     (struct array*)calloc(sizeof(struct array)+3*sizeof(int),1); 
+  g->attr.arrayptr->dim = 3;
+  g->attr.arrayptr->itemsize = sizeof(REAL);
+  g->attr.arrayptr->datatype = REAL_TYPE;
+  g->attr.arrayptr->datacount = 0;
+  g->attr.arrayptr->sizes[0] = 0;
+  g->attr.arrayptr->sizes[1] = 0;
+  g->attr.arrayptr->sizes[2] = 0;
+  g->attr.arrayptr->datastart = 0; 
   g->flags = INTERNAL_NAME|PERMANENT|ARRAY_PARAM|READONLY;
+
+  k = add_perm_global("transform_gen_swap_colors");
+  transform_gen_swap_colors_global = k;
+  g = globals(k);
+  g->attr.arrayptr = 
+     (struct array*)calloc(sizeof(struct array)+1*sizeof(int),1); 
+  g->attr.arrayptr->dim = 1;
+  g->attr.arrayptr->itemsize = sizeof(int);
+  g->attr.arrayptr->datatype = INTEGER_TYPE;
+  g->attr.arrayptr->datacount = 0;
+  g->attr.arrayptr->sizes[0] = 0;
+  g->attr.arrayptr->datastart = 0; 
+  g->flags = INTERNAL_NAME|PERMANENT|ARRAY_PARAM;
 
   k = add_perm_global("view_transforms");
   view_transforms_global = k;
@@ -859,7 +982,7 @@ void initialize_perm_globals()
   g->attr.arrayptr->sizes[1] = 0;
   g->attr.arrayptr->sizes[2] = 0;
   g->attr.arrayptr->datastart = 0; 
-  g->flags = INTERNAL_NAME|PERMANENT|ARRAY_PARAM;
+  g->flags = INTERNAL_NAME|PERMANENT|ARRAY_PARAM|ALWAYS_RECALC|DONT_RESIZE;
 
   k = add_perm_global("torus_periods");
   torus_periods_global = k;
@@ -872,7 +995,7 @@ void initialize_perm_globals()
   g->attr.arrayptr->sizes[0] = 0;
   g->attr.arrayptr->sizes[1] = 0;
   g->attr.arrayptr->datacount = 0;
-  g->flags = INTERNAL_NAME|PERMANENT|ARRAY_PARAM|READONLY;
+  g->flags = INTERNAL_NAME|PERMANENT|ARRAY_PARAM|READONLY|ALWAYS_RECALC;
 
   k = add_perm_global("inverse_periods");
   inverse_periods_global = k;
@@ -934,7 +1057,38 @@ void initialize_perm_globals()
   g->attr.arrayptr->datastart = (char*)clip_coeff-(char*)(g->attr.arrayptr); 
   g->flags = PERMANENT|ARRAY_PARAM|RECALC_PARAMETER|ALWAYS_RECALC;
 
-}
+  if ( console_title_global == 0 )
+  {
+    k = add_perm_global("console_title");  // not permanent, so can be assigned to naturally
+    console_title_global = k;
+    g = globals(k);
+    g->value.string = console_title;
+    g->type = STRING_TYPE;
+    g->flags = INTERNAL_NAME|STRINGVAL;
+
+    k = add_perm_global("graphics_title");  // not permanent, so can be assigned to naturally
+    graphics_title_global = k;
+    g = globals(k);
+    g->value.string = graphics_title;
+    g->type = STRING_TYPE;
+    g->flags = INTERNAL_NAME|STRINGVAL;
+
+    k = add_perm_global("graphics_title2");  // not permanent, so can be assigned to naturally
+    graphics_title2_global = k;
+    g = globals(k);
+    g->value.string = graphics_title2;
+    g->type = STRING_TYPE;
+    g->flags = INTERNAL_NAME|STRINGVAL;
+
+    k = add_perm_global("graphics_title3");  // not permanent, so can be assigned to naturally
+    graphics_title3_global = k;
+    g = globals(k);
+    g->value.string = graphics_title3;
+    g->type = STRING_TYPE;
+    g->flags = INTERNAL_NAME|STRINGVAL;
+  }
+
+} // end initialize_perm_globals()
 
 
 /*************************************************************************
@@ -943,8 +1097,7 @@ void initialize_perm_globals()
 *
 * purpose: allocate transform_colors array and update global variable info.
 */
-void allocate_transform_colors(count)
-int count;
+void allocate_transform_colors(int count)
 { struct global *g;
 
   if ( transform_colors ) myfree((char*)transform_colors);
@@ -955,7 +1108,7 @@ int count;
   g->attr.arrayptr->datacount = count;
   g->attr.arrayptr->datastart = count ?
         ((char*)transform_colors - (char*)(g->attr.arrayptr)) : 0;
-}
+} // end allocate_transform_colors()
 
 /*************************************************************************
 *
@@ -975,7 +1128,32 @@ void set_view_transforms_global()
   g->attr.arrayptr->datacount = transform_count*(SDIM+1)*(SDIM+1);
   g->attr.arrayptr->datastart = transform_count ?
         (char*)view_transforms[0][0] - (char*)(g->attr.arrayptr) : 0;
-}
+} // end set_view_transforms_global()
+
+/*************************************************************************
+*
+* function: set_view_transform_generators_global()
+*
+* purpose: update view_transform_generators[][][] global variable info.
+*/
+void set_view_transform_generators_global()
+{ struct global *g;
+
+  g = globals(view_transform_generators_global); 
+  g->attr.arrayptr->sizes[0] = transform_gen_count;
+  g->attr.arrayptr->sizes[1] = SDIM+1;
+  g->attr.arrayptr->sizes[2] = SDIM+1;
+  g->attr.arrayptr->datacount = transform_gen_count*(SDIM+1)*(SDIM+1);
+  g->attr.arrayptr->datastart = transform_gen_count ?
+        (char*)view_transform_gens[0][0] - (char*)(g->attr.arrayptr) : 0;
+
+  g = globals(transform_gen_swap_colors_global); 
+  g->attr.arrayptr->sizes[0] = transform_gen_count;
+  g->attr.arrayptr->datacount = transform_gen_count;
+  g->attr.arrayptr->datastart = transform_gen_count ?
+        (char*)transform_gen_swap - (char*)(g->attr.arrayptr) : 0;
+
+} // end set_view_transform_generators_global()
 
 
 /*************************************************************************
@@ -993,7 +1171,7 @@ void set_torus_periods_global()
   g->attr.arrayptr->datacount = SDIM*SDIM;
   g->attr.arrayptr->datastart = 
         (char*)&web.torus_period[0][0] - (char*)(g->attr.arrayptr);
-}
+} // end set_torus_periods_global()
 
 
 /*************************************************************************
@@ -1010,8 +1188,8 @@ void set_inverse_periods_global()
   g->attr.arrayptr->sizes[1] = SDIM;
   g->attr.arrayptr->datacount = SDIM*SDIM;
   g->attr.arrayptr->datastart = 
-        (char*)&web.inverse_periods[0][0] - (char*)(g->attr.arrayptr);
-}
+        (char*)&web.inverse_periods_tr[0][0] - (char*)(g->attr.arrayptr);
+} // end set_inverse_periods_global()
 
 
 /*************************************************************************
@@ -1029,7 +1207,7 @@ void set_view_matrix_global()
   g->attr.arrayptr->datacount = (SDIM+1)*(SDIM+1);
   g->attr.arrayptr->datastart = 
         (char*)&view[0][0] - (char*)(g->attr.arrayptr);
-}
+} // end set_view_matrix_global()
 
 
 /*************************************************************************
@@ -1038,9 +1216,10 @@ void set_view_matrix_global()
 *
 * purpose: update eigenvalue[] global variable info.
 */
-void set_eigenvalue_list_global(evalues,count)
-REAL *evalues;
-int count;
+void set_eigenvalue_list_global(
+  REAL *evalues,
+  int count
+)
 { struct global *g;
 
   g = globals(eigenvalues_list_global);
@@ -1048,7 +1227,7 @@ int count;
   g->attr.arrayptr->datacount = count;
   g->attr.arrayptr->datastart = 
         (char*)evalues - (char*)(g->attr.arrayptr);
-}
+} // end set_eigenvalue_list_global()
 
 /********************************************************************************
 *
@@ -1056,8 +1235,13 @@ int count;
 *
 * Purpose: return a pointer to the array info structure associated with a
 *          global variable or extra attribute.  Called from eval*().
+*          Note: localbase argument needed for globals() macro.
 */
-struct array *get_name_arrayptr(int name_id,  REAL *newstack, struct locallist_t *localbase)
+struct array *get_name_arrayptr(
+  int name_id,  
+  REAL *newstack, 
+  struct locallist_t *localbase
+)
 {
   if ( (name_id & GTYPEMASK) == ATTRIBNAME )
   { struct extra *ex = EXTRAS(name_eltype(name_id)) + (name_id & GLOBMASK);
@@ -1074,7 +1258,7 @@ struct array *get_name_arrayptr(int name_id,  REAL *newstack, struct locallist_t
   }
 
   return NULL; /* just to keep some compilers happy */
-}
+} // end get_name_arrayptr()
 
 /********************************************************************************
 *
@@ -1096,7 +1280,7 @@ char *get_name_name(int name_id, struct locallist_t *localbase)
   }
 
   return NULL;  /* just to keep some compilers happy */
-}
+} // end get_name_name()
 
 /********************************************************************************
 *
@@ -1118,7 +1302,8 @@ int get_name_dim(int name_id, struct locallist_t *localbase)
   }
 
   return 0;  /* just to keep some compilers happy */
-}
+} // end get_name_dim()
+
 /********************************************************************************
 *
 * Function: get_name_datatype()
@@ -1139,4 +1324,4 @@ int get_name_datatype(int name_id, struct locallist_t *localbase)
   }
 
   return 0; /* just to keep some compilers happy */
-}
+} // end get_name_datatype()

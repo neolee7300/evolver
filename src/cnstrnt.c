@@ -5,10 +5,10 @@
 
 /****************************************************************
 *
-*  File: cnstrnt.c
+*  File: cnstrnt.c 
 *
 *  Contents:  Functions dealing with boundary constraints.
-*/
+*/ 
 
 #include "include.h"
 
@@ -20,8 +20,7 @@
 *
 */
 
-void constraint_init(con)
-struct constraint *con;
+void constraint_init(struct constraint *con)
 { int i;
   con->formula = (struct expnode *)mycalloc(1+2*MAXCONCOMP,
       sizeof(struct expnode));
@@ -30,7 +29,7 @@ struct constraint *con;
   { con->envect[i] = con->formula + 1 + i;
     con->convect[i] = con->formula + 1 + MAXCONCOMP + i;
   }
-}
+} // end constraint_init()
 
 /*******************************************************************
 *
@@ -40,8 +39,7 @@ struct constraint *con;
 *
 */
 
-void constraint_free(con)
-struct constraint *con;
+void constraint_free(struct constraint *con)
 { int j;
 
   if ( con->formula )
@@ -53,7 +51,7 @@ struct constraint *con;
     myfree((char*)con->formula);
   }
   
-}
+} // end constraint_free(
 
 /******************************************************************
 *
@@ -71,19 +69,20 @@ struct constraint *con;
 */
 
 
-int constr_proj(mode,concount,constr,coord,b,combo,conlist,detect_flag,v_id)
-int mode;  /* TANGPROJ for vector projection of b to tangent plane,
+int constr_proj(
+  int mode,  /* TANGPROJ for vector projection of b to tangent plane,
                         (note return is normal component of b!)
               PLAINPROJ for using input b as right side 
                         (note return is offset from constraints!)*/
-int concount;  /* how many constraints */
-struct constraint **constr;  /* array of pointers to constraints */
-REAL *coord;  /* coordinates of point for evaluating functions */
-REAL *b;        /* vector to project */
-REAL *combo;  /* desired linear combination */
-int *conlist;  /* list of constraint numbers; for returning hits */
-int detect_flag; /* set if want to detect one-sided constraints */
-vertex_id v_id; /* vertex for DETECT mode, or passing on to constraint eval */
+  int concount,  /* how many constraints */
+  struct constraint **constr,  /* array of pointers to constraints */
+  REAL *coord,  /* coordinates of point for evaluating functions */
+  REAL *b,        /* vector to project */
+  REAL *combo,  /* desired linear combination */
+  int *conlist,  /* list of constraint numbers; for returning hits */
+  int detect_flag, /* set if want to detect one-sided constraints */
+  vertex_id v_id /* vertex for DETECT mode, or passing on to constraint eval */
+)
 {
 /* maximum number of hit constraints */
 #define MAXCONSTR MAXCOORD
@@ -94,7 +93,7 @@ vertex_id v_id; /* vertex for DETECT mode, or passing on to constraint eval */
   REAL fval;                          /* value of constraint      */
   REAL *bb;                           /* pointer to right side    */
   MAT2D(a,MAXCONSTR,MAXCONSTR);       /* matrix for projection    */
-
+  
   if ( concount > MAXCONSTR ) 
   { sprintf(errmsg,
      "Trying to project vertex %s on more constraints, %d, than allowed, %d.",
@@ -172,9 +171,10 @@ vertex_id v_id; /* vertex for DETECT mode, or passing on to constraint eval */
 */
 
 
-int constr_proj_matrix(v_id,mat)
-vertex_id v_id; /* vertex for DETECT mode, or passing on to constraint eval */
-REAL **mat;     /* projection matrix */
+int constr_proj_matrix(
+  vertex_id v_id, /* vertex for DETECT mode, or passing on to constraint eval */
+  REAL **mat     /* projection matrix */
+)
 {
 /* maximum number of hit constraints */
 #define MAXCONSTR MAXCOORD
@@ -186,21 +186,23 @@ REAL **mat;     /* projection matrix */
   struct constraint *constr[MAXCONSTR];
   for ( j = 1 ; j <= (int)conmap[0] ; j++ )
    if ( conmap[j] & CON_HIT_BIT )
-     constr[concount++] = get_constraint(conmap[j]);
-
-  if ( concount > MAXCONSTR ) 
-  { sprintf(errmsg,
-     "Vertex %s has more constraints, %d, than allowed, %d.",
-        ELNAME(v_id),concount,SDIM);  
+   { 
+     if ( concount >= web.sdim ) 
+     { sprintf(errmsg,
+       "Vertex %s has more constraints than space dimension, %d.",
+          ELNAME(v_id),SDIM);  
  
-     sprintf(errmsg+strlen(errmsg),"    Projecting on constraints ");
-     for ( i = 0 ; i < concount ; i++ )
-        sprintf(errmsg+strlen(errmsg)," %s",constr[i]->name);
-     strcat(errmsg,".  Maybe redundant one-sided constraints?");
+       sprintf(errmsg+strlen(errmsg),"    Projecting on constraints ");
+       for ( i = 0 ; i < concount ; i++ )
+        if ( conmap[i] & CON_HIT_BIT )
+          sprintf(errmsg+strlen(errmsg)," %s",constr[i]->name);
+       strcat(errmsg,".  Maybe redundant one-sided constraints?");
      
-     strcat(errmsg,"\n");
-     kb_error(3515,errmsg,RECOVERABLE);
-  }
+       strcat(errmsg,"\n");
+       kb_error(3515,errmsg,RECOVERABLE);
+     }
+     constr[concount++] = get_constraint(conmap[j]);
+   }
 
   if ( concount > 0 )
   { REAL *coord = get_coord(v_id);
@@ -245,9 +247,10 @@ REAL **mat;     /* projection matrix */
 */
 
 
-int constr_proj_matrix_wall(v_id,mat)
-vertex_id v_id; /* vertex for DETECT mode, or passing on to constraint eval */
-REAL **mat;  /* projection matrix */
+int constr_proj_matrix_wall(
+  vertex_id v_id, /* vertex for DETECT mode, or passing on to constraint eval */
+  REAL **mat  /* projection matrix */
+)
 {
 /* maximum number of hit constraints */
 #define MAXCONSTR MAXCOORD
@@ -316,16 +319,17 @@ REAL **mat;  /* projection matrix */
 *                for the first time.
 */
 
-int project_v_constr(v_id,mode,one_sided_reset)
-vertex_id v_id;
-int mode; /* TEST_MOVE or ACTUAL_MOVE */
-int one_sided_reset; /* whether to reset one-sidedness */
+int project_v_constr(
+  vertex_id v_id,
+  int mode, /* TEST_MOVE or ACTUAL_MOVE */
+  int one_sided_reset /* whether to reset one-sidedness */
+)
 {
   REAL *x;
   conmap_t *conmap;
-  struct constraint *con[MAXCONPER],*thiscon;
+  struct constraint *con[MAXCONHIT],*thiscon;
   int oncount = 0;
-  REAL f[MAXCONPER],delta[MAXCOORD];
+  REAL f[MAXCONHIT],delta[MAXCOORD];
   int j,itercount = 0;
   REAL diff,totaldiff;
   int walls = 0;  /* total number of constraints vertex is on */
@@ -334,8 +338,9 @@ int one_sided_reset; /* whether to reset one-sidedness */
   /*int hit_one_side;*/ /* if hits a one-sided constraint */
   int new_hits = 0; /* total new hits */
 
-//  if ( one_sided_reset == RESET_ONESIDEDNESS )
-//    clear_v_constraint_status(v_id);  // moved from inside loop, so 1-sided con is sticky
+  if ( one_sided_reset == RESET_ONESIDEDNESS )
+    clear_v_constraint_status(v_id);  // moved from inside loop, so 1-sided con is sticky
+ 
   x = get_coord(v_id);
   conmap = get_v_constraint_map(v_id);
   do
@@ -355,6 +360,11 @@ int one_sided_reset; /* whether to reset one-sidedness */
                ( diff < -web.tolerance )) )
       {
         continue;
+      }
+      if ( oncount >= web.sdim )
+      { sprintf(errmsg,"Vertex %s hits more constraints than dimension of space.\n",
+            ELNAME(v_id));
+        kb_error(5883,errmsg,RECOVERABLE);
       }
       if ( thiscon->attr & (NONNEGATIVE|NONPOSITIVE) )
       { /* hit_one_side = 1; */
@@ -383,7 +393,8 @@ int one_sided_reset; /* whether to reset one-sidedness */
   { struct constraint *con = get_constraint(dcon);
     sprintf(msg,
   "Vertex %s doesn't converge to constraint %s after %d iterations. \n maxdiff = %g, constraint_tolerance %g\n",
-         ELNAME(v_id),con->name,MAXCONITER,(DOUBLE)totaldiff,web.tolerance);
+         ELNAME(v_id),con->name,MAXCONITER,(DOUBLE)totaldiff,
+            (DOUBLE)web.tolerance);
      kb_error(1792,msg,WARNING);
   }
 
@@ -396,7 +407,8 @@ int one_sided_reset; /* whether to reset one-sidedness */
 */
   }
   return new_hits;
-}
+
+} // end project_v_constr()
 
 /*****************************************************************
 *
@@ -405,8 +417,7 @@ int one_sided_reset; /* whether to reset one-sidedness */
 *  Purpose: calculate force on vertex due to constraint energy. (string model)
 */
 
-void calc_constr_force_v(v_id)
-vertex_id v_id;
+void calc_constr_force_v(vertex_id v_id)
 {
   REAL *f,*coord;
   struct constraint *constr;
@@ -431,7 +442,8 @@ vertex_id v_id;
   }
 
   return;
-}
+
+} // end calc_constr_force_v()
 
 /**************************************************************************
 *
@@ -440,8 +452,7 @@ vertex_id v_id;
 *  Purpose: calculate force on endpoints of edge due to constraint energy.
 */
 
-void calc_constr_force_e(e_id)
-edge_id e_id;
+void calc_constr_force_e(edge_id e_id)
 {
   REAL *tcoord,*hcoord;
   REAL *tforce,*hforce;
@@ -499,7 +510,8 @@ edge_id e_id;
   }
 
   return;
-}
+
+} // end calc_constr_force_e()
 
 /*****************************************************************
 *
@@ -508,8 +520,7 @@ edge_id e_id;
 *  Purpose: calculate constraint energy due to vertex. (string model)
 */
 
-void calc_constr_energy_v(v_id)
-vertex_id v_id;
+void calc_constr_energy_v(vertex_id v_id)
 {
   REAL e;
   int j;
@@ -526,7 +537,7 @@ vertex_id v_id;
     else
       binary_tree_add(web.total_energy_addends,e);
   }
-}
+} // end calc_constr_energy_v()
 
 /*****************************************************************
 *
@@ -536,8 +547,7 @@ vertex_id v_id;
 *              Also contributions to quantities from constraints.
 */
 
-void calc_constr_energy_e(e_id)
-edge_id e_id;
+void calc_constr_energy_e(edge_id e_id)
 {
   REAL *tcoord,*hcoord;
   struct constraint *constr;
@@ -589,7 +599,7 @@ edge_id e_id;
 
   binary_tree_add(web.total_energy_addends,energy);
 
-}
+} // end calc_constr_energy_e()
 
 /*****************************************************************
 *
@@ -598,8 +608,7 @@ edge_id e_id;
 *  Purpose: calculate interior content due to vertex. (string model)
 */
 
-void calc_constr_content_v(v_id)
-vertex_id v_id;
+void calc_constr_content_v(vertex_id v_id)
 {
   REAL e=0.0;
   int j;
@@ -674,7 +683,7 @@ vertex_id v_id;
     } while ( !equal_id(next_e,start_e) );
   
   }
-}
+}  // end calc_constr_content_v()
 
 /*****************************************************************
 *
@@ -683,8 +692,7 @@ vertex_id v_id;
 *  Purpose: calculate interior content due to edge. (film model)
 */
 
-void calc_constr_content_e(e_id)
-edge_id e_id;
+void calc_constr_content_e(edge_id e_id)
 {
   REAL *tcoord,*hcoord;
   struct constraint *constr;
@@ -776,7 +784,8 @@ edge_id e_id;
 
   }
   return;
-}
+
+} // end calc_constr_content_e()
 
 
 /*****************************************************************
@@ -788,13 +797,12 @@ edge_id e_id;
 *                of true area.
 */
 
-void constr_spring_energy(e_id)
-edge_id e_id;
+void constr_spring_energy(edge_id e_id)
 {
   REAL sprenergy = 0.0;
   REAL s[MAXCOORD];
   REAL ss;
-  struct constraint *constr[MAXCONPER];
+  struct constraint *constr[MAXCONHIT];
   int concount;
   conmap_t * conmap;
   vertex_id tail,head;
@@ -811,7 +819,14 @@ edge_id e_id;
   for ( j = 1,i = 0 ; j <= (int)conmap[0] ; j++ )
   { constr[i] = get_constraint(conmap[j]);
     if ( constr[i]->attr & B_CONVEX ) 
+    {
+      if ( i >= MAXCONHIT )
+      { sprintf(errmsg,"Edge %s on too many convex constraints.\n",
+            ELNAME(e_id));
+        kb_error(5884,errmsg,RECOVERABLE);
+      }
       i++;    /* keep this one */
+    }
   }
   if ( i == 0 ) return;
   concount = i;  
@@ -868,7 +883,8 @@ edge_id e_id;
   sprenergy *= web.spring_constant;
   binary_tree_add(web.total_energy_addends,sprenergy);
   web.spring_energy += sprenergy;
-}
+
+} // end constr_spring_energy()
 
 /****************************************************************
 *
@@ -888,12 +904,11 @@ edge_id e_id;
 */
 
 
-void  constr_springs(e_id)
-edge_id e_id;
+void  constr_springs(edge_id e_id)
 {
   REAL s[MAXCOORD],*fh,*ft;
   REAL ss; /* square lengths */
-  struct constraint *constr[MAXCONPER];
+  struct constraint *constr[MAXCONHIT];
   int concount;
   conmap_t * conmap;
   vertex_id head,tail;
@@ -910,8 +925,16 @@ edge_id e_id;
   conmap = get_e_constraint_map(e_id);
   for ( j = 1,i=0 ; j <= (int)conmap[0] ; j++ )
   { constr[i] = get_constraint(conmap[j]);
-    if ( constr[i]->attr & B_CONVEX ) i++;    /* keep this one */
-   }
+    if ( constr[i]->attr & B_CONVEX )
+    {
+      if ( i >= MAXCONHIT )
+      { sprintf(errmsg,"Vertex %s on too many convex constraints.\n",
+            ELNAME(e_id));
+        kb_error(5885,errmsg,RECOVERABLE);
+      }
+      i++;    /* keep this one */
+    }
+  }
   if ( i == 0 ) return;
   concount = i;  
 
@@ -984,7 +1007,7 @@ edge_id e_id;
      fh[i] -= web.spring_constant*q[i]*norm;
 #endif 
 
-}
+} // end constr_springs()
 
 /*************************************************************************
  
@@ -1003,8 +1026,7 @@ edge_id e_id;
 *  Quadratic version.
 */
 
-void constr_edge_energy_q(e_id)
-edge_id e_id;
+void constr_edge_energy_q(edge_id e_id)
 {
   REAL x[EDGE_CTRL][MAXCOORD];
   REAL *pt[EDGE_CTRL];
@@ -1058,7 +1080,7 @@ edge_id e_id;
      
   binary_tree_add(web.total_energy_addends,energy);
 
-}
+}  // end constr_edge_energy_q()
  
 
 
@@ -1071,8 +1093,7 @@ edge_id e_id;
 *  Quadratic version.
 */
 
-void constr_edge_force_q(e_id)
-edge_id e_id;
+void constr_edge_force_q(edge_id e_id)
 {
   REAL x[EDGE_CTRL][MAXCOORD];
   REAL *pt[EDGE_CTRL];
@@ -1133,7 +1154,7 @@ edge_id e_id;
       }              
     }
   }
-}
+} // end constr_edge_force_q()
  
 
 
@@ -1146,8 +1167,7 @@ edge_id e_id;
 *  Quadratic version.
 */
 
-void constr_edge_content_q(e_id)
-edge_id e_id;
+void constr_edge_content_q(edge_id e_id)
 {
   REAL x[EDGE_CTRL][MAXCOORD];
   REAL *pt[EDGE_CTRL];
@@ -1226,7 +1246,8 @@ edge_id e_id;
   } while ( valid_id(fe_id) && !equal_id(fe_id,first_fe) );
 
   return;
-}
+
+} // end constr_edge_content_q()
 
 
 /************************************************************************
@@ -1238,8 +1259,7 @@ edge_id e_id;
 *  Quadratic version.
 */
 
-void constr_vol_grad_q(e_id)
-edge_id e_id;
+void constr_vol_grad_q(edge_id e_id)
 {
   REAL x[EDGE_CTRL][MAXCOORD];
   REAL *pt[EDGE_CTRL];
@@ -1333,7 +1353,8 @@ edge_id e_id;
         }
       }
     } while ( !equal_id(fe,start_fe));
-}
+
+} // constr_vol_grad_q()
 
 
 /*****************************************************************
@@ -1343,12 +1364,13 @@ edge_id e_id;
 *  Purpose: calculate basis of constraint tangent.
 */
 
-int constr_basis(v_id,basis)
-vertex_id v_id;
-REAL **basis;  /* for return */
+int constr_basis(
+  vertex_id v_id,
+  REAL **basis  /* for return */
+)
 {
   conmap_t *conmap;
-  struct constraint *con[MAXCONPER];
+  struct constraint *con[MAXCONHIT];
   int oncount = 0;
   REAL ggrad[MAXCOORD][MAXCOORD];
   REAL *grad[MAXCOORD]; /* for proper matrix form */
@@ -1359,7 +1381,15 @@ REAL **basis;  /* for return */
 
   conmap = get_v_constraint_map(v_id);
   for ( j = 1 , oncount = 0; j <= (int)conmap[0] ; j++ )
-        con[oncount++] = get_constraint(conmap[j]);
+   if ( conmap[j] & CON_HIT_BIT )
+   { if ( oncount >= web.sdim ) 
+     { sprintf(errmsg,
+       "Vertex %s has more constraints than space dimension, %d\n.",
+          ELNAME(v_id),SDIM);  
+       kb_error(5886,errmsg,RECOVERABLE);
+     } 
+     con[oncount++] = get_constraint(conmap[j]);
+   }
 
   /* first calc constraint gradients */
   for ( i = 0 ; i < oncount ; i++ )     
@@ -1376,7 +1406,8 @@ REAL **basis;  /* for return */
       basis[i][j] = bas[j][i];
 
   return nullity;
-}
+
+}  // end constr_basis()
 
 /***************************************************************************
 *
@@ -1386,22 +1417,29 @@ REAL **basis;  /* for return */
 *
 */
 
-void force_project(fin,v_id,fout)
-REAL *fin;
-vertex_id v_id;
-REAL *fout;
-{ int attr = get_vattr(v_id);
+void force_project(
+  REAL *fin,
+  vertex_id v_id,
+  REAL *fout
+)
+{ ATTR attr = get_vattr(v_id);
   int i,j;
   if ( attr & CONSTRAINT )
   { conmap_t * conmap = get_v_constraint_map(v_id);
     int oncount = 0;
-    struct constraint *con[MAXCONPER];
-    int conlist[MAXCONPER];
+    struct constraint *con[MAXCONHIT];
+    int conlist[MAXCONHIT];
     REAL perp[MAXCOORD];
 
     for ( j = 1 ; j <= (int)conmap[0] ; j++ )
     { if ( conmap[j] & CON_HIT_BIT )
-      { conlist[oncount] = conmap[j] & CONMASK;
+      { 
+        if ( oncount >= web.sdim )
+        { sprintf(errmsg,"Vertex %s hits more constraints than dimension of space.\n",
+              ELNAME(v_id));
+          kb_error(5887,errmsg,RECOVERABLE);
+        }
+        conlist[oncount] = conmap[j] & CONMASK;
         con[oncount] = get_constraint(conmap[j]);
         oncount++;
       }
@@ -1424,6 +1462,7 @@ REAL *fout;
   /* no projecting to do */
   for ( i = 0 ; i < SDIM ; i++ )
     fout[i] = fin[i];
-}
+
+} // end force_project()
 
  

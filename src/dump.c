@@ -36,7 +36,7 @@ char *color_names[] = {
 #include "lex.h"
 #include "ytab.h"
 
-void list_forwards ARGS((void));
+void list_forwards (void);
 
 /********************************************************
 *
@@ -60,7 +60,8 @@ void dump()
   prompt(msg,name,sizeof(name));
   if ( name[0] == 0 ) do_dump(defaultname);
   else do_dump(name);
-}
+
+} // end dump()
 
 /****************************************************************************
 *
@@ -69,15 +70,22 @@ void dump()
 * purpose: print string representation of datatype value.
 */
 
-void print_data_value(dest,type,src)
-char *dest;
-int type;
-void *src;
-{
+void print_data_value(
+  char *dest,
+  int type,
+  void *src,
+  int maxspace, // in dest
+  int mode
+)
+{   if ( type == ELEMENTID_TYPE )
+      type = id_type(*(element_id*)src) + VERTEX_TYPE;
+
     switch ( type )
     { case REAL_TYPE:
           sprintf(dest,
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+              "%2.*Qg",DPREC,*(REAL *)src);
+#elif defined(LONGDOUBLE)
               "%2.*Lg",DPREC,*(REAL *)src);
 #else
               "%2.15g",*(REAL *)src);
@@ -107,23 +115,49 @@ void *src;
        case ULONG_TYPE:
             sprintf(dest,"%lu",*(unsigned long int*)src);
             break;
+       case STRING_TYPE: 
+            if ( *(char**)src == NULL )
+              strcpy(dest,"\"\"");
+            else if ( mode == PRINT_DUMP )
+              convert_string(*(char**)src,dest,maxspace);
+            else
+            { if ( strlen(*(char**)src) > maxspace-5 )
+                kb_error(6222,"String length exceeds maximum length.\n",RECOVERABLE);
+              sprintf(dest,"\"%s\"",*(char**)src);
+            }
+            break;
        case PTR_TYPE:
             sprintf(dest,"%p",*(char**)src);
             break;
        case VERTEX_TYPE:
-            sprintf(dest,"vertex[%s]",ELNAME(*(element_id*)src));
+            if ( valid_id(*(element_id*)src) )
+              sprintf(dest,"vertex[%s]",ELNAME(*(element_id*)src));
+            else 
+              sprintf(dest,"none");
             break;
        case EDGE_TYPE:
-            sprintf(dest,"edge[%s]",ELNAME(*(element_id*)src));
+            if ( valid_id(*(element_id*)src) )
+              sprintf(dest,"edge[%s]",ELNAME(*(element_id*)src));
+            else 
+              sprintf(dest,"none");
             break;
        case FACET_TYPE:
-            sprintf(dest,"facet[%s]",ELNAME(*(element_id*)src));
+            if ( valid_id(*(element_id*)src) )
+              sprintf(dest,"facet[%s]",ELNAME(*(element_id*)src));
+            else 
+              sprintf(dest,"none");
             break;
        case BODY_TYPE:
-            sprintf(dest,"body[%s]",ELNAME(*(element_id*)src));
+            if ( valid_id(*(element_id*)src) )
+              sprintf(dest,"body[%s]",ELNAME(*(element_id*)src));
+            else 
+              sprintf(dest,"none");
             break;
        case FACETEDGE_TYPE:
-            sprintf(dest,"facetedge[%s]",ELNAME(*(element_id*)src));
+            if ( valid_id(*(element_id*)src) )
+              sprintf(dest,"facetedge[%s]",ELNAME(*(element_id*)src));
+            else 
+              sprintf(dest,"none");
             break;
        case BOUNDARY_TYPE:
             sprintf(dest,"%s",web.boundaries[*(int*)src].name);
@@ -147,7 +181,7 @@ void *src;
             else sprintf(errmsg,"Illegal datatype %d\n",type);
             kb_error(3667,errmsg,RECOVERABLE);
      }
-}
+} // print_data_value()
 
 /***********************************************************************
 *
@@ -156,9 +190,11 @@ void *src;
 * purpose: Print array elements in bracket-delimited form.  Used in
 *          top_dump and print array.
 */
-void print_array(a,datastart)
-struct array *a;
-void *datastart; /* if not in struct array */
+void print_array(
+  struct array *a,
+  void *datastart, /* if not in struct array */
+  int mode /* PRINT_PLAIN or PRINT_DUMP (for strings in dump files) */
+)
 { int k;
   int spots[100];
   int depth;
@@ -168,7 +204,7 @@ void *datastart; /* if not in struct array */
 
   if ( a->dim == 0 ) 
   {
-    print_data_value(msg+strlen(msg),a->datatype,spot);
+    print_data_value(msg+strlen(msg),a->datatype,spot,msgmax-100,mode);
     strcat(msg,"\n");
     outstring(msg);
     return;
@@ -184,7 +220,7 @@ void *datastart; /* if not in struct array */
     if ( depth == a->dim )
     { for ( k = 0 ; k < a->sizes[depth-1] ; k++ )
       { 
-        print_data_value(msg+strlen(msg),a->datatype,spot);
+        print_data_value(msg+strlen(msg),a->datatype,spot,msgmax-100,mode);
         spot += a->itemsize;
         if ( k < a->sizes[depth-1] - 1 ) strcat(msg,",");
         if ( (strlen(msg) > 60) && (k < a->sizes[depth-1] - 1) ) 
@@ -216,9 +252,10 @@ void *datastart; /* if not in struct array */
 * purpose: Print attribute array elements in bracket-delimited form.  Used in
 *          element dump.
 */
-void print_array_attribute(ex,datastart)
-struct extra *ex;
-void *datastart; 
+void print_array_attribute(
+  struct extra *ex,
+  void *datastart
+)
 { int k;
   int spots[100];
   int depth;
@@ -226,7 +263,7 @@ void *datastart;
   size_t linelength;
 
   if ( ex->array_spec.dim == 0 ) /* scalar */
-  { print_data_value(msg,ex->type,spot);
+  { print_data_value(msg,ex->type,spot,msgmax-5,PRINT_PLAIN);
     outstring(msg);
     return;
   }
@@ -241,7 +278,7 @@ void *datastart;
     { outstring("{"); depth++; spots[depth] = 0; continue; }
     if ( depth == ex->array_spec.dim )
     { for ( k = 0 ; k < ex->array_spec.sizes[depth-1] ; k++ )
-      { print_data_value(msg+strlen(msg),ex->type,spot);
+      { print_data_value(msg+strlen(msg),ex->type,spot,msgmax-100,PRINT_PLAIN);
         spot += ex->array_spec.itemsize;
         if ( k < ex->array_spec.sizes[depth-1] - 1 ) 
         { strcat(msg,",");
@@ -278,14 +315,14 @@ void *datastart;
 * purpose: Write out top part of datafile.
 */
 
-void top_dump(fd)
-FILE *fd;  /* destination file */
+void top_dump(FILE *fd  /* destination file */)
 {
   int i,j,k;
   struct gen_quant *q;
   struct method_instance *mi;
   FILE *old_fd = outfd;
   int e_type;
+  int did_section_title = 0;
 
   outfd = fd;
 
@@ -310,6 +347,41 @@ FILE *fd;  /* destination file */
     dump_macros();
   }
 
+  if ( match_id_flag )
+    outstring("keep_originals\n");
+
+  if ( mpi_local_bodies_flag )
+    outstring("mpi_local_bodies\n");
+
+  if ( match_id_flag ) // keep_originals
+  { sprintf(msg,"vertices_predicted    %6d\n",web.skel[VERTEX].max_ord+1);
+    outstring(msg);
+    sprintf(msg,"edges_predicted       %6d\n",web.skel[EDGE].max_ord+1);
+    outstring(msg);
+    sprintf(msg,"facets_predicted      %6d\n",web.skel[FACET].max_ord+1);
+    outstring(msg);
+    sprintf(msg,"facetedges_predicted  %6d\n",web.skel[FACETEDGE].max_ord+1);
+    outstring(msg);
+    sprintf(msg,"bodies_predicted      %6d\n",web.skel[BODY].max_ord+1);
+    outstring(msg);
+  }
+  else
+  { sprintf(msg,"vertices_predicted    %6ld\n",web.skel[VERTEX].count+1);
+    outstring(msg);
+    sprintf(msg,"edges_predicted       %6ld\n",web.skel[EDGE].count+1);
+    outstring(msg);
+    sprintf(msg,"facets_predicted      %6ld\n",web.skel[FACET].count+1);
+    outstring(msg);
+    sprintf(msg,"facetedges_predicted  %6ld\n",web.skel[FACETEDGE].count+1);
+    outstring(msg);
+    sprintf(msg,"bodies_predicted      %6ld\n",web.skel[BODY].count+1);
+    outstring(msg);
+  }
+  sprintf(msg,"quantities_predicted       %6d\n",gen_quant_count);
+  outstring(msg);
+  sprintf(msg,"method_instances_predicted %6d\n",meth_inst_count);
+  outstring(msg);
+
   if ( volume_method_name[0] )
   { sprintf(msg,"volume_method_name \"%s\"\n",volume_method_name); 
     outstring(msg);
@@ -323,7 +395,9 @@ FILE *fd;  /* destination file */
     outstring(msg);
   }
 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+  sprintf(msg,"// Total energy: %2.*Qg\n",DPREC,web.total_energy);
+#elif defined(LONGDOUBLE)
   sprintf(msg,"// Total energy: %2.*Lg\n",DPREC,web.total_energy);
 #else
   sprintf(msg,"// Total energy: %2.15g\n",web.total_energy);
@@ -358,68 +432,89 @@ FILE *fd;  /* destination file */
   else if ( web.scale != 0.1 )
      { sprintf(msg,"SCALE: %2.15g\n\n",(DOUBLE)web.scale); outstring(msg); }
 
+  list_top_procedures(LIST_PROTO); /* protos here, in case of on_assign_call */
+
   /* global variables */
   for ( i = 0 ; i < web.global_count ; i++ )
-  { if ( square_curvature_flag && (i == (square_curvature_param&GLOBMASK)) )
+  { struct global *g = globals(i);
+    if ( square_curvature_flag && (i == (square_curvature_param&GLOBMASK)) )
       continue;
     if ( mean_curv_int_flag && (i == (mean_curvature_param&GLOBMASK)) )
       continue;
     if ( sqgauss_flag && (i == (sqgauss_param|GLOBMASK)) ) continue;
-    if ( globals(i)->flags & GLOB_LOCALVAR ) continue;
-    if ( globals(i)->flags & FILE_VALUES )
+    if ( g->flags & GLOB_LOCALVAR ) continue;
+    if ( g->flags2 & NO_DUMP_BIT ) continue;
+    if ( g->flags & FILE_VALUES )
     {
-      sprintf(msg,"PARAMETER %s ",globals(i)->name);
+      sprintf(msg,"PARAMETER %s ",g->name);
       outstring(msg); 
       if ( reflevel == 0 )
          sprintf(msg,"PARAMETER_FILE \"%s\" \n",
-              globals(i)->value.file.value_file); 
+              g->value.file.value_file); 
       else    sprintf(msg,"PARAMETER_FILE \"%s\" \n","not dumped");
       outstring(msg); 
     }
-    else if ( (globals(i)->flags & ORDINARY_PARAM) &&
-          !(globals(i)->flags & (INTERNAL_NAME|QUANTITY_TYPES)) )
-      { if ( globals(i)->flags & OPTIMIZING_PARAMETER )
-            sprintf(msg,"OPTIMIZING_PARAMETER %s ",globals(i)->name);
+    else if ( (g->flags & ORDINARY_PARAM) &&
+          !(g->flags & (INTERNAL_NAME|QUANTITY_TYPES)) )
+      { if ( g->flags & OPTIMIZING_PARAMETER )
+            sprintf(msg,"OPTIMIZING_PARAMETER %s ",g->name);
         else 
-            sprintf(msg,"PARAMETER %s ",globals(i)->name); outstring(msg); 
-#ifdef LONGDOUBLE
-         sprintf(msg,"= %2.*Lg ",DPREC,globals(i)->value.real); outstring(msg); 
+            sprintf(msg,"PARAMETER %s ",g->name); 
+    outstring(msg); 
+#ifdef FLOAT128
+         sprintf(msg,"= %2.*Qg ",DPREC,g->value.real); 
+         outstring(msg); 
+#elif defined(LONGDOUBLE)
+         sprintf(msg,"= %2.*Lg ",DPREC,g->value.real); 
+         outstring(msg); 
 #else
-         sprintf(msg,"= %2.15g ",globals(i)->value.real); outstring(msg); 
+         sprintf(msg,"= %2.15g ",g->value.real); outstring(msg); 
 #endif 
-         if ( globals(i)->attr.varstuff.delta != OPTPARAM_DELTA 
-           && globals(i)->attr.varstuff.delta != 0.0 )
+         if ( g->attr.varstuff.delta != OPTPARAM_DELTA 
+           && g->attr.varstuff.delta != 0.0 )
          {
-#ifdef LONGDOUBLE
-            sprintf(msg,"pdelta = %2.*Lg ",DPREC,globals(i)->attr.varstuff.delta); outstring(msg); 
+#ifdef FLOAT128
+            sprintf(msg,"pdelta = %2.*Qg ",DPREC,g->attr.varstuff.delta); 
+            outstring(msg); 
+#elif defined(LONGDOUBLE)
+            sprintf(msg,"pdelta = %2.*Lg ",DPREC,g->attr.varstuff.delta); 
+            outstring(msg); 
 #else
-            sprintf(msg,"pdelta = %2.15g ",globals(i)->attr.varstuff.delta); outstring(msg); 
+            sprintf(msg,"pdelta = %2.15g ",g->attr.varstuff.delta); 
+            outstring(msg); 
 #endif 
          }
-         if ( globals(i)->attr.varstuff.pscale != 1.0 
-           && globals(i)->attr.varstuff.pscale != 0.0 )
+         if ( g->attr.varstuff.pscale != 1.0 
+           && g->attr.varstuff.pscale != 0.0 )
          {
-#ifdef LONGDOUBLE
-            sprintf(msg,"pscale = %2.*Lg ",DPREC,globals(i)->attr.varstuff.pscale); outstring(msg); 
+#ifdef FLOAT128
+            sprintf(msg,"pscale = %2.*rg ",DPREC,g->attr.varstuff.pscale); 
+#elif defined(LONGDOUBLE)
+            sprintf(msg,"pscale = %2.*Lg ",DPREC,g->attr.varstuff.pscale); 
 #else
-            sprintf(msg,"pscale = %2.15g ",globals(i)->attr.varstuff.pscale); outstring(msg); 
+            sprintf(msg,"pscale = %2.15g ",g->attr.varstuff.pscale); 
 #endif 
+            outstring(msg); 
+         }
+         if ( g->attr.varstuff.on_assign_call )
+         { sprintf(msg,"on_assign_call %s ",globals(g->attr.varstuff.on_assign_call)->name);
+           outstring(msg);
          }
          outstring("\n"); 
       }
-      else if ( globals(i)->flags & ARRAY_PARAM )        
-      { struct array *a = globals(i)->attr.arrayptr;
-        if ( !(globals(i)->flags & INTERNAL_NAME) )
+      else if ( g->flags & ARRAY_PARAM )        
+      { struct array *a = g->attr.arrayptr;
+        if ( !(g->flags & INTERNAL_NAME) )
           if ( a )  /* declaration might not have been executed */
           {
-            sprintf(msg,"define %s",globals(i)->name);
+            sprintf(msg,"define %s",g->name);
             strcat(msg," ");
-            strcat(msg,datatype_name[a->datatype]);
+            strcat(msg,datatype_name[g->type]);
             for ( j = 0 ; j < a->dim ; j++ )
               sprintf(msg+strlen(msg),"[%d]",a->sizes[j]);
             outstring(msg);
             outstring(" =\n");
-            print_array(a,NULL);
+            print_array(a,NULL,PRINT_DUMP);
             outstring("\n");
           }
       }
@@ -444,7 +539,9 @@ FILE *fd;  /* destination file */
        { outstring("// ");
          for ( j = 0 ; j < SDIM ; j++ )
          { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+           sprintf(msg," %*.*Qf ",DWIDTH,DPREC,web.torus_period[i][j]);
+#elif defined(LONGDOUBLE)
            sprintf(msg," %*.*Lf ",DWIDTH,DPREC,web.torus_period[i][j]);
 #else
            sprintf(msg," %18.15f ",web.torus_period[i][j]);
@@ -470,7 +567,9 @@ FILE *fd;  /* destination file */
        { outstring("// ");
          for ( j = 0 ; j < SDIM ; j++ )
          { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+           sprintf(msg," %*.*Qf ",DWIDTH,DPREC,web.torus_display_period[i][j]);
+#elif defined(LONGDOUBLE)
            sprintf(msg," %*.*Lf ",DWIDTH,DPREC,web.torus_display_period[i][j]);
 #else
            sprintf(msg," %18.15f ",web.torus_display_period[i][j]);
@@ -484,7 +583,9 @@ FILE *fd;  /* destination file */
        outstring("DISPLAY_ORIGIN\n");
        for ( i = 0 ; i < SDIM  ; i++ )
        {
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+           sprintf(msg," %*.*Qf ",DWIDTH,DPREC,web.display_origin[i]);
+#elif defined(LONGDOUBLE)
            sprintf(msg," %*.*Lf ",DWIDTH,DPREC,web.display_origin[i]);
 #else
            sprintf(msg," %18.15f ",web.display_origin[i]);
@@ -537,13 +638,17 @@ FILE *fd;  /* destination file */
   if ( web.meritfactor != 0.0 )
   { sprintf(msg,"MERIT_FACTOR: %2.15g\n\n",(DOUBLE)web.meritfactor); outstring(msg); }
   if ( web.gravflag )
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+  { sprintf(msg,"GRAVITY_CONSTANT: %2.*Qg\n\n",DPREC,web.grav_const); outstring(msg); }
+#elif defined(LONGDOUBLE)
   { sprintf(msg,"GRAVITY_CONSTANT: %2.*Lg\n\n",DPREC,web.grav_const); outstring(msg); }
 #else
   { sprintf(msg,"GRAVITY_CONSTANT: %2.15g\n\n",web.grav_const); outstring(msg); }
 #endif 
   if ( web.diffusion_const != 0.0 )
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+  { sprintf(msg,"DIFFUSION: %2.*Qg\n\n",DPREC,web.diffusion_const); outstring(msg); }
+#elif defined(LONGDOUBLE)
   { sprintf(msg,"DIFFUSION: %2.*Lg\n\n",DPREC,web.diffusion_const); outstring(msg); }
 #else
   { sprintf(msg,"DIFFUSION: %2.15g\n\n",web.diffusion_const); outstring(msg); }
@@ -631,22 +736,29 @@ FILE *fd;  /* destination file */
   }
 
   /* extra attributes for elements */
+  did_section_title = 0;
   for ( e_type = VERTEX ; e_type <= FACETEDGE ; e_type++ )
   { struct extra *ex;
     for ( i = 0, ex = EXTRAS(e_type) ; 
                 i < web.skel[e_type].extra_count ; i++, ex++ )
      { if ( !(ex->flags & DUMP_ATTR) ) continue;
-        sprintf(msg,"\ndefine %s attribute %s %s",typenames[e_type], ex->name,
+       if ( !did_section_title )
+       { outstring("\n//Extra attributes for elements\n");
+         did_section_title = 1;
+       }
+       sprintf(msg,"\ndefine %s attribute %s %s",typenames[e_type], ex->name,
           datatype_name[ex->type]);
-        for ( j = 0 ; j < ex->array_spec.dim ; j++)
+       for ( j = 0 ; j < ex->array_spec.dim ; j++)
           sprintf(msg+strlen(msg),"[%d]",ex->array_spec.sizes[j]);
-        if ( ex->code.start ) 
+       if ( ex->code.start ) 
           sprintf(msg+strlen(msg),
             " // function definition in READ section");
-        strcat(msg,"\n");
-        outstring(msg);       
+       strcat(msg,"\n");
+       outstring(msg);       
      }
   }
+  if ( did_section_title )
+    outstring("\n");
 
   /* view matrix */
   outstring("VIEW_MATRIX \n");
@@ -659,33 +771,52 @@ FILE *fd;  /* destination file */
   }
 
   /* Clipping and slicing planes */
-  outstring("clip_coeff = {");
-  for ( i = 0 ; i < MAXCLIPS ; i++ )
-  { int nonzero = 0;
-    for ( j = 0 ; j <= SDIM ; j++ )
-      if ( clip_coeff[i][j] ) nonzero = 1;
-    if ( nonzero )
-    { if ( i > 0 ) outstring(",{");
-      else outstring("{");
+//  if ( clip_coeff_set_flag )
+  if ( !(clip_coeff[0][0]==0.0 && clip_coeff[0][1]==0.0 && 
+       clip_coeff[0][2]==0.0 && clip_coeff[0][3]==0.0) )
+  { int maxclip = -1;
+    // see what coefficients are non-default
+    for ( i = 0 ; i < MAXCLIPS ; i++ )
       for ( j = 0 ; j <= SDIM ; j++ )
-      { sprintf(msg,"%8.5f",clip_coeff[i][j]);
-        outstring(msg);
-        if ( j < SDIM )
-          outstring(",");
+      { if ( (i==0) && (j==0) )
+        { if ( clip_coeff[i][j] != 1.0 )
+            maxclip = i;
+        }
+        else if ( clip_coeff[i][j] != 0.0 )
+          maxclip = i;
       }
-      outstring("}");
+    if ( maxclip >= 0 )
+    { outstring("clip_coeff = {");
+      for ( i = 0 ; i <= maxclip ; i++ )
+      { 
+        if ( i > 0 ) outstring(",{");
+        else outstring("{");
+        for ( j = 0 ; j <= SDIM ; j++ )
+        { sprintf(msg,"%8.5f",(DOUBLE)clip_coeff[i][j]);
+          outstring(msg);
+          if ( j < SDIM )
+             outstring(",");
+        }
+        outstring("}");
+      }
+      outstring("}\n\n");
     }
-  }
-  outstring("}\n\n");
 
-  outstring("slice_coeff = {");
-  for ( j = 0 ; j <= SDIM ; j++ )
-  { sprintf(msg,"%8.5f",slice_coeff[j]);
-    outstring(msg);
-    if ( j < SDIM )
-      outstring(",");
   }
-  outstring("}\n\n");
+
+  // see if slice_coeff needs to be printed
+//  if ( slice_coeff_set_flag )
+  if ( !(slice_coeff[0]==0.0 && slice_coeff[1]==0.0 && 
+       slice_coeff[2]==0.0 && slice_coeff[3]==0.0) )
+  { outstring("slice_coeff = {");
+    for ( j = 0 ; j <= SDIM ; j++ )
+    { sprintf(msg,"%8.5f",(DOUBLE)slice_coeff[j]);
+      outstring(msg);
+      if ( j < SDIM )
+        outstring(",");
+    }
+    outstring("}\n\n");
+  }
 
 
   if ( mobility_flag ) /* after element attributes, since it can use them */
@@ -708,13 +839,21 @@ FILE *fd;  /* destination file */
     }
   }
 
+  // unset method instance print flags
+  for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
+  { mi = METH_INSTANCE(k);
+    mi->flags &= ~PRINTED_INST;
+  }
+
   /* unattached instances, probably from compound quantities */
   for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
   { mi = METH_INSTANCE(k);
-    if ( mi->quant >= 0 ) continue; /* has a quantity */ 
-    if ( mi->flags & (Q_DELETED|IMPLICIT_INSTANCE|DEFAULT_INSTANCE) )
+    if ( (mi->quants[0] >= 0) && !(GEN_QUANT(mi->quants[0])->flags & DEFAULT_QUANTITY) ) 
+      continue; /* has a quantity */ 
+    if ( mi->flags & (Q_DELETED|DEFAULT_INSTANCE|PRINTED_INST) )
        continue;
     list_method_instance(k);
+    mi->flags |= PRINTED_INST; 
   }
 
   /* named quantities */
@@ -775,7 +914,7 @@ void dump_macros()
   }
   outstring("\n");
 
-}
+} // end dump_macros()
 
 /**********************************************************************
 *
@@ -784,8 +923,7 @@ void dump_macros()
 *  purpose: list attributes of method instance
 */
 
-void dump_method_specs(meth)
-int meth;
+void dump_method_specs(int meth)
 {
   struct method_instance *mi = METH_INSTANCE(meth);
   int j;
@@ -793,13 +931,16 @@ int meth;
   if ( mi->flags & GLOBAL_INST ) outstring(" global ");
   if ( mi->flags & IGNORE_CONSTR ) outstring(" ignore_constraints ");
   if ( mi->flags & IGNORE_FIXED ) outstring(" ignore_fixed ");
+  if ( mi->flags & CALC_IN_3D ) outstring(" calculate_in_3d ");
   if ( mi->flags & ELEMENT_MODULUS_FLAG )
   {  outstring(" element_modulus ");
      outstring(EXTRAS(mi->type)[mi->elmodulus].name);
   }
   if ( mi->modulus != 1.0 )
      { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+        sprintf(msg," modulus %3.*Qg ",DPREC,mi->modulus);
+#elif defined(LONGDOUBLE)
         sprintf(msg," modulus %3.*Lg ",DPREC,mi->modulus);
 #else
         sprintf(msg," modulus %3.15g ",mi->modulus);
@@ -808,7 +949,9 @@ int meth;
      }
   if ( mi->flags & METH_PARAMETER_1 )
   { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     sprintf(msg," parameter_1 %3.*Lg ",DPREC,mi->parameter_1);
+#elif defined(LONGDOUBLE)
      sprintf(msg," parameter_1 %3.*Lg ",DPREC,mi->parameter_1);
 #else
      sprintf(msg," parameter_1 %3.15g ",mi->parameter_1);
@@ -856,14 +999,15 @@ int meth;
 *
 */
 
-void vertex_dump(v_id,fd)
-vertex_id v_id;
-FILE *fd;   /* destination file */
+void vertex_dump(
+  vertex_id v_id,
+  FILE *fd   /* destination file */
+)
 { int i;
   REAL *x;
   FILE *old_fd = outfd;
   struct extra *ex;
-  int attr = get_vattr(v_id);
+  ATTR attr = get_vattr(v_id);
   vertex_id orig;
 
   outfd = fd;
@@ -877,7 +1021,9 @@ FILE *fd;   /* destination file */
 
     sprintf(msg,"%3s",ELNAME(v_id)); outstring(msg); 
     for ( i = 0 ; i < bdry->pcount ; i++ )
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+    { sprintf(msg,"  %*.*Qg",DWIDTH,DPREC,param[i]); outstring(msg); }
+#elif defined(LONGDOUBLE)
     { sprintf(msg,"  %*.*Lg",DWIDTH,DPREC,param[i]); outstring(msg); }
 #else
     { sprintf(msg,"  %17.15g",param[i]); outstring(msg); }
@@ -886,7 +1032,9 @@ FILE *fd;   /* destination file */
     outstring(msg); 
     sprintf(msg," /* ("); outstring(msg); 
     for ( i = 0; i < SDIM ; i++)
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+    { sprintf(msg," %*.*Qg",DWIDTH,DPREC,x[i]); outstring(msg); }
+#elif defined(LONGDOUBLE)
     { sprintf(msg," %*.*Lg",DWIDTH,DPREC,x[i]); outstring(msg); }
 #else
     { sprintf(msg," %17.15g",x[i]); outstring(msg); }
@@ -897,7 +1045,9 @@ FILE *fd;   /* destination file */
   { /* print regular coordinates */
     sprintf(msg,"%3s ",ELNAME(v_id)); outstring(msg); 
     for ( i = 0; i < SDIM ; i++)
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+      { sprintf(msg," %*.*Qg",DWIDTH,DPREC,x[i]); outstring(msg); }
+#elif defined(LONGDOUBLE)
       { sprintf(msg," %*.*Lg",DWIDTH,DPREC,x[i]); outstring(msg); }
 #else
       { sprintf(msg," %17.15g",x[i]); outstring(msg); }
@@ -923,6 +1073,8 @@ FILE *fd;   /* destination file */
      { sprintf(msg, " axial_point "); outstring(msg); }
   if ( attr & BARE_NAKED )
      { sprintf(msg, " bare "); outstring(msg); }
+  if ( attr & NO_HESSIAN_NORMAL_ATTR )
+     { sprintf(msg, " no_hessian_normal "); outstring(msg); }
 
   orig = get_original(v_id);
   if ( valid_id(orig) && !equal_element(orig,v_id) ) 
@@ -934,10 +1086,10 @@ FILE *fd;   /* destination file */
     int *methlist = (int*)((char*)elptr(v_id) + meth_offset);
     for ( i = 0 ; i < (int)elptr(v_id)->method_count ; i++ )
       { mi = METH_INSTANCE(abs(methlist[i]));
-        if ( GEN_QUANT(mi->quant)->flags & (DEFAULT_QUANTITY|Q_DELETED) )
+        if ( GEN_QUANT(mi->quants[0])->flags & (DEFAULT_QUANTITY|Q_DELETED) )
           continue;
         if ( mi->flags & IMPLICIT_INSTANCE )
-           sprintf(msg," %s ",GEN_QUANT(mi->quant)->name);
+           sprintf(msg," %s ",GEN_QUANT(mi->quants[0])->name);
         else sprintf(msg," %s%c ",mi->name,methlist[i]<0?'-':' '); 
         outstring(msg); 
       }
@@ -965,11 +1117,12 @@ FILE *fd;   /* destination file */
 *
 */
 
-void edge_dump(e_id,fd)
-edge_id e_id;
-FILE *fd;  /* destination file */
+void edge_dump(
+  edge_id e_id,
+  FILE *fd  /* destination file */
+)
 { int i;
-  int attr;
+  ATTR attr;
   FILE *old_fd = outfd;
   struct extra *ex;
   edge_id orig;
@@ -1041,7 +1194,9 @@ FILE *fd;  /* destination file */
   }
   if ( (attr & DENSITY) || ((web.representation==STRING) &&
                     (get_edge_density(e_id) != 1.0)))
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+    { sprintf(msg,"  density %1.*Qg ",DPREC,get_edge_density(e_id)); outstring(msg); }
+#elif defined(LONGDOUBLE)
     { sprintf(msg,"  density %1.*Lg ",DPREC,get_edge_density(e_id)); outstring(msg); }
 #else
     { sprintf(msg,"  density %1.15g ",get_edge_density(e_id)); outstring(msg); }
@@ -1071,8 +1226,9 @@ FILE *fd;  /* destination file */
       { sprintf(msg,"fixed "); outstring(msg); }
   if ( attr & BARE_NAKED ) { sprintf(msg," bare "); outstring(msg); }
   if ( attr & NO_REFINE ) outstring(" no_refine ");
+  if ( attr & NO_TRANSFORM ) outstring(" no_transform ");
   if ( attr & NONCONTENT ) outstring(" noncontent ");
-
+ 
   if ( get_edge_color(e_id)  != DEFAULT_EDGE_COLOR )
   { sprintf(msg," color %s ",COLORNAME(get_edge_color(e_id))); outstring(msg); }
   if ( (fd == old_fd) && (web.representation != SIMPLEX) )
@@ -1086,15 +1242,15 @@ FILE *fd;  /* destination file */
     for ( i = 0 ; i < elptr(e_id)->method_count ; i++ )
       { int mm = methlist[i];
         mi = METH_INSTANCE(abs(mm));
-        if ( mi->quant >= 0 && 
-          (GEN_QUANT(mi->quant)->flags & (DEFAULT_QUANTITY|Q_DELETED)) ) 
+        if ( mi->quants[0] >= 0 && 
+          (GEN_QUANT(mi->quants[0])->flags & (DEFAULT_QUANTITY|Q_DELETED)) ) 
           continue;
-        if ( mi->quant >= 0 && (mi->flags & IMPLICIT_INSTANCE) )
-           sprintf(msg,"%s%c ",GEN_QUANT(mi->quant)->name,(mm<0?'-':' '));
+        if ( mi->quants[0] >= 0 && (mi->flags & IMPLICIT_INSTANCE) )
+           sprintf(msg,"%s%c ",GEN_QUANT(mi->quants[0])->name,(mm<0?'-':' '));
         else sprintf(msg,"%s%c ",mi->name,(mm<0?'-':' ')); 
         outstring(msg); 
       }
-  }
+  } 
   orig = get_original(e_id);
   if ( valid_id(orig) && !equal_element(orig,e_id) ) 
      { sprintf(msg," original %s",ELNAME(orig)); outstring(msg); }
@@ -1123,16 +1279,17 @@ FILE *fd;  /* destination file */
 *
 */
 
-void facet_dump(f_id,fd)
-facet_id f_id;
-FILE *fd;  /* destination file */
+void facet_dump(
+  facet_id f_id,
+  FILE *fd  /* destination file */
+)
 { int i;
   int per_line = 0; 
   edge_id e_id;
   facetedge_id fe;
   FILE *old_fd = outfd;
   struct extra *ex;
-  int attr = get_fattr(f_id);
+  ATTR attr = get_fattr(f_id);
   facet_id orig;
 
   outfd = fd;
@@ -1191,17 +1348,18 @@ FILE *fd;  /* destination file */
       }
     if ( attr & NEGBOUNDARY ) outstring(" orientation -1 ");
     if ( attr & DENSITY )
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+    { sprintf(msg,"  density %1.*Qg ",DPREC,get_facet_density(f_id)); outstring(msg); }
+#elif defined(LONGDOUBLE)
     { sprintf(msg,"  density %1.*Lg ",DPREC,get_facet_density(f_id)); outstring(msg); }
 #else
     { sprintf(msg,"  density %1.15g ",get_facet_density(f_id)); outstring(msg); }
 #endif 
-    if ( attr&FIXED )  outstring(" fixed " ); 
+    if ( attr & FIXED )  outstring(" fixed " ); 
     if ( attr & NO_REFINE ) outstring(" no_refine ");
+    if ( attr & NO_TRANSFORM ) outstring(" no_transform ");
     if ( attr & NONCONTENT ) outstring(" noncontent ");
     if ( attr & NODISPLAY ) outstring(" nodisplay"); 
-    if ( get_tag(f_id) ) 
-        { sprintf(msg," tag %d ",get_tag(f_id)); outstring(msg); }
     if ( phase_flag && (web.representation == STRING) )
      { sprintf(msg," phase %d ",get_f_phase(f_id)); outstring(msg); }
     if ( get_facet_color(f_id) != DEFAULT_FACET_COLOR  )
@@ -1210,6 +1368,10 @@ FILE *fd;  /* destination file */
     if ( get_facet_backcolor(f_id) !=  get_facet_color(f_id) )
      { sprintf(msg," backcolor %s ",COLORNAME(get_facet_backcolor(f_id))); 
        outstring(msg); }
+    if ( opacity_attr )
+    { sprintf(msg," opacity %f ",*(REAL*)get_extra(f_id,opacity_attr));
+      outstring(msg);
+    }
     if ( elptr(f_id)->method_count )
     { struct method_instance *mi;
       int meth_offset = EXTRAS(FACET)[web.meth_attr[FACET]].offset;
@@ -1218,11 +1380,11 @@ FILE *fd;  /* destination file */
       for ( i = 0 ; i < methcount ; i++ )
         { int mm = methlist[i];
           mi = METH_INSTANCE(abs(mm));
-          if ( mi->quant >= 0 &&
-            (GEN_QUANT(mi->quant)->flags & (DEFAULT_QUANTITY|Q_DELETED)) )
+          if ( mi->quants[0] >= 0 &&
+            (GEN_QUANT(mi->quants[0])->flags & (DEFAULT_QUANTITY|Q_DELETED)) )
              continue;
-          if ( mi->quant >= 0 && (mi->flags & IMPLICIT_INSTANCE) )
-             sprintf(msg," %s%c ",GEN_QUANT(mi->quant)->name,(mm<0?'-':' '));
+          if ( mi->quants[0] >= 0 && (mi->flags & IMPLICIT_INSTANCE) )
+             sprintf(msg," %s%c ",GEN_QUANT(mi->quants[0])->name,(mm<0?'-':' '));
           else sprintf(msg," %s%c ",mi->name,(mm<0?'-':' ')); 
           outstring(msg); 
         }
@@ -1256,9 +1418,10 @@ FILE *fd;  /* destination file */
 *
 */
 
-void body_dump(b_id,fd)
-body_id b_id;
-FILE *fd;  /* destination file */
+void body_dump(
+  body_id b_id,
+  FILE *fd  /* destination file */
+)
 { 
   REAL den;
   int per_line = 0;
@@ -1297,7 +1460,11 @@ FILE *fd;  /* destination file */
   bvol = get_body_volume(b_id);
   if ( get_battr(b_id) & FIXEDVOL )
     { sprintf(msg,
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+        "  volume %1.*Qg  /*actual: %1.*Qg*/ lagrange_multiplier %1.*Qg ",
+                     DPREC,get_body_fixvol(b_id), DPREC,
+                     bvol,DPREC,get_body_pressure(b_id));
+#elif defined(LONGDOUBLE)
         "  volume %1.*Lg  /*actual: %1.*Lg*/ lagrange_multiplier %1.*Lg ",
                      DPREC,get_body_fixvol(b_id), DPREC,
                      bvol,DPREC,get_body_pressure(b_id));
@@ -1308,8 +1475,16 @@ FILE *fd;  /* destination file */
 #endif 
       outstring(msg); 
     }
+
+  if ( get_battr(b_id) & WANT_CENTEROFMASS )
+    {
+      outstring(" centerofmass "); 
+    }
+
     if ( (get_body_volconst(b_id) != 0.0) )
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+      { sprintf(msg, "  volconst %1.*Qg ",DPREC,get_body_volconst(b_id)); 
+#elif defined(LONGDOUBLE)
       { sprintf(msg, "  volconst %1.*Lg ",DPREC,get_body_volconst(b_id)); 
 #else
       { sprintf(msg, "  volconst %1.15g ",get_body_volconst(b_id)); 
@@ -1317,7 +1492,9 @@ FILE *fd;  /* destination file */
         outstring(msg); }
 
     if ( web.torus_flag && ((bvol > web.torusv) || (bvol < 0.0)) )
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+    { sprintf(msg, "  actual_volume %1.*Qg ",DPREC,bvol); 
+#elif defined(LONGDOUBLE)
     { sprintf(msg, "  actual_volume %1.*Lg ",DPREC,bvol); 
 #else
     { sprintf(msg, "  actual_volume %1.15g ",bvol); 
@@ -1325,14 +1502,18 @@ FILE *fd;  /* destination file */
       outstring(msg); }
 
     if ( get_battr(b_id) & PRESSURE ) 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+      { sprintf(msg,"  pressure %1.*Qg",DPREC, get_body_pressure(b_id)); outstring(msg); }
+#elif defined(LONGDOUBLE)
       { sprintf(msg,"  pressure %1.*Lg",DPREC, get_body_pressure(b_id)); outstring(msg); }
 #else
       { sprintf(msg,"  pressure %1.15g", get_body_pressure(b_id)); outstring(msg); }
 #endif 
     den = get_body_density(b_id);
     if ( den != 0.0 )
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+         { sprintf(msg,"  density %1.*Qg ",DPREC,den); outstring(msg); }
+#elif defined(LONGDOUBLE)
          { sprintf(msg,"  density %1.*Lg ",DPREC,den); outstring(msg); }
 #else
          { sprintf(msg,"  density %1.15g ",den); outstring(msg); }
@@ -1350,7 +1531,7 @@ FILE *fd;  /* destination file */
       for ( i = 0 ; i < (int)elptr(b_id)->method_count ; i++ )
       { mi = METH_INSTANCE(abs(methlist[i]));
         if ( mi->flags & IMPLICIT_INSTANCE )
-          sprintf(msg,"%s ",GEN_QUANT(mi->quant)->name);
+          sprintf(msg,"%s ",GEN_QUANT(mi->quants[0])->name);
         else sprintf(msg,"%s%c ",mi->name,methlist[i]>0?' ':'-'); 
         outstring(msg); 
       }
@@ -1384,12 +1565,12 @@ static FILE *dumpfd;
 *
 */
 
-void toggle_save(togglename)
-char *togglename;
+void toggle_save(char *togglename)
 { if ( readflag == 0 ) { outstring("\nread\n"); readflag = 1; }
   sprintf(msg,"%s on\n",togglename);
   outstring(msg);
-}
+
+} // end toggle_save()
 
 /**************************************************************************
 *
@@ -1400,12 +1581,11 @@ char *togglename;
 *
 */
 
-void toggle_save_off(togglename) /* for default on toggles */
-char *togglename;
+void toggle_save_off(char *togglename) 
 { if ( readflag == 0 ) { outstring("\nread\n"); readflag = 1; }
   sprintf(msg,"%s off\n",togglename);
   outstring(msg);
-}
+} // end toggle_save_off()
 
 /***********************************************************************
 *
@@ -1414,8 +1594,7 @@ char *togglename;
 * purpose: dump whole datafile.  Open file, call section dumps.
 *
 */
-void do_dump(name)
-char *name;
+void do_dump(char *name)
 {
   vertex_id v_id;
   edge_id e_id;
@@ -1470,7 +1649,7 @@ char *name;
 
   /* body dump */
   #ifndef MPI_EVOLVER
-  calc_content(Q_FIXED|Q_INFO);
+//  calc_content(Q_FIXED|Q_INFO|Q_ENERGY|Q_CONSERVED);
   #endif
   fputs("\nbodies  /* facets */\n",dumpfd);
   MFOR_ALL_BODIES(b_id)
@@ -1489,9 +1668,10 @@ char *name;
 * purpose: list one procedure, recursing if necessary for
 *             dependencies.
 */
-void list_proc(g,level)
-struct global *g;     /* global variable of procedure */
-int level; /* for recursion depth check */
+void list_proc(
+  struct global *g,     /* global variable of procedure */
+  int level /* for recursion depth check */
+  )
 { struct expnode *ex = &g->value.proc;
   struct treenode *node;
   int pp;
@@ -1505,7 +1685,7 @@ int level; /* for recursion depth check */
   {
     /* check dependencies */
     for ( node = ex->start ; node != ex->root ; node ++  )
-      if ( node->type == PROCEDURE_ )
+      if ( node->type == PROCEDURE_NODE )
       { pp = node->op1.name_id;
         if ( globals(pp)->attr.procstuff.proc_timestamp < proc_timestamp )
             list_proc(globals(pp),level+1);
@@ -1520,10 +1700,10 @@ int level; /* for recursion depth check */
   if ( g->value.proc.root==NULL )
       outstring("{}");
   else
-  { if ( g->value.proc.root->type != COMMAND_BLOCK_ )
+  { if ( g->value.proc.root->type != COMMAND_BLOCK_NODE )
       outstring("{"); 
     outstring(print_express(&g->value.proc,'X'));
-    if ( g->value.proc.root->type != COMMAND_BLOCK_ )
+    if ( g->value.proc.root->type != COMMAND_BLOCK_NODE )
       outstring("}");
   }
   outstring("\n");
@@ -1537,8 +1717,7 @@ int level; /* for recursion depth check */
 * purpose: list one procedure, recursing if necessary for
 *             dependencies.
 */
-void list_function(g)
-struct global *g;
+void list_function(struct global *g)
 { 
   if ( g->value.proc.root == NULL )
   { outstring("// ");
@@ -1557,8 +1736,7 @@ struct global *g;
 *
 * purpose: list one procedure,
 */
-void list_procedure(g)
-struct global *g;
+void list_procedure(struct global *g)
 { if ( g->value.proc.root == NULL )
   { outstring("// ");
     outstring(g->name);
@@ -1576,8 +1754,7 @@ struct global *g;
 *
 * purpose: list one function prototype
 */
-void list_function_proto(g)
-struct global *g;
+void list_function_proto(struct global *g)
 { 
   struct expnode ex = g->value.proc;  /* copy, since will modify */
   if ( !ex.root ) 
@@ -1602,8 +1779,7 @@ struct global *g;
 *
 * purpose: list one procedure prototype.
 */
-void list_procedure_proto(g)
-struct global *g;
+void list_procedure_proto(struct global *g)
 { 
   struct expnode ex = g->value.proc;
   outstring("procedure ");
@@ -1634,14 +1810,14 @@ struct global *g;
 *          For SUBROUTINE, see list_procedures().
 *
 */
-void list_top_procedures(mode)
-int mode; /* LIST_PROTO or LIST_FULL */
+void list_top_procedures(int mode /* LIST_PROTO or LIST_FULL */)
 { int i; 
   int protoflag = 0; /* whether printed prototype comment */
 
   proc_timestamp++;
 
   /* prototypes */
+  if ( mode == LIST_PROTO )
   for ( i = 0 ; i < web.global_count ; i++ )
   {
     if ( globals(i)->flags & FUNCTION_NAME ) 
@@ -1684,8 +1860,7 @@ int mode; /* LIST_PROTO or LIST_FULL */
 *          Note this lists globals of type SUBROUTINE.
 *
 */
-void list_procedures(mode)
-int mode; /* LIST_PROTO or LIST_FULL */
+void list_procedures(int mode /* LIST_PROTO or LIST_FULL */)
 { int i; 
   int perm_comment_flag = 0;
   int witharg_comment_flag = 0;
@@ -1810,10 +1985,10 @@ int mode; /* LIST_PROTO or LIST_FULL */
         else
         { sprintf(msg,"%c :::= ",i);
           outstring(msg);
-          if ( single_redefine[i].root->type != COMMAND_BLOCK_ )
+          if ( single_redefine[i].root->type != COMMAND_BLOCK_NODE )
             outstring("{"); 
           outstring(print_express(&single_redefine[i],'X'));
-          if ( single_redefine[i].root->type != COMMAND_BLOCK_ )
+          if ( single_redefine[i].root->type != COMMAND_BLOCK_NODE )
             outstring("}"); 
         }
         outstring("\n");
@@ -1828,8 +2003,7 @@ int mode; /* LIST_PROTO or LIST_FULL */
 *          Called also by bottominfo command.
 */
 
-void bottom_dump(fd)
-FILE *fd;
+void bottom_dump(FILE *fd)
 { int i;
   FILE *old_fd = outfd;
   int e_type;
@@ -1841,13 +2015,76 @@ FILE *fd;
 
   /* string variables */
   for ( i = 0 ; i < web.global_count ; i++ )
-  { if ( globals(i)->flags & STRINGVAL )
-    { sprintf(msg,"%s := ",globals(i)->name);
-      convert_string(globals(i)->value.string,msg+strlen(msg));
+  { struct global *g = globals(i);
+    if ( g->flags & STRINGVAL )
+    { sprintf(msg,"%s := ",g->name);
+      convert_string(g->value.string,msg+strlen(msg),msgmax-100);
       strcat(msg,"\n");
       outstring(msg);
     }
   }  
+  
+  /* "no_dump" global variables */
+  for ( i = 0 ; i < web.global_count ; i++ )
+  { struct global *g = globals(i);
+    if ( !(g->flags2 & NO_DUMP_BIT) ) continue;
+    if ( (g->flags & ORDINARY_PARAM) &&
+          !(g->flags & (INTERNAL_NAME|QUANTITY_TYPES)) )
+      { sprintf(msg,"%s ",g->name); 
+        outstring(msg); 
+#ifdef FLOAT128
+         sprintf(msg,":= %2.*Qg; ",DPREC,g->value.real); 
+#elif defined(LONGDOUBLE)
+         sprintf(msg,":= %2.*Lg; ",DPREC,g->value.real); 
+#else
+         sprintf(msg,":= %2.15g; ",g->value.real); 
+#endif 
+         outstring(msg); 
+         if ( g->attr.varstuff.delta != OPTPARAM_DELTA 
+           && g->attr.varstuff.delta != 0.0 )
+         {
+#ifdef FLOAT128
+            sprintf(msg,"%s.pdelta = %2.*Qg; ",g->name,DPREC,g->attr.varstuff.delta); 
+#elif defined(LONGDOUBLE)
+            sprintf(msg,"%s.pdelta = %2.*Lg; ",g->name,DPREC,g->attr.varstuff.delta); 
+#else
+            sprintf(msg,"%s.pdelta = %2.15g; ",g->name,g->attr.varstuff.delta); 
+#endif 
+            outstring(msg); 
+         }
+         if ( g->attr.varstuff.pscale != 1.0 
+           && g->attr.varstuff.pscale != 0.0 )
+         {
+#ifdef FLOAT128
+            sprintf(msg,"%s.pscale = %2.*Qg ",g->name,DPREC,g->attr.varstuff.pscale); 
+#elif defined(LONGDOUBLE)
+            sprintf(msg,"%s.pscale = %2.*Lg ",g->name,DPREC,g->attr.varstuff.pscale); 
+#else
+            sprintf(msg,"%s.pscale = %2.15g ",g->name,g->attr.varstuff.pscale); 
+#endif 
+            outstring(msg); 
+         }
+         outstring("\n"); 
+      }
+      else if ( g->flags & ARRAY_PARAM )        
+      { struct array *a = g->attr.arrayptr;
+        if ( !(g->flags & INTERNAL_NAME) )
+          if ( a )  /* declaration might not have been executed */
+          { int j;
+            sprintf(msg,"define %s",g->name);
+            strcat(msg," ");
+            strcat(msg,datatype_name[g->type]);
+            for ( j = 0 ; j < a->dim ; j++ )
+              sprintf(msg+strlen(msg),"[%d]",a->sizes[j]);
+            outstring(msg);
+            outstring("\n");
+            sprintf(msg,"%s = \n",g->name);
+            print_array(a,NULL,PRINT_DUMP);
+            outstring("\n");
+          }
+      }
+   }
+
   /* extra attributes with function definitions */
   for ( e_type = VERTEX ; e_type <= FACETEDGE ; e_type++ )
   { struct extra *ex;
@@ -1866,18 +2103,6 @@ FILE *fd;
         outstring(" }\n");
      }
   }
-  list_procedures(LIST_FULL);
-
-  if ( show_expr[EDGE] ) 
-    { 
-      outstring(print_express(show_command+EDGE,'X'));
-      outstring("\n");
-    }
-  if ( show_expr[FACET] ) 
-    { 
-      outstring(print_express(show_command+FACET,'X'));
-      outstring("\n");
-    }
 
   /* misc state saving */
   outstring("\n");
@@ -1887,17 +2112,30 @@ FILE *fd;
     case TORUS_CONNECTED_MODE: outstring("connected\n"); break;
   }
   if ( window_aspect_ratio != 0.0 )
-  { sprintf(msg,"window_aspect_ratio := %18.15f\n",window_aspect_ratio); 
+  { sprintf(msg,"window_aspect_ratio := %18.15f\n",
+       (DOUBLE)window_aspect_ratio); 
     outstring(msg);
   }
   if ( clip_view_flag )
     toggle_save("clip_view");
   
+  if ( view_transforms_unique_point_flag )
+  { toggle_save("view_transforms_use_unique_point");
+    for ( i = 0 ; i < SDIM ; i++ )
+    { sprintf(msg,"  view_transforms_unique_point[%d] := %18.15f\n",i+1,
+        (DOUBLE)view_transforms_unique_point[i]);
+      outstring(msg);
+    }
+  }
   if ( slice_view_flag ) toggle_save("slice_view");
   if ( visibility_test ) toggle_save("visibility_test");
+  if ( K_altitude_flag ) toggle_save("K_altitude_mode");
   if ( full_bounding_box_flag ) toggle_save("full_bounding_box");
-  if ( gridflag > 0 ) toggle_save("gridflag");
-  if ( gridflag == 0 ) toggle_save_off("gridflag");
+  if ( force_edgeswap_flag ) toggle_save("force_edgeswap");
+  if ( gridflag > 0 ) toggle_save("ps_gridflag");
+  if ( gridflag == 0 ) toggle_save_off("ps_gridflag");
+  if ( septum_flag > 0 ) toggle_save("septum_flag");
+  if ( septum_flag == 0 ) toggle_save_off("septum_flag");
   if ( user_thickness_flag )
   { sprintf(msg,"thickness := %g\n",(double)thickness); outstring(msg); }
   if ( hessian_slant_cutoff != 0.0 ) 
@@ -1919,8 +2157,8 @@ FILE *fd;
   if ( circular_arc_flag ) toggle_save("circular_arc_draw");
   if ( rgb_colors_flag ) toggle_save("rgb_colors");
   if ( kraynikpopedge_flag ) toggle_save("kraynikpopedge");
-  if ( !kraynikpopvertex_flag ) toggle_save("kraynikpopvertexedge");
-  
+  if ( !kraynikpopvertex_flag ) toggle_save_off("kraynikpopvertex");
+  if ( !edgeshow_flag ) toggle_save_off("show_all_edges");
   if ( quiet_flag ) toggle_save("quiet");
   if ( augmented_hessian_flag > 0 ) toggle_save("augmented_hessian");
   if ( augmented_hessian_flag == 0 ) toggle_save_off("augmented_hessian");
@@ -1949,15 +2187,16 @@ FILE *fd;
   if ( pop_enjoin_flag ) toggle_save("pop_enjoin");
   if ( pop_to_face_flag ) toggle_save("pop_to_face");
   if ( pop_to_edge_flag ) toggle_save("pop_to_edge");
-  if ( ps_colorflag > 0 ) toggle_save("pscolorflag");
-  if ( ps_colorflag == 0 ) toggle_save_off("pscolorflag");
-  if ( labelflag == 0 ) toggle_save_off("labelflag");
-  if ( labelflag > 0  ) toggle_save("labelflag");
-  if ( crossingflag > 0 ) toggle_save("crossingflag");
-  if ( crossingflag == 0 ) toggle_save_off("crossingflag");
+  if ( ps_colorflag > 0 ) toggle_save("ps_colorflag");
+  if ( ps_colorflag == 0 ) toggle_save_off("ps_colorflag");
+  if ( ps_cmykflag ) toggle_save("ps_cmykflag");
+  if ( labelflag == 0 ) toggle_save_off("ps_labelflag");
+  if ( labelflag > 0  ) toggle_save("ps_labelflag");
+  if ( crossingflag > 0 ) toggle_save("ps_crossingflag");
+  if ( crossingflag == 0 ) toggle_save_off("ps_crossingflag");
   if ( smooth_graph_flag ) toggle_save("smooth_graph");
   if ( hessian_by_diff_flag ) toggle_save("hessian_diff");
-  if ( !hessian_normal_flag ) toggle_save("hessian_normal");
+  if ( !hessian_normal_flag ) toggle_save_off("hessian_normal");
   if ( hessian_normal_perp_flag ) toggle_save("hessian_normal_perp");
   if ( hessian_normal_one_flag ) toggle_save("hessian_normal_one");
   if ( hessian_double_normal_flag ) toggle_save("hessian_double_normal");
@@ -1979,18 +2218,21 @@ FILE *fd;
   if ( web.bodycount && !web.gravflag ) toggle_save_off("gravity");
   if ( hessian_linear_metric_flag )
   { toggle_save("linear_metric");
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     sprintf(msg,"linear_metric_mix := %2.*Qg\n",DPREC,linear_metric_mix);
+#elif defined(LONGDOUBLE)
      sprintf(msg,"linear_metric_mix := %2.*Lg\n",DPREC,linear_metric_mix);
 #else
      sprintf(msg,"linear_metric_mix := %2.15g\n",(DOUBLE)linear_metric_mix);
 #endif 
      outstring(msg);
   }
+
   if ( transform_expr[0] )
-     { 
-        sprintf(msg,"transform_expr \"%s\"\n",transform_expr);
-        outstring(msg);
-     }
+  { 
+    sprintf(msg,"transform_expr \"%s\"\n",transform_expr);
+    outstring(msg);
+  }
   if ( !transforms_flag && (transform_count>1)) toggle_save_off("transforms");
   outstring("\n\n");
   if ( web.target_tolerance != DEFAULT_TARGET_TOLERANCE )
@@ -2001,6 +2243,20 @@ FILE *fd;
   { sprintf(msg,"brightness := %2.15g\n",(DOUBLE)brightness);
     outstring(msg);
   }
+
+  list_procedures(LIST_FULL);
+
+  if ( show_expr[EDGE] ) 
+  { 
+    outstring(print_express(show_command+EDGE,'X'));
+    outstring("\n");
+  }
+  if ( show_expr[FACET] ) 
+  { 
+    outstring(print_express(show_command+FACET,'X'));
+    outstring("\n");
+  }
+
   /* windup */
   outfd = old_fd;
 } /* end bottom_dump */
@@ -2013,9 +2269,10 @@ FILE *fd;
 *           screen display for debugging, not standard dump file.
 *
 */
-void facetedge_dump(fe,fd)
-facetedge_id fe;
-FILE *fd;
+void facetedge_dump(
+  facetedge_id fe,
+  FILE *fd
+)
 { edge_id e_id;
   facet_id f_id;
   facetedge_id nf = get_next_facet(fe);
@@ -2087,7 +2344,10 @@ void dump_force()
     x = get_coord(v_id);
     switch(SDIM)
         { case 2:
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+          sprintf(msg,"%3s    %17.*Qf %17.*Qf  |x| = %17.*Qf ",
+             ELNAME(v_id),DPREC,x[0],DPREC,x[1],DPREC,sqrt(SDIM_dot(x,x))); 
+#elif defined(LONGDOUBLE)
           sprintf(msg,"%3s    %17.*Lf %17.*Lf  |x| = %17.*Lf ",
              ELNAME(v_id),DPREC,x[0],DPREC,x[1],DPREC,sqrt(SDIM_dot(x,x))); 
 #else
@@ -2097,7 +2357,10 @@ void dump_force()
              outstring(msg); 
             break;
           case 3:
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+          sprintf(msg,"%3s  %17.*Qf %17.*Qf %17.*Qf  |x| = %17.*Qf ",
+             ELNAME(v_id),DPREC,x[0],DPREC,x[1],DPREC,x[2],DPREC,sqrt(SDIM_dot(x,x))); 
+#elif defined(LONGDOUBLE)
           sprintf(msg,"%3s  %17.*Lf %17.*Lf %17.*Lf  |x| = %17.*Lf ",
              ELNAME(v_id),DPREC,x[0],DPREC,x[1],DPREC,x[2],DPREC,sqrt(SDIM_dot(x,x))); 
 #else
@@ -2128,7 +2391,10 @@ void dump_force()
     mag = sqrt(SDIM_dot(f,f));
     switch(SDIM)
     { case 2:
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+          sprintf(msg,"f:    %17.*Qf %17.*Qf |f| = %g\n\n",
+             DPREC,f[0],DPREC,f[1],(DOUBLE)mag); outstring(msg); 
+#elif defined(LONGDOUBLE)
           sprintf(msg,"f:    %17.*Lf %17.*Lf |f| = %g\n\n",
              DPREC,f[0],DPREC,f[1],(DOUBLE)mag); outstring(msg); 
 #else
@@ -2137,7 +2403,10 @@ void dump_force()
 #endif 
           break;
       case 3:
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+          sprintf(msg,"f:    %17.*Qf %17.*Qf %17.*Qf  |f| = %g\n\n",
+             DPREC,f[0],DPREC,f[1],DPREC,f[2],(DOUBLE)mag); outstring(msg); 
+#elif defined(LONGDOUBLE)
           sprintf(msg,"f:    %17.*Lf %17.*Lf %17.*Lf  |f| = %g\n\n",
              DPREC,f[0],DPREC,f[1],DPREC,f[2],(DOUBLE)mag); outstring(msg); 
 #else
@@ -2189,8 +2458,7 @@ void list_attributes()
 * Purpose: List quantity in top of datafile, and for "list quantity" 
 *          command.
 */
-void list_quantity(k)
-int k;  /* quantity number */
+void list_quantity(int k  /* quantity number */)
 { struct gen_quant *q;
   int i;
   struct method_instance *mi;
@@ -2201,19 +2469,24 @@ int k;  /* quantity number */
   outstring("\n");
   for ( i = 0 ; i < q->method_count ; i++ )
   { mi = METH_INSTANCE(q->meth_inst[i]); 
-    if ( mi->flags & (IMPLICIT_INSTANCE|DEFAULT_INSTANCE) ) continue;
+    if ( mi->flags & (IMPLICIT_INSTANCE|DEFAULT_INSTANCE|PRINTED_INST) ) 
+      continue;
     outstring("METHOD_INSTANCE "); 
     outstring(mi->name);
     outstring(" METHOD ");
     outstring(basic_gen_methods[mi->gen_method].name);
     dump_method_specs(q->meth_inst[i]);
+    mi->flags |= PRINTED_INST; // to prevent printing for multiple quants
   }
   switch ( q->flags & (Q_INFO|Q_FIXED|Q_ENERGY|Q_CONSERVED) )
   { case Q_INFO:
       sprintf(msg,"QUANTITY %s INFO_ONLY ",q->name); outstring(msg); 
       break;
     case Q_CONSERVED:
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+        sprintf(msg,"QUANTITY %s CONSERVED  lagrange_multiplier %2.*Qg",
+                  q->name,DPREC,q->pressure); 
+#elif defined(LONGDOUBLE)
         sprintf(msg,"QUANTITY %s CONSERVED  lagrange_multiplier %2.*Lg",
                   q->name,DPREC,q->pressure); 
 #else
@@ -2223,7 +2496,10 @@ int k;  /* quantity number */
         outstring(msg); 
         break;
     case Q_FIXED:
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+        sprintf(msg,"QUANTITY %s FIXED = %2.*Qg  lagrange_multiplier %2.*Qg",
+                q->name,DPREC,q->target,DPREC,q->pressure); 
+#elif defined(LONGDOUBLE)
         sprintf(msg,"QUANTITY %s FIXED = %2.*Lg  lagrange_multiplier %2.*Lg",
                 q->name,DPREC,q->target,DPREC,q->pressure); 
 #else
@@ -2237,19 +2513,25 @@ int k;  /* quantity number */
         break;
    }
    if ( q->tolerance >= 0.0 ) 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+   { sprintf(msg," tolerance %2.*Qg ",DPREC,q->tolerance); outstring(msg); }
+#elif defined(LONGDOUBLE)
    { sprintf(msg," tolerance %2.*Lg ",DPREC,q->tolerance); outstring(msg); }
 #else
    { sprintf(msg," tolerance %2.15g ",q->tolerance); outstring(msg); }
 #endif 
    if ( q->modulus != 1.0 ) 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+   { sprintf(msg," modulus %2.*Qg ",DPREC,q->modulus); outstring(msg); }
+#elif defined(LONGDOUBLE)
    { sprintf(msg," modulus %2.*Lg ",DPREC,q->modulus); outstring(msg); }
 #else
    { sprintf(msg," modulus %2.15g ",q->modulus); outstring(msg); }
 #endif 
    if ( q->volconst != 0.0 ) 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+   { sprintf(msg," volconst %2.*Qg ",DPREC,q->volconst); outstring(msg); }
+#elif defined(LONGDOUBLE)
    { sprintf(msg," volconst %2.*Lg ",DPREC,q->volconst); outstring(msg); }
 #else
    { sprintf(msg," volconst %2.15g ",q->volconst); outstring(msg); }
@@ -2268,7 +2550,8 @@ int k;  /* quantity number */
      else outstring(mi->name);
    }
    outstring("\n"); 
-}
+
+} // end list_quantity()
 
 /**************************************************************************
 *
@@ -2277,8 +2560,7 @@ int k;  /* quantity number */
 * Purpose: List method instance in top of datafile, and implement 
 *          "list method_instance" command.
 */
-void list_method_instance(k)
-int k;
+void list_method_instance(int k /* method number */ )
 { struct method_instance *mi = METH_INSTANCE(k);
  
   outstring("METHOD_INSTANCE "); 
@@ -2286,7 +2568,8 @@ int k;
   outstring(" METHOD ");
   outstring(basic_gen_methods[mi->gen_method].name);
   dump_method_specs(k);
-}
+
+} // end list_method_instance()
 
 /**************************************************************************
 *
@@ -2295,8 +2578,7 @@ int k;
 * Purpose: List constraint in top of datafile, and implement 
 *          "list constraint" command.
 */
-void list_constraint(cnum)
-int cnum;
+void list_constraint(int cnum /* constraint number */ )
 { struct constraint *con = get_constraint(cnum);
   int j;
   
@@ -2334,7 +2616,7 @@ int cnum;
       outstring("\n"); 
     }
   }
-}
+} // end list_constraint()
 
 /**************************************************************************
 *
@@ -2343,8 +2625,7 @@ int cnum;
 * Purpose: List boundary in top of datafile, and implement 
 *          "list boundary" command.
 */
-void list_boundary(bnum)
-int bnum;
+void list_boundary(int bnum /* boundary number */)
 { struct boundary * bdry = web.boundaries + bnum;
   int j;
 
@@ -2423,29 +2704,29 @@ void list_forwards()
     outstring("boundary ");
     outstring(bdry->name);
     outstring(";\n");
-  }
-
+  }  
+ 
   /* quantities */
   for ( i = 0 ; i < gen_quant_count ; i++ )
-  { 
-    if ( GEN_QUANT(i)->flags & DEFAULT_QUANTITY )
+  { struct gen_quant *q = GEN_QUANT(i);
+    if ( q->flags & (Q_DELETED|DEFAULT_QUANTITY) )
        continue;
     if ( !title_flag )  outstring("\n// Forward declarations\n");
     title_flag = 1;
     outstring("quantity ");
-    outstring(GEN_QUANT(i)->name);
+    outstring(q->name);
     outstring(";\n");
   }
-
+ 
   /* method_instances */
   for ( i = LOW_INST ; i < meth_inst_count ; i++ )
-  { 
-    if ( METH_INSTANCE(i)->flags & (IMPLICIT_INSTANCE|DEFAULT_INSTANCE) )
+  { struct method_instance *mi = METH_INSTANCE(i);
+    if ( mi->flags & (Q_DELETED|IMPLICIT_INSTANCE|DEFAULT_INSTANCE) )
       continue;
     if ( !title_flag )  outstring("\n// Forward declarations\n");
     title_flag = 1;
     outstring("method_instance ");
-    outstring(METH_INSTANCE(i)->name);
+    outstring(mi->name);
     outstring(";\n");
   }
 

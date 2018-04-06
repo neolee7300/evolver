@@ -1,13 +1,17 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
-<HEAD><TITLE>Surface Evolver Documentation: miscellaneous
-</title></head>
+<!DOCTYPE HTML>
+<HEAD><TITLE>Surface Evolver Documentation: miscellaneous </title>
+<link rel="stylesheet" type="text/css" href="evdoc-style.css" />
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+</head>
 
 <BODY>
-<center>
-<h1><a href="http://www.susqu.edu/facstaff/b/brakke/evolver/evolver.htm">
+
+<h1 class="center">
+<a href="http://www.susqu.edu/brakke/evolver/evolver.htm" class="comic">
 Surface Evolver</a> Documentation</h1>
-</center>
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
+
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 
 <h1> Miscellaneous terms</h1>
@@ -15,39 +19,39 @@ This file provides some entries for various keywords that are not
 used as name pointers elsewhere for ambiguity, incredible obscurity,
  or some other reason.
 <hr>
-<a name="alice"></a>   <h3>Alice</h3>
+<a   id="alice"></a>   <h3>Alice</h3>
 A keyword for a special purpose command not documented.
 <hr>
 
-<a name="area"></a><h3>Area</h3>
+<a   id="area"></a><h3>Area</h3>
 As a keyword, area is a read-only attribute of a facet.
 <hr>
 
-<a name="area_fixed"></a><a name="fixed_area"></a><h3>Area_fixed</h3>
+<a   id="area_fixed"></a><a   id="fixed_area"></a><h3>Area_fixed</h3>
 An obsolete way of declaring the total area of the surface fixed in the
 datafile.  Synonym: fixed_area. The preferred way of doing this now is to define a fixed
-<a href="quants.htm#named quantities">named quantity</a> in the datafile, 
+<a href="quants.htm#named-quantities">named quantity</a> in the datafile, 
 such as<br>
-<tt>quantity the_area fixed = 2.3 global_method facet_area</tt><br>
+<code>quantity the_area fixed = 2.3 global_method facet_area</code><br>
 This permits all the named quantity features to be used.
 
 <hr>
 
-<a name="attribute"></a><h3>Attribute</h3>
+<a   id="attribute"></a><h3>Attribute</h3>
 As a keyword, "attribute" is used in the <a href="commands.htm#define">
 define</a> command for element
-<a href="elements.htm#extra attributes">extra attributes</a>. 
+<a href="elements.htm#extra-attributes">extra attributes</a>. 
 <hr>
 
-<a name="bare"></a><h3>Bare</h3>
+<a   id="bare"></a><h3>Bare</h3>
 As a keyword, "bare" is a 
-<a href="elements.htm#bare vertex">vertex attribute</a> or an 
-<a href="elements.htm#bare edge">edge attribute</a> set by
+<a href="elements.htm#bare,-vertex">vertex attribute</a> or an 
+<a href="elements.htm#bare,-edge">edge attribute</a> set by
 the user that tells the Evolver not to expect the vertex or edge to
 be attached to a facet.
 <hr>
 
-<a name="body"></a><h3>Body</h3>
+<a   id="body"></a><h3>Body</h3>
 A <a href="elements.htm#bodies">body</a> is a three dimensional geometric
 element.
 As a command keyword, "body" is an element name in 
@@ -56,94 +60,101 @@ either as the main element type, or as a subelement of a facet.
 
 
 <hr>
-<a name="burchard"></a><h3>Burchard</h3>
+<a   id="burchard"></a><h3>Burchard</h3>
 A keyword for a special purpose command not documented.
 
 <hr>
 
-<a name="color"></a><h3>Color</h3>
+<a   id="color"></a><h3>Color</h3>
 As a keyword, "color" is an attribute of edges and facets.
 For the permitted values, see <a href="syntax.htm#colors">colors</a>.
 <hr>
 
-<a name="conducting_knot_energy"></a><h3>Conducting_knot_energy</h3>
+<a   id="conducting_knot_energy"></a><h3>Conducting_knot_energy</h3>
 Datafile keyword that automatically creates an energy named quantity
 using the method 
 <a href="quants.htm#knot_energy">knot_energy</a> as a global method.  
 May be followed in the datafile with a modulus value.  
 <hr>
 
-<a name="insulating_knot_energy"></a><h3>Insulating_knot_energy</h3>
+<a   id="insulating_knot_energy"></a><h3>Insulating_knot_energy</h3>
 Datafile keyword that automatically creates an energy named quantity
 using the method 
 <a href="quants.htm#uniform_knot_energy">uniform_knot_energy</a> as a global method.  
 May be followed in the datafile with a modulus value.  
 <hr>
 
-<a name="constraint"></a>
-<a name="constraints"></a><h3>Constraint</h3>
+<a   id="constraint"></a>
+<a   id="constraints"></a><h3>Constraint</h3>
 "Constraint" can be used in a 
-<a href="constrnt.htm#general constraints"> general</a> sense, 
+<a href="constrnt.htm#general-constraints"> general</a> sense, 
 but as a keyword it refers to 
-<a href="constrnt.htm#level set constraints">level set constraints</a>.
+<a href="constrnt.htm#level-set-constraints">level set constraints</a>.
 "Constraint" and "constraints" are interchangeable.
 <hr>
 
-<a name="content"></a> <h3>Content</h3>
+<a   id="content"></a> <h3>Content</h3>
 "Content" is used to mean volume (or area, in the string model)
-in <a href="datafile.htm#constraint decl">constraint integrals</a>.
+in <a href="datafile.htm#constraint-decl">constraint integrals</a>.
 <hr>
 
-<a name="convex"></a><h3>Convex</h3>
+<a   id="convex"></a><h3>Convex</h3>
 A keyword used in declaring a
-<a href="datafile.htm#constraint decl">constraint</a>
+<a href="datafile.htm#constraint-decl">constraint</a>
  in the datafile that causes
-a <a href="energies.htm#gap energy">gap energy</a> to be included.
+a <a href="energies.htm#gap-energy">gap energy</a> to be included.
 The idea is to prevent straight edges and facets from 
 short-cutting curved constraints with big gaps.
 <hr>
 
-<a name="density"></a><h3>Density</h3>
+<a   id="density"></a><h3>Density</h3>
 A keyword referring either to the gravitational density of a body, or
 to the surface tension of a facet, or to the linear tension of an edge.  
 In the latter two cases, "density" is synonymous with "tension".
 <hr>
 
-<a name="edge"></a><h3>Edge</h3>
+<a   id="edge"></a><h3>Edge</h3>
 In general, one of the basic geometric elements.  As a keyword, it
 is used in <a href="commands.htm#generators">element generators</a>.
 Synonym: edges.
 <hr>
 
-<a name="efixed"></a><h3>Efixed</h3>
+<a   id="efixed"></a><h3>Efixed</h3>
 Obsolete datafile attribute to make an edge fixed without fixing its endpoints.
 Keyword retained just for compatibility with old dump files.
 <hr>
 
-<a name="eprint"></a><h3>Eprint</h3>
+<a   id="eprint"></a><h3>Eprint</h3>
 Function that prints an expression and returns the value. Syntax: eprint expr.
 Meant for debugging; probably an archaic leftover from when the command
-language was not as developed.  Example: <tt>print sum(facet, eprint area)</tt>
+language was not as developed.  Example: <code>print sum(facet, eprint area)</code>
 will print out all the facet areas and then the sum.
 <hr>
 
-<a name="facet"></a><h3>Facet</h3>><h3>Fixed</h3>
+<a   id="facet"></a><h3>Facet</h3>>
+In general, one of the basic geometric elements.  In the soapfilm model,
+it is a triangle defined by its three oriented edges.  In the string model,
+it is a connected sequence of edges of arbitrary number.  In the simplex
+ model, it is a simplex of dimension given by the surface_dimension
+item in the top of the datafile, and is defined by its vertices.
+
+<a   id="fixed"></a><h3>Fixed</h3>
 Attribute that can be applied to 
-<a href="elements.htm#fixed vertex">vertices</a>, 
-<a href="elements.htm#fixed edge">edges</a>, 
-<a href="elements.htm#fixed facet">facets</a>, or 
-<a href="quants.htm#fixed quantity">named quantities</a>.
+<a href="elements.htm#fixed,-vertex">vertices</a>, 
+<a href="elements.htm#fixed,-edge">edges</a>, 
+<a href="elements.htm#fixed,-facet">facets</a>, or 
+<a href="quants.htm#fixed-quantity">named quantities</a>.
 <hr>
 
-<a name="function"></a>
-<a name="formula"></a><h3>Formula</h3>
+<a   id="function"></a>
+<a   id="formula"></a><h3>Formula</h3>
 Datafile keyword used in 
-<a href="datafile.htm#constraint decl">level set constraints</a>
+<a href="datafile.htm#constraint-decl">level set constraints</a>
  to introduce the function formula. Synonym: function
 <hr>
 
 
-<a name="gauss_curvature"></a><h3>Gauss_curvature</h3>
+<a   id="gauss_curvature"></a><h3>Gauss_curvature</h3>
 Datafile keyword that automatically creates an energy named quantity
 using the method 
 <a href="quants.htm#gauss_curvature_integral">gauss_curvature_integral</a>
@@ -151,52 +162,52 @@ using the method
 May be followed in the datafile with a modulus value.  
 <hr>
 
-<a name="tolerance"></a><h3>Tolerance</h3>
+<a   id="tolerance"></a><h3>Tolerance</h3>
 As a keyword, "tolerance" refers to a
-<a href="quants.htm#quantity tolerance">fixed quantity attribute</a>
+<a href="quants.htm#quantity-tolerance">fixed quantity attribute</a>
 that is used as the criterion for convergence.  Uses
 <a href="syntax.htm#target_tolerance">target_tolerance</a> as the
 default value. 
 
 <hr>
-<a name="div_normal_curvature"></a><h3>Div_normal_curvature</h3>
+<a   id="div_normal_curvature"></a><h3>Div_normal_curvature</h3>
 Toggle to make sq_mean_curvature energy calculate the mean curvature
 by the divergence of the normal vectors at the vertices of a facet.
 
 <hr>
-<a name="force_pos_def"></a><h3>Force_pos_def</h3>
+<a   id="force_pos_def"></a><h3>Force_pos_def</h3>
 Toggle. If this is on during YSMP factoring of Hessian and the Hessian
 turns up indefinite, something will be added to the diagonal element
 to make it positive definite.  Left over from some experiment probably.
 
 <hr>
-<a name="h_inverse_metric"></a><h3>H_inverse_metric</h3>
+<a   id="h_inverse_metric"></a><h3>H_inverse_metric</h3>
 Toggle. Replaces force by Laplacian of force.  For doing motion
 by Laplacian of mean curvature.
 
 <hr>
-<a name="modulus"></a><h3>Modulus</h3>
+<a   id="modulus"></a><h3>Modulus</h3>
 A keyword that is an attribute of a
-<a href="quants.htm#named quantities">named quantity</a>
-or a <a href="quants.htm#method instances">method instance</a>, which
+<a href="quants.htm#named-quantities">named quantity</a>
+or a <a href="quants.htm#method-instances">method instance</a>, which
 is a multiplier for the calculated value.
 
 <hr>
-<a name="opacity"></a><h3>Opacity</h3>
+<a   id="opacity"></a><h3>Opacity</h3>
 Facet attribute for transparency on some geomview systems.
-Syntax: <tt>set facet opacity </tt><i> value</i> where value
+Syntax: <code>set facet opacity </code><i> value</i> where value
 is between 0 and 1.  Actually, this just sets a global variable
 for all facets simultaneously. The value is passed to geomview in
 the alpha slot of the color.
 <hr>
-<a name="parameters"></a>
-<a name="parameter"></a><h3>Parameter</h3>
+<a   id="parameters"></a>
+<a   id="parameter"></a><h3>Parameter</h3>
 Refers to either a 
-<a href="constrnt.htm#parametric boundaries">parametric boundary</a>
+<a href="constrnt.htm#parametric-boundaries">parametric boundary</a>
 parameter, or a user-defined <a href="syntax.htm#variables">variable</a>.
 
 <hr>
-<a name="parameter_file"></a><h3>Parameter_file</h3>
+<a   id="parameter_file"></a><h3>Parameter_file</h3>
 In the top section of the datafile, a variable can be initialized
 with a set of values in a file with the syntax
 <pre>
@@ -205,68 +216,68 @@ PARAMETER name PARAMETER_FILE string
 I forget exactly how it is all supposed to work.
 <hr>
 
-<a name="pressure"></a>
+<a   id="pressure"></a>
 <h3>Pressure</h3>
 Usually means an attribute of 
-<a href="elements.htm#body pressure">fixed-volume bodies</a> or 
-<a href="quants.htm#quantity pressure">fixed named
+<a href="elements.htm#pressure,-body">fixed-volume bodies</a> or 
+<a href="quants.htm#quantity-pressure">fixed named
 quantities</a> that is actually the Lagrange multiplier for the constraint.
 As body attribute in the datafile, establishes 
-<a href="energies.htm#pressure energy">fixed pressure</a> for the
+<a href="energies.htm#pressure-energy">fixed pressure</a> for the
 body.
 Also used rarely in the top section of the datafile to establish the
 <a href="toggle.htm#ambient_pressure">ideal gas model</a>.
 
 <hr>
-<a name="surface_energy"></a><h3>Surface_energy</h3>
+<a   id="surface_energy"></a><h3>Surface_energy</h3>
 An obsolete way of including vector surface energy integrals in the
 datafile.  The present method is to use 
-a <a href="quants.htm#named quantities">named quantity</a>
+a <a href="quants.htm#named-quantities">named quantity</a>
 with the <a href="quants.htm#facet_vector_integral">facet_vector_integral</a>
 method.
 <hr>
 
-<a name="total"></a><h3>Total</h3>
+<a   id="total"></a><h3>Total</h3>
 An obsolete syntax for the value of a named quantity (e.g. my_quant) is
 "total my_quant".  The present syntax is "my_quant.value".
 <hr>
 
-<a name="valence"></a><h3>Valence</h3>
+<a   id="valence"></a><h3>Valence</h3>
 An attribute of a vertex, which is the number of incident edges,
 or an attribute of an edge, which is the number of incident facets,
 or an attribute of a facet, which is the number of edges on the facet.
 <hr>
 
-<a name="vertex"></a><h3>Vertex</h3>
+<a   id="vertex"></a><h3>Vertex</h3>
 One of the basic <a href="elements.htm#vertices">geometric elements</a>. 
 As a keyword, it is used
 in <a href="commands.htm#generators">element generators</a>.
 
 <hr>
-<a name="utest"></a><h3>Utest</h3>
+<a   id="utest"></a><h3>Utest</h3>
 Runs a test to see if triangulation is Delaunay. Meant for higher
 dimensions and simplex model.
 <hr>
-<a name="stability_test"></a><h3>Stability_test</h3>
+<a   id="stability_test"></a><h3>Stability_test</h3>
 Command to find largest eigenvalue of 
 <a href="model.htm#mobility">mobility</a> matrix. Don't really
 recall what this was for.
 <hr>
-<a name="tag"></a><h3>Tag</h3>
+<a   id="tag"></a><h3>Tag</h3>
 An obsolete facet attribute, once used to associate an arbitrary
 value with a facet.  Now superseded by 
-<a href="elements.htm#extra attributes">extra attributes</a>.
+<a href="elements.htm#extra-attributes">extra attributes</a>.
 
 
 <hr>
-<a name="dynamic load library"></a><h2>Dynamic load libraries.</h2>
+<a   id="dynamic-load-library"></a><h2>Dynamic load libraries.</h2>
 
 This feature hasn't been used much, but documentation is included here
 for completeness.
 
-Many Evolver features, such as <a href="constrnt.htm#level set constraints">
-level set constraints</a>, <a href="constrnt.htm#parametric boundaries">
-parametric boundaries</a>,  <a href="quants.htm#named methods">
+Many Evolver features, such as <a href="constrnt.htm#level-set-constraints">
+level set constraints</a>, <a href="constrnt.htm#parametric-boundaries">
+parametric boundaries</a>,  <a href="quants.htm#named-methods">
 named method</a> integrands, and <a href="model.htm#metric"> Riemannian
 metrics</a> require user-defined functions of a set of arguments.
 The expressions for these functions are ordinarily stored as a parse tree
@@ -367,15 +378,15 @@ NOTE: This implementation of dynamic loading is experimental, and the
 interface described here may change in the future.
 
 <hr>
-<a name="__bhead_index"></a><h3>__bhead_index</h3>
+<a   id="__bhead_index"></a><h3>__bhead_index</h3>
 A body attribute used internally by Hessian routines.
 
 <hr>
-<a name="__vhead_index"></a><h3>__vhead_index</h3>
+<a   id="__vhead_index"></a><h3>__vhead_index</h3>
 A vertex attribute used internally by Hessian routines.
 
 <hr>
-<a name="form_factors"></a><h3>form_factors</h3>
+<a   id="form_factors"></a><h3>form_factors</h3>
 A facet extra attribute vector used by several elastic energy named
 methods: <a href="quants.htm#linear_elastic">linear_elastic</a>, 
 <a href="quants.htm#neo_hookean">neo_hookean</a>, 
@@ -392,7 +403,7 @@ it will be created by Evolver, and the initial facet shape will be assumed
 to be unstrained.
 
 <hr>
-<a name="poisson_ratio"></a><h3>poisson_ratio</h3>
+<a   id="poisson_ratio"></a><h3>poisson_ratio</h3>
 Facet extra attribute used by various elastic named methods:
 <a href="quants.htm#linear_elastic">linear_elastic</a>, 
 <a href="quants.htm#linear_elastic_B">linear_elastic_B</a>, 
@@ -405,7 +416,7 @@ Facet extra attribute used by various elastic named methods:
 This is the two-dimensional isotropic poisson ratio.
 
 
-<a name="h_zero"></a>
+<a   id="h_zero"></a>
 <hr>
 Some physical surfaces have their lowest energy state when their
 mean curvature is some nonzero value.  An example is a membrane
@@ -452,47 +463,47 @@ Methods not using h_zero:
 </ul>
 
 
-<a name="knot_power"></a>
+<a   id="knot_power"></a>
 <hr>
 <h3>knot_power</h3>
 Internal read-write variable used as exponent on some term in
 various knot energies.  Named methods using knot_power are:
 
 <ul>
-<a href="quants.htm#buck_knot_energy">
+<li><a href="quants.htm#buck_knot_energy">
 buck_knot_energy</a>
-<a href="quants.htm#charge_gradient">
+<li><a href="quants.htm#charge_gradient">
 charge_gradient</a>
-<a href="quants.htm#facet_knot_energy">
+<li><a href="quants.htm#facet_knot_energy">
 facet_knot_energy</a>
-<a href="quants.htm#facet_knot_energy_fix">
+<li><a href="quants.htm#facet_knot_energy_fix">
 facet_knot_energy_fix</a>
-<a href="quants.htm#knot_energy">
+<li><a href="quants.htm#knot_energy">
 knot_energy</a>
-<a href="quants.htm#knot_thickness_0">
+<li><a href="quants.htm#knot_thickness_0">
 knot_thickness_0</a>
-<a href="quants.htm#knot_thickness_p">
+<li><a href="quants.htm#knot_thickness_p">
 knot_thickness_p</a>
-<a href="quants.htm#knot_thickness_p2">
+<li><a href="quants.htm#knot_thickness_p2">
 knot_thickness_p2</a>
-<a href="quants.htm#proj_knot_energy">
+<li><a href="quants.htm#proj_knot_energy">
 proj_knot_energy</a>
-<a href="quants.htm#sphere_knot_energy">
+<li><a href="quants.htm#sphere_knot_energy">
 sphere_knot_energy</a>
-<a href="quants.htm#uniform_knot_energy">
+<li><a href="quants.htm#uniform_knot_energy">
 uniform_knot_energy</a>
-<a href="quants.htm#uniform_knot_energy_normalizer">
+<li><a href="quants.htm#uniform_knot_energy_normalizer">
 uniform_knot_energy_normalizer</a>
-<a href="quants.htm#uniform_knot_normalizer1">
+<li><a href="quants.htm#uniform_knot_normalizer1">
 uniform_knot_normalizer1</a>
-<a href="quants.htm#uniform_knot_normalizer2">
+<li><a href="quants.htm#uniform_knot_normalizer2">
 uniform_knot_normalizer2</a>
 </ul>
 
 
-<a name="surface_knot_power"></a>
+<a   id="surface_knot_power"></a>
 <hr>
-<h3>surface_knot_power</h3.
+<h3>surface_knot_power</h3>
 
 Internal read-write variable used in the 
 <a href="quants.htm#facet_knot_energy">facet_knot_energy</a>  and
@@ -501,7 +512,7 @@ named methods
 as the exponent of the denominator.
 
 <hr>
-<a name="LEBweight"></a>
+<a   id="LEBweight"></a>
 <h3>LEBweight></h3>
 Facet extra attribute used to weight individual facets in the
 named methods <a href="quants.htm#linear_elastic_B">linear_elastic_B</a>,
@@ -509,15 +520,16 @@ named methods <a href="quants.htm#relaxed_elastic">relaxed_elastic</a>,
 named methods <a href="quants.htm#relaxed_elastic_A">relaxed_elastic_A</a>,
 
 <hr>
-<a name="old_force_ribiere"></a>
+<a   id="old_force_ribiere"></a>
 <h3>old_force_ribiere</h3>
 Vertex extra attribute used internally by conjugate gradient mode.
 
 <hr>
-<a name="parameter_1"></a><h3>parameter_1</a>
+<a   id="parameter_1"></a><h3>parameter_1</h3>
 A generic parameter used by a couple of named methods.
 <hr>
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 
 </body>

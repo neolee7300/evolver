@@ -22,8 +22,7 @@ REAL euclidean_area;    /* euclidean area for conformal metrics */
 *  accumulates them at each control point.
 */
 
-void edge_force_l_metric(e_id)
-edge_id e_id;
+void edge_force_l_metric(edge_id e_id)
 {
   REAL v[MAXCOORD],len,f,fp,*tforce,*hforce;
   int i,j,k;
@@ -73,7 +72,7 @@ edge_id e_id;
   }
   set_edge_length(e_id,len);
 
-}
+} // end edge_force_l_metric()
 
 
 /************************************************************************
@@ -82,8 +81,7 @@ edge_id e_id;
 *
 */
 
-void edge_energy_l_metric(e_id)
-edge_id e_id;
+void edge_energy_l_metric(edge_id e_id)
 {
   REAL energy;
   REAL midx[MAXCOORD];
@@ -119,7 +117,7 @@ edge_id e_id;
   energy *= get_edge_density(e_id);
   binary_tree_add(web.total_energy_addends,energy);
 
-}
+} // end edge_energy_l_metric()
 
 /************************************************************************
 *
@@ -130,8 +128,7 @@ edge_id e_id;
 *  Quadratic version.
 */
 
-void edge_energy_q_metric(e_id)
-edge_id e_id;
+void edge_energy_q_metric(edge_id e_id)
 {
   REAL *pt[EDGE_CTRL];
   REAL tang[MAXCOORD];
@@ -170,10 +167,6 @@ edge_id e_id;
     if ( web.representation == STRING )
     { /* don't count triple junction as area */
       binary_tree_add(web.total_area_addends,len);
-      /* accumulate  area around each vertex to scale motion */
-      add_vertex_star(v[0],len);
-      add_vertex_star(v[1],len);
-      add_vertex_star(v[2],len);
     }
 
     len *= get_edge_density(e_id);
@@ -181,7 +174,7 @@ edge_id e_id;
   }
      
   return;
-}
+} // end edge_energy_q_metric()
 
 /************************************************************************
 *
@@ -192,8 +185,7 @@ edge_id e_id;
 *  Quadratic version.
 */
 
-void edge_force_q_metric(e_id)
-edge_id e_id;
+void edge_force_q_metric(edge_id e_id)
 {
   REAL *pt[EDGE_CTRL];
   REAL tang[MAXCOORD];
@@ -259,7 +251,7 @@ edge_id e_id;
   }
 
   return;
-}
+} // end edge_energy_q_metric()
 
 /**********************************************************************
 *
@@ -281,10 +273,11 @@ edge_id e_id;
 *
 **********************************************************************/
 
-REAL simplex_energy_metric(v,pt)
-vertex_id *v; /* list of vertices */
-REAL **pt;  /* pointer to list of vertex coords for simplex */
+REAL simplex_energy_metric(
+  vertex_id *v, /* list of vertices */
+  REAL **pt  /* pointer to list of vertex coords for simplex */
                     /* order must agree with that used to set up gauss arrays */
+)
 { int i,j,k;
   REAL gpt[MAXCOORD];
   REAL area = 0.0;  /* total */
@@ -331,7 +324,7 @@ REAL **pt;  /* pointer to list of vertex coords for simplex */
   area /= web.simplex_factorial;
 
   return area;
-}
+} // end simplex_energy_metric()
 
 
 /**********************************************************************
@@ -360,12 +353,13 @@ REAL **pt,      /* coords to used (unwrapped ) */
 REAL density,  /* surface tension of facet */
 REAL **forces)
 #else
-void simplex_force_metric(v,pt,density,forces)
-vertex_id *v;  /* pointer to list of vertex ID's for simplex */
-                    /* order must agree with that used to set up gauss arrays */
-REAL **pt;      /* coords to used (unwrapped ) */
-REAL density;  /* surface tension of facet */
-REAL **forces;
+void simplex_force_metric(
+  vertex_id *v,   /* pointer to list of vertex ID's for simplex */
+                  /* order must agree with that used to set up gauss arrays */
+  REAL **pt,      /* coords to used (unwrapped ) */
+  REAL density,   /* surface tension of facet */
+  REAL **forces
+)
 #endif
 { int i,j,k,mu,nu,m,n;
   REAL gpt[MAXCOORD];
@@ -448,7 +442,7 @@ REAL **forces;
     }
 
   return;
-}
+} // end simplex_force_metric()
 
 /*********************************************************************
 *
@@ -458,9 +452,10 @@ REAL **forces;
 *              Does conversion in place.
 */
 
-void  metric_form_to_vector(x,f)
-REAL *x;  /* coordinates */
-REAL *f;  /* form incoming, vector outgoing */
+void  metric_form_to_vector(
+  REAL *x,  /* coordinates */
+  REAL *f   /* form incoming, vector outgoing */
+)
 { int i,j;
   REAL temp[MAXCOORD];
   REAL rr,rf;
@@ -491,7 +486,7 @@ REAL *f;  /* form incoming, vector outgoing */
   matvec_mul(metric,f,temp,SDIM,SDIM);
   memcpy((char*)f,(char*)temp,SDIM*sizeof(REAL));
 
-}
+} // end metric_form_to_vector()
 
 
 /***********************************************************************
@@ -500,7 +495,7 @@ REAL *f;  /* form incoming, vector outgoing */
                              Works for edges, facets, and simplices
 ***********************************************************************/
 
-REAL metric_area_all ARGS((struct qinfo*,int));
+REAL metric_area_all (struct qinfo*,int);
 
 /**********************************************************************
 *
@@ -508,13 +503,14 @@ REAL metric_area_all ARGS((struct qinfo*,int));
 *
 *  purpose: make sure general metric is in effect.
 */
-void metric_area_init(mode,mi)
-int mode;
-struct method_instance *mi;
-{  if ( web.conformal_flag || !web.metric_flag )
+void metric_area_init(
+  int mode,
+  struct method_instance *mi
+)
+{ if ( web.conformal_flag || !web.metric_flag )
      kb_error(1583,"Cannot use metric_facet_area or metric_edge_length method without a general metric.\n",
       RECOVERABLE);
-}
+} // end metric_area_init()
 
 /**********************************************************************
 *
@@ -534,9 +530,10 @@ struct method_instance *mi;
 *
 **********************************************************************/
 
-REAL metric_area_all(q_info,mode)
-struct qinfo *q_info;
-int mode; /* gradient or hessian */
+REAL metric_area_all(
+  struct qinfo *q_info,
+  int mode /* gradient or hessian */
+)
 {
   REAL density=0.0;  /* surface tension of facet */
   REAL **grad = q_info->grad;
@@ -732,17 +729,14 @@ int mode; /* gradient or hessian */
   return density*area;
 } /* end metric_area_all() */
 
-REAL metric_area_value(q_info)
-struct qinfo *q_info;
+REAL metric_area_value(struct qinfo *q_info)
 { return metric_area_all(q_info,METHOD_VALUE);
 }
 
-REAL metric_area_grad(q_info)
-struct qinfo *q_info;
+REAL metric_area_grad(struct qinfo *q_info)
 { return metric_area_all(q_info,METHOD_GRADIENT);
 }
 
-REAL metric_area_hess(q_info)
-struct qinfo *q_info;
+REAL metric_area_hess(struct qinfo *q_info)
 { return metric_area_all(q_info,METHOD_HESSIAN);
 }

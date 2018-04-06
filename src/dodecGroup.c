@@ -74,41 +74,52 @@ REAL gen[32][PDIM][PDIM];
 
 typedef REAL pmat[PDIM];
 typedef REAL ppmat[PDIM][PDIM];
-static void copy ARGS(( pmat, pmat ));
-static void copyMat ARGS(( ppmat, ppmat));
-static void matMult ARGS(( ppmat, ppmat, ppmat));
-static void matVecMult ARGS(( ppmat , pmat , pmat ));
-static void convertToHyp ARGS(( pmat , pmat ));
-static void calcGen ARGS(( WRAPTYPE , ppmat ));
-static void calcElem ARGS(( WRAPTYPE , ppmat ));
-static WRAPTYPE check_inverse ARGS(( WRAPTYPE , WRAPTYPE ));
-void init_gen ARGS((void));
-WRAPTYPE dodec_inverse ARGS((WRAPTYPE));
-void dodec_wrap ARGS(( REAL x[PDIM], REAL y[PDIM],WRAPTYPE));
-WRAPTYPE dodec_compose ARGS((WRAPTYPE, WRAPTYPE));
-void dodec_form_pullback ARGS((REAL *,REAL *,REAL *,WRAPTYPE ));
+static void copy ( pmat, pmat );
+static void copyMat ( ppmat, ppmat);
+static void matMult ( ppmat, ppmat, ppmat);
+static void matVecMult ( ppmat , pmat , pmat );
+static void convertToHyp ( pmat , pmat );
+static void calcGen ( WRAPTYPE , ppmat );
+static void calcElem ( WRAPTYPE , ppmat );
+static WRAPTYPE check_inverse ( WRAPTYPE , WRAPTYPE );
+void init_gen (void);
+WRAPTYPE dodec_inverse (WRAPTYPE);
+void dodec_wrap ( REAL x[PDIM], REAL y[PDIM],WRAPTYPE);
+WRAPTYPE dodec_compose (WRAPTYPE, WRAPTYPE);
+void dodec_form_pullback (REAL *,REAL *,REAL *,WRAPTYPE );
 
-static void copy(z,w)
-REAL z[PDIM],w[PDIM];
+/* Some local utility routines for fixed-size vectors and matrices */
+
+static void copy( 
+  REAL z[PDIM],   // source vector
+  REAL w[PDIM]    // destination vector
+)
 {
      int j;
 
      for (j=0; j<PDIM; j++)
           w[j]=z[j];
-}
 
-static void copyMat(mat1, mat2)
-      REAL mat1[PDIM][PDIM], mat2[PDIM][PDIM];
+} // end copy()
+
+static void copyMat(
+      REAL mat1[PDIM][PDIM],  // source
+      REAL mat2[PDIM][PDIM]   // destination
+)
 {
   int i,j;
 
   for(i=0;i<PDIM;i++)
      for(j=0;j<PDIM;j++)
         mat2[i][j] = mat1[i][j];
-}
 
-static void matMult(mat1, mat2, newMat)
-      REAL mat1[PDIM][PDIM], mat2[PDIM][PDIM], newMat[PDIM][PDIM];
+} // end copyMat()
+
+static void matMult(
+      REAL mat1[PDIM][PDIM], // first multiplicand
+      REAL mat2[PDIM][PDIM], // second multiplicand
+      REAL newMat[PDIM][PDIM]  // product
+)
 {
   int i, j, k;
   REAL temp1[PDIM][PDIM], temp2[PDIM][PDIM];
@@ -122,10 +133,13 @@ static void matMult(mat1, mat2, newMat)
         for(k=0;k<PDIM;k++)
           newMat[i][j] += temp1[i][k] * temp2[k][j];
      }
-}
+} // end matMult()
 
-static void matVecMult(mat, x, y)
-      REAL mat[PDIM][PDIM], x[PDIM], y[PDIM];
+static void matVecMult(
+      REAL mat[PDIM][PDIM],  // matrix
+      REAL x[PDIM],    // multiplicand vector
+      REAL y[PDIM]     //  product
+)
 {
   int i, j;
   REAL temp[PDIM];
@@ -136,10 +150,12 @@ static void matVecMult(mat, x, y)
      for(j=0;j<PDIM;j++)
         y[i] += temp[j]*mat[j][i];
   }
-}
+} // end matVecMult()
 
-static void convertToHyp(x, y)
-      REAL x[PDIM], y[PDIM];
+static void convertToHyp(
+      REAL x[PDIM], // Euclidean
+      REAL y[PDIM]  // Hyperbolic
+)
 {
   REAL ww;
 
@@ -149,13 +165,15 @@ static void convertToHyp(x, y)
   y[1] = x[1]*ww;
   y[2] = x[2]*ww;
   y[3] = ww;
-}
+
+} // end convertToHyp()
 
 /* This function calculates the matrix associated with a given group
     generator represented by a 5-bit integer */
-static void calcGen(ggen, mat)
-      WRAPTYPE ggen;
-      REAL mat[PDIM][PDIM];
+static void calcGen(
+      WRAPTYPE ggen,
+      REAL mat[PDIM][PDIM]
+)
 {
   int i;
   
@@ -174,13 +192,14 @@ static void calcGen(ggen, mat)
      for(i=0;i<((4-(ggen&3))%4);i++)
         matMult(mat, centerRotate, mat);
   }
-}
+} // end calcGen()
 
 /* This function calculates the matrix associated with a given group
     genrator represented by an int */
-static void calcElem(element, mat)
-      WRAPTYPE element;
-      REAL mat[PDIM][PDIM];
+static void calcElem(
+      WRAPTYPE element,
+      REAL mat[PDIM][PDIM]
+)
 {
   int i, numGens;
   REAL genMat[PDIM][PDIM];
@@ -193,10 +212,12 @@ static void calcElem(element, mat)
      matMult(mat, gen[FINDGEN(element)], mat);
      element = CHOP(element);
   }
-}
+} // end calcElem()
 
-static WRAPTYPE check_inverse(elem1, elem2)
-      WRAPTYPE elem1, elem2;
+static WRAPTYPE check_inverse(
+      WRAPTYPE elem1, 
+      WRAPTYPE elem2
+      )
 {
   int i;
   int numgen1, numgen2;
@@ -242,12 +263,12 @@ static WRAPTYPE check_inverse(elem1, elem2)
   endelem += 1 + (pres<<(3+NUMGEN(endelem)*5));
   free((char*)gens);
   return(endelem);
-}
+
+} // check_inverse()
      
 /* This function returns the inverse of a group element in its integer
     representation. */
-WRAPTYPE dodec_inverse(element)
-      WRAPTYPE element;
+WRAPTYPE dodec_inverse( WRAPTYPE element )
 {
   int i, numGens;
   WRAPTYPE inverse;
@@ -261,8 +282,9 @@ WRAPTYPE dodec_inverse(element)
   }
   inverse = (inverse<<3) + numGens;
   return(inverse);
-}
 
+} // end dodec_inverse()
+ 
 /* This function initializes the group generators */
 void init_gen()
 {
@@ -272,13 +294,16 @@ void init_gen()
      calcGen(i, gen[i]);
 
   q_init_flag = 1;
-}
+
+} // end init_gen()
 
 /* This function returns the coordinate for a point after and element of
     the group has been applied to it. */
-void dodec_wrap(x, y, element)
-      REAL x[PDIM], y[PDIM];
-      WRAPTYPE element;
+void dodec_wrap(
+      REAL x[PDIM], 
+      REAL y[PDIM],
+      WRAPTYPE element
+      )
 {
   REAL mat[PDIM][PDIM];
   int i;
@@ -295,12 +320,14 @@ void dodec_wrap(x, y, element)
      for(i=0;i<SDIM;i++)
         y[i] /= y[3];
   }
-}
+}  // end dodec_wrap()
 
 /* This function composes two elements of the group and returns their integer
     representation */
-WRAPTYPE dodec_compose(elem1, elem2)
-      WRAPTYPE elem1, elem2;
+WRAPTYPE dodec_compose(
+      WRAPTYPE elem1, 
+      WRAPTYPE elem2
+      )
 {
   int numGens;
   WRAPTYPE compp;
@@ -316,7 +343,8 @@ WRAPTYPE dodec_compose(elem1, elem2)
      printf("too many generators \n");
 
      return(compp);
-}
+
+} // end dodec_compose()
 
 /*******************************************************************
 *
@@ -327,11 +355,12 @@ WRAPTYPE dodec_compose(elem1, elem2)
 *
 */
 
-void dodec_form_pullback(x,xform,yform,wrap)
-REAL *x;    /* original coordinates */
-REAL *xform;  /* result pullback */
-REAL *yform;    /* original form input  */
-WRAPTYPE wrap;  /* encoded symmetry group element */
+void dodec_form_pullback(
+  REAL *x,    /* original coordinates */
+  REAL *xform,  /* result pullback */
+  REAL *yform,    /* original form input  */
+  WRAPTYPE wrap  /* encoded symmetry group element */
+)
 {
   int i,j;
   REAL trans[PDIM][PDIM];
@@ -361,4 +390,4 @@ WRAPTYPE wrap;  /* encoded symmetry group element */
      for ( j = 0, xform[i] = 0. ; j < SDIM ; j++ )
         xform[i] += jac[j][i]*yform[j];
 
-}
+} // end dodec_form_pullback()

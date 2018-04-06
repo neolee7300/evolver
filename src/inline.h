@@ -284,8 +284,18 @@ INLINE facetedge_id get_body_fe(b_id)  body_id b_id;
 }
 
 INLINE facetedge_id get_vertex_fe(v_id) vertex_id v_id;
-{ edge_id xx_id=vptr(v_id)->e_id;
-  return  valid_id(xx_id)?same_sign(eptr(xx_id)->fe_id,xx_id):NULLID;
+{ facet_id fe;
+  edge_id start_e, xx_id=vptr(v_id)->e_id;
+  // might be bare edge, so seek along edge loop
+  if ( !valid_id(xx_id) ) return NULLID;
+  fe = eptr(xx_id)->fe_id;
+  start_e = xx_id;
+  while ( !valid_id(fe) )
+  { xx_id = get_next_tail_edge(xx_id);
+    if ( equal_element(xx_id,start_e) ) return NULLID;
+    fe = eptr(xx_id)->fe_id;
+  }
+  return  same_sign(fe,xx_id);
 }
 
 INLINE void set_body_facet(b_id,f_id)  body_id b_id; facet_id f_id;

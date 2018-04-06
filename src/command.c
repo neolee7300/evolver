@@ -40,6 +40,7 @@ void recalc()
     transform_gen_expr(transform_expr);
   }
   recalc_verts();
+  if ( overall_size <= 0 ) resize();
   update_display();
 
   if ( phase_flag )
@@ -99,7 +100,7 @@ void reset_conj_grad()
   if ( conj_grad_flag && ( ribiere_flag ) )
   { int r_attr = find_attribute(VERTEX,RIBIERE_ATTR_NAME);
      if ( r_attr == -1 )
-     { add_attribute(VERTEX,RIBIERE_ATTR_NAME,REAL_TYPE,1,&size,0,NULL);
+     { add_attribute(VERTEX,RIBIERE_ATTR_NAME,REAL_TYPE,1,&size,0,NULL,MPI_NO_PROPAGATE);
        r_attr = find_attribute(VERTEX,RIBIERE_ATTR_NAME);
      }
      FOR_ALL_VERTICES(v_id)
@@ -116,8 +117,7 @@ void reset_conj_grad()
 *  purpose: Handle one command.  Useful for event loopers.
 */
 
-int old_menu ARGS1((text),
-char *text)
+int old_menu (char *text)
 { int retval = 0;
   if ( text[0] == '!' ) 
    retval = old_history(text); /* history list */
@@ -128,7 +128,8 @@ char *text)
        recalc();
 
   return retval;
-}
+
+} // end old_menu ()
 
 /*************************************************************
 *
@@ -138,10 +139,9 @@ char *text)
 *
 */
 
-void report_times ARGS((void));
+void report_times (void);
 
-void letter_command ARGS1((c),
-int c)
+void letter_command (int c)
 {
   char response[140]; 
   body_id b_id;
@@ -206,7 +206,7 @@ int c)
 
      case 'A' : /* set adjustable parameters */
             if ( set_parameters() )
-                  recalc();
+              recalc();
             break;
 
 
@@ -424,7 +424,9 @@ int c)
                   web.projection_flag = 0;
                   web.pressure_flag = 1;
                   if ( everything_quantities_flag )
-                    FOR_ALL_BODIES(b_id) create_pressure_quant(b_id);
+                  { FOR_ALL_BODIES(b_id) 
+                      create_pressure_quant(b_id);
+                  }
                 }
                 else
                 {
@@ -581,6 +583,7 @@ int c)
                     web.vertex_pop_count = 0;
                   web.vertex_pop_count += n = verpop_str();
                   sprintf(msg,"Vertices popped: %d\n",web.vertex_pop_count);
+                  outstring(msg);
                   web.counts_reported |= vertex_pop_count_bit;
                 }
                 else
@@ -589,6 +592,7 @@ int c)
                     web.edge_pop_count = 0;
                   web.edge_pop_count = n = edgepop_film();
                   sprintf(msg,"Edges popped: %d\n",web.edge_pop_count);
+                  outstring(msg);
                   web.counts_reported |= edge_pop_count_bit;
                 }
                 if ( n > 0 ) recalc();
@@ -876,7 +880,9 @@ void extrapolate()
 
   for ( m = 0 ; m <= reflevel ; m++ )
   { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+    sprintf(msg,"refinement: %1d  energy: %*.*Qg  ",m,DWIDTH,DPREC,extrap_val[m]);
+#elif defined(LONGDOUBLE)
     sprintf(msg,"refinement: %1d  energy: %*.*Lg  ",m,DWIDTH,DPREC,extrap_val[m]);
 #else
     sprintf(msg,"refinement: %1d  energy: %19.15f  ",m,extrap_val[m]);
@@ -886,7 +892,9 @@ void extrapolate()
       { d1 = extrap_val[m-1] - extrap_val[m-2];
          d2 = extrap_val[m] - extrap_val[m-1];
          ext = extrap_val[m] - d2*d2/(d2 - d1);
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+         sprintf(msg,"extrapolation: %*.*Qg\n",DWIDTH,DPREC,ext);
+#elif defined(LONGDOUBLE)
          sprintf(msg,"extrapolation: %*.*Lg\n",DWIDTH,DPREC,ext);
 #else
          sprintf(msg,"extrapolation: %19.15f\n",ext);
@@ -895,7 +903,7 @@ void extrapolate()
       }
     else outstring("\n");
   }
-}
+} // end extrapolate()
 
 /*****************************************************************
 *
@@ -927,7 +935,7 @@ void recalc_verts()
     if ( get_vattr(v_id) & CONSTRAINT )
          project_v_constr(v_id,ACTUAL_MOVE,RESET_ONESIDEDNESS);
   }
-}
+} // end recalc_verts()
 
 /*****************************************************************
 *
@@ -948,7 +956,9 @@ void information()
     { sprintf(msg,"Total time: %f\n",(DOUBLE)total_time);
       outstring(msg);
     }
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+    sprintf(msg,"Total energy: %*.*Qg\n",DWIDTH,DPREC,web.total_energy);
+#elif defined(LONGDOUBLE)
     sprintf(msg,"Total energy: %*.*Lg\n",DWIDTH,DPREC,web.total_energy);
 #else
     sprintf(msg,"Total energy: %17.15g\n",web.total_energy);
@@ -956,14 +966,18 @@ void information()
     outstring(msg);
     if ( web.spring_energy != 0.0 )
       {
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+         sprintf(msg,"Gap energy: %*.*Qg\n",DWIDTH,DPREC,web.spring_energy);
+#elif defined(LONGDOUBLE)
          sprintf(msg,"Gap energy: %*.*Lg\n",DWIDTH,DPREC,web.spring_energy);
 #else
          sprintf(msg,"Gap energy: %17.15g\n",web.spring_energy);
 #endif
          outstring(msg);
       }
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+    sprintf(msg,"Total %s:   %*.*Qg\n",areaname,DWIDTH,DPREC,web.total_area);
+#elif defined(LONGDOUBLE)
     sprintf(msg,"Total %s:   %*.*Lg\n",areaname,DWIDTH,DPREC,web.total_area);
 #else
     sprintf(msg,"Total %s:   %17.15g\n",areaname,web.total_area);
@@ -1119,6 +1133,7 @@ void show_volumes()
   struct gen_quant *quan;
   int headerflag = 0;
   int recalc_flag = 0;
+  unsigned int max_name = 20;
 
   if ( (web.bodycount == 0) && !gen_quant_count)
   { outstring("No bodies or quantities.\n");
@@ -1129,21 +1144,24 @@ void show_volumes()
       || ( info_volume_timestamp < global_timestamp) )
     recalc_flag = 1;
 
-   for ( k=0 ; k < gen_quant_count; k++ )
+  for ( k=0 ; k < gen_quant_count; k++ )
   { quan = GEN_QUANT(k);
     if ( (quan->flags & DEFAULT_QUANTITY) && !show_all_quantities )
          continue;
     if (quan->flags & Q_DELETED ) continue;
 	if ( !(quan->flags  & (Q_FIXED|Q_INFO|Q_ENERGY)) ) continue;
+    if ( strlen(quan->name) > max_name )
+            max_name = strlen(quan->name);
     if ( (quan->timestamp < global_timestamp) 
                  || (quan->timestamp < global_timestamp) )
     { 
 #ifdef MPI_EVOLVER
       if ( this_task == MASTER_TASK )
 #endif
-	  { outstring("recalculating...\n");
+	  { if ( !recalc_flag )
+          outstring("recalculating...\n");
         recalc_flag = 1;
-	    break;
+
 	  }
 	  
     }
@@ -1152,10 +1170,22 @@ void show_volumes()
        calc_content(Q_FIXED|Q_INFO|Q_ENERGY);
   if ( web.bodycount )
   {
-    outstring("Body             target volume        actual volume        pressure\n");
+    outstring("\nBody          target volume           actual volume          pressure\n");
     FOR_ALL_BODIES(b_id)
     { if ( equal_id(b_id,web.outside_body) ) continue;
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+      if ( get_battr(b_id) & FIXEDVOL )
+        sprintf(msg,"%3s  %*.*Qg      %*.*Qg    %*.*Qg\n",
+             ELNAME(b_id),DWIDTH,DPREC,get_body_fixvol(b_id),
+            DWIDTH,DPREC, get_body_volume(b_id),DWIDTH,DPREC,get_body_pressure(b_id));
+      else if ( get_battr(b_id) & PRESSURE )
+        sprintf(msg,"%3s         ------------     %*.*Qg    %*.*Qg\n",
+             ELNAME(b_id),
+             DWIDTH,DPREC,get_body_volume(b_id),DWIDTH,DPREC,get_body_pressure(b_id));
+      else /* not a constraint */
+          sprintf(msg,"%3s         ------------     %*.*Qg \n",
+             ELNAME(b_id), DWIDTH,DPREC,get_body_volume(b_id));
+#elif defined(LONGDOUBLE)
       if ( get_battr(b_id) & FIXEDVOL )
         sprintf(msg,"%3s  %*.*Lg      %*.*Lg    %*.*Lg\n",
              ELNAME(b_id),DWIDTH,DPREC,get_body_fixvol(b_id),
@@ -1169,15 +1199,15 @@ void show_volumes()
              ELNAME(b_id), DWIDTH,DPREC,get_body_volume(b_id));
 #else
       if ( get_battr(b_id) & FIXEDVOL )
-        sprintf(msg,"%3s         %17.15g      %17.15g    %17.15g\n",
+        sprintf(msg,"%3s  %22.15g  %22.15g %17.15g\n",
              ELNAME(b_id),get_body_fixvol(b_id),
              get_body_volume(b_id),get_body_pressure(b_id));
       else if ( get_battr(b_id) & PRESSURE )
-        sprintf(msg,"%3s            ------------     %17.15g    %17.15g\n",
+        sprintf(msg,"%3s            ------------     %22.15g %17.15g\n",
              ELNAME(b_id),
              get_body_volume(b_id),get_body_pressure(b_id));
       else /* not a constraint */
-        sprintf(msg,"%3s            ------------     %17.15g \n",
+        sprintf(msg,"%3s            ------------     %22.15g \n",
              ELNAME(b_id), get_body_volume(b_id));
 #endif
       outstring(msg);
@@ -1191,15 +1221,27 @@ void show_volumes()
          continue;
        if ( quan->flags & Q_DELETED ) continue;
        if ( !headerflag )
-         outstring(
-  "          Quantity      target value     actual value          pressure\n");
+       { sprintf(msg,"\n%*s       target value           actual value                 pressure\n",max_name,"           Quantity");
+         outstring(msg);
+       }
        headerflag = 1;
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
        if ( quan->flags & Q_CONSERVED )
-         sprintf(msg,"%20s    (conserved)      ----------------- %*.*Lg\n",
+         sprintf(msg,"%*s    (conserved)      ----------------- %*.*Qg\n",max_name,
               quan->name, DWIDTH,DPREC,quan->pressure);
        else if ( quan->flags & Q_FIXED )
-         sprintf(msg,"%20s  %*.*Lg  %*.*Lg  %*.*Lg\n",
+         sprintf(msg,"%*s  %*.*Qg  %*.*Qg  %*.*Qg\n",max_name,
+              quan->name,DWIDTH,DPREC,quan->target,DWIDTH,DPREC,
+              quan->value,DWIDTH,DPREC,quan->pressure);
+       else
+         sprintf(msg,"%20s         ---------  %*.*Qg\n",
+               quan->name,DWIDTH,DPREC,quan->value);
+#elif defined(LONGDOUBLE)
+       if ( quan->flags & Q_CONSERVED )
+         sprintf(msg,"%*s    (conserved)      ----------------- %*.*Lg\n",max_name,
+              quan->name, DWIDTH,DPREC,quan->pressure);
+       else if ( quan->flags & Q_FIXED )
+         sprintf(msg,"%*s  %*.*Lg  %*.*Lg  %*.*Lg\n",max_name,
               quan->name,DWIDTH,DPREC,quan->target,DWIDTH,DPREC,
               quan->value,DWIDTH,DPREC,quan->pressure);
        else
@@ -1207,13 +1249,13 @@ void show_volumes()
                quan->name,DWIDTH,DPREC,quan->value);
 #else
        if ( quan->flags & Q_CONSERVED )
-         sprintf(msg,"%20s     (conserved)     ----------------   %17.15g\n",
+         sprintf(msg,"%*s     (conserved)     ----------------   %17.15g\n",max_name,
               quan->name,quan->pressure);
        else if ( quan->flags & Q_FIXED )
-         sprintf(msg,"%20s  %17.15g  %17.15g  %17.15g\n",
+         sprintf(msg,"%*s  %22.15g  %22.15g  %17.15g\n",max_name,
               quan->name,quan->target,quan->value,quan->pressure);
        else
-         sprintf(msg,"%20s         ---------  %17.15g\n",
+         sprintf(msg,"%*s         ---------      %22.15g\n",max_name,
                 quan->name,quan->value);
 #endif
        outstring(msg);
@@ -1239,23 +1281,33 @@ int set_parameters()
  
   outstring("Variables: \n");
   for ( n = 0 ; n < web.global_count ; n++ )
-  { if ( globals(n)->flags & SUBROUTINE ) continue;
-    if ( !globals(n)->flags ) continue;
-    if ( globals(n)->flags & ORDINARY_PARAM )
+  { struct global *g = globals(n);
+    if ( g->flags & SUBROUTINE ) continue;
+    if ( !g->flags ) continue;
+    if ( g->flags & ORDINARY_PARAM )
     { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+      sprintf(msg,"%2d. %31.31s  %-#*.*Qg\n",
+        n+1,g->name,DWIDTH,DPREC,g->value.real);
+#elif defined(LONGDOUBLE)
       sprintf(msg,"%2d. %31.31s  %-#*.*Lg\n",
-        n+1,globals(n)->name,DWIDTH,DPREC,globals(n)->value.real);
+        n+1,g->name,DWIDTH,DPREC,g->value.real);
 #else
       sprintf(msg,"%2d. %31.31s  %-#21.15g\n",
-        n+1,globals(n)->name,globals(n)->value.real);
+        n+1,g->name,g->value.real);
 #endif
-      if ( globals(n)->flags & OPTIMIZING_PARAMETER )
+      if ( g->flags & OPTIMIZING_PARAMETER )
          strcpy(msg+strlen(msg)-1,"  optimizing_parameter\n");
     }
-    else if ( globals(n)->flags & STRINGVAL )
-     sprintf(msg,"%2d. %31.31s  %1.40s\n",
-        n+1,globals(n)->name,globals(n)->value.string);
+    else if ( g->flags & ARRAY_PARAM )
+    { int k;
+      sprintf(msg,"%2d. %31.31s  array %s",n+1,g->name,datatype_name[g->type]);
+      for ( k = 0 ; k < g->attr.arrayptr->dim ; k++ )
+        sprintf(msg+strlen(msg),"[%d]",g->attr.arrayptr->sizes[k]);
+      strcat(msg,"\n");
+    }
+    else if ( g->flags & STRINGVAL )
+     sprintf(msg,"%2d. %31.31s  %1.40s\n", n+1,g->name,g->value.string);
     else continue;
     outstring(msg);
     showcount++;
@@ -1263,11 +1315,14 @@ int set_parameters()
   if ( web.perm_global_count )
   { int titleflag = 0;
     for ( n = 0 ; n < web.perm_global_count ; n++ )
-    { if ( perm_globals(n)->flags & SUBROUTINE ) continue;
+    { if ( perm_globals(n)->flags & (SUBROUTINE|INTERNAL_NAME) ) continue;
       if ( !perm_globals(n)->flags ) continue;
       if ( perm_globals(n)->flags & ORDINARY_PARAM )
       { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+        sprintf(msg,"%2d. %31.31s  %-#*.*Qg\n", web.global_count +
+          n+1,perm_globals(n)->name,DWIDTH,DPREC,perm_globals(n)->value.real);
+#elif defined(LONGDOUBLE)
         sprintf(msg,"%2d. %31.31s  %-#*.*Lg\n", web.global_count +
           n+1,perm_globals(n)->name,DWIDTH,DPREC,perm_globals(n)->value.real);
 #else
@@ -1303,13 +1358,23 @@ int set_parameters()
     c = strtok(NULL,"");
     if ( const_expr(c,&val) > 0 )
     { if ( (n > 0) && (n <= web.global_count) )
-       {
-         if ( globals(n-1)->flags & ORDINARY_PARAM )
-            globals(n-1)->value.real = val;
+       { struct global *g = globals(n-1);
+         if ( g->flags & ORDINARY_PARAM )
+         { g->value.real = val;         
+           if ( g->flags & ORDINARY_PARAM )
+           { g->value.real = val;
+             if ( g->attr.varstuff.on_assign_call )
+             { struct global *gg = globals(g->attr.varstuff.on_assign_call);
+               eval(&gg->value.proc,NULL,NULLID,NULL);
+             } 
+           }
+         }
          else
             outstring("Bad parameter number. \n");
          if ( logfd ) 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+            fprintf(logfd,"%d %*.*Qg\n",n,DWIDTH,DPREC,val);
+#elif defined(LONGDOUBLE)
             fprintf(logfd,"%d %*.*Lg\n",n,DWIDTH,DPREC,val);
 #else
             fprintf(logfd,"%d %17.15g\n",n,val);
@@ -1318,9 +1383,16 @@ int set_parameters()
        }
        else if ( (n >= web.global_count ) && 
               (n <= web.global_count+web.perm_global_count) )
-       { n -= web.global_count;
-         if ( globals(n-1)->flags & ORDINARY_PARAM )
-            globals(n-1)->value.real = val;
+       { struct global *g;
+         n -= web.global_count;
+         g = globals(n-1);
+         if ( g->flags & ORDINARY_PARAM )
+         { g->value.real = val;
+           if ( g->attr.varstuff.on_assign_call )
+           { struct global *gg = globals(g->attr.varstuff.on_assign_call);
+             eval(&gg->value.proc,NULL,NULLID,NULL);
+           }
+         }
          else
             outstring("Bad parameter number. \n");
        }
@@ -1352,7 +1424,7 @@ void report_quantities()
   if ( everything_quantities_flag )
   { if ( show_all_quantities )
     outstring(
-"(showing internal quantities also; to suppress, do \"show_all_quantities off\")\n");
+  "(showing internal quantities also; to suppress, do \"show_all_quantities off\")\n");
     else outstring(
    "(not showing internal quantities; to show, do \"show_all_quantities\")\n");
   }
@@ -1365,7 +1437,9 @@ void report_quantities()
          calc_content(Q_INFO|Q_ENERGY|Q_FIXED);
 
      /* name and value */
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+      sprintf(msg,"%2d. %-31.31s  %#*.*Qg",k+1,q->name,DWIDTH,DPREC,q->value);
+#elif defined(LONGDOUBLE)
       sprintf(msg,"%2d. %-31.31s  %#*.*Lg",k+1,q->name,DWIDTH,DPREC,q->value);
 #else
       sprintf(msg,"%2d. %-31.31s  %#21.15g",k+1,q->name,q->value);
@@ -1378,7 +1452,10 @@ void report_quantities()
 
       if ( q->flags & Q_FIXED )
       {
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+        sprintf(msg,"    %31.31s  %#*.*Qg\n","target",DWIDTH,DPREC,
+          q->target);
+#elif defined(LONGDOUBLE)
         sprintf(msg,"    %31.31s  %#*.*Lg\n","target",DWIDTH,DPREC,
           q->target);
 #else
@@ -1388,7 +1465,10 @@ void report_quantities()
       }
 
      /* modulus */
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+      sprintf(msg,"    %31.31s  %#*.*Qg\n","modulus",DWIDTH,
+         DPREC, q->modulus); 
+#elif defined(LONGDOUBLE)
       sprintf(msg,"    %31.31s  %#*.*Lg\n","modulus",DWIDTH,
          DPREC, q->modulus); 
 #else
@@ -1399,7 +1479,10 @@ void report_quantities()
      /* volconst */
      if ( q->volconst != 0.0 )
      {
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+        sprintf(msg,"    %31.31s  %#*.*Qg\n","volconst",DWIDTH,
+         DPREC, q->modulus); 
+#elif defined(LONGDOUBLE)
         sprintf(msg,"    %31.31s  %#*.*Lg\n","volconst",DWIDTH,
          DPREC, q->modulus); 
 #else
@@ -1415,7 +1498,9 @@ void report_quantities()
           continue;  /* don't clutter up things */
 
        /* name and value */
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+      sprintf(msg,"    %-31.31s  %#*.*Qg",mi->name,DWIDTH,DPREC,mi->value);
+#elif defined(LONGDOUBLE)
       sprintf(msg,"    %-31.31s  %#*.*Lg",mi->name,DWIDTH,DPREC,mi->value);
  #else
       sprintf(msg,"    %-31.31s  %#21.15g",mi->name,mi->value);
@@ -1424,7 +1509,10 @@ void report_quantities()
       outstring(msg);
 
       /* modulus */
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+      sprintf(msg,"    %31.31s  %#*.*Qg\n","modulus",
+             DWIDTH, DPREC, mi->modulus);
+#elif defined(LONGDOUBLE)
       sprintf(msg,"    %31.31s  %#*.*Lg\n","modulus",
              DWIDTH, DPREC, mi->modulus);
 #else
@@ -1448,7 +1536,7 @@ void report_quantities()
     }
   }
 
-}
+} // end report_quantities()
  
 /**************************************************************************
 *
@@ -1535,5 +1623,6 @@ void report_times()
 #else
   outstring("Profiling not enabled on this system.\n");
 #endif
-}
+
+}  // end report_times()
 

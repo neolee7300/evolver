@@ -46,8 +46,7 @@
 *  Output:  Array of Wulff vectors, wulff_flag set
 */
 
-void wulff_initialize(wulffname)
-char *wulffname;
+void wulff_initialize(char *wulffname)
 {
   FILE *wfd;
   REAL *row; /* current Wulff vector */
@@ -88,7 +87,12 @@ char *wulffname;
   for ( k = 0 ; k < MAXWULFF ; k++ )
      { row = wulff_vector[k];
        for ( j = 0 ; j < SDIM ; j++ )
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+       { DOUBLE x;
+         if ( fscanf(wfd,"%lf",&x) != 1 ) break;
+         row[j] = x;
+       }
+#elif defined(LONGDOUBLE)
        if ( fscanf(wfd,"%Lf",row+j) != 1 ) break;
 #else
        if ( fscanf(wfd,"%lf",row+j) != 1 ) break;
@@ -96,7 +100,7 @@ char *wulffname;
      }
   fclose(wfd);
   web.wulff_count = k;
-}
+} // end wulff_initialize()
 
 /******************************************************************8
 *
@@ -111,9 +115,10 @@ char *wulffname;
 *  Output:    Components of Wulff vector put in place.
 */
 
-void file_wulff(norm,wulff)
-REAL *norm;
-REAL *wulff;
+void file_wulff(
+  REAL *norm,
+  REAL *wulff
+)
 {
   REAL maxw = -1e20;
   REAL *w; /* Wulff vector being tested */
@@ -128,7 +133,7 @@ REAL *wulff;
           }
      }
   memcpy((char *)wulff,(char *)wulff_vector[best],SDIM*sizeof(REAL));
-}
+} // end file_wulff()
 
 /******************************************************************
 *
@@ -137,9 +142,10 @@ REAL *wulff;
 *  Purpose:  Provide Wulff vector for upper hemisphere Wulff shape.
 */
 
-void hemi_wulff(normal,wulff)
-REAL *normal;
-REAL *wulff;
+void hemi_wulff(
+  REAL *normal,
+  REAL *wulff
+)
 {
   int i;
   REAL norm;
@@ -153,7 +159,7 @@ REAL *wulff;
   if ( norm > 0.0 )
      for ( i = 0 ; i < SDIM ; i++ )
         wulff[i] /= norm;
-}
+} // end hemi_wulff()
 
 /********************************************************************
 *
@@ -162,9 +168,10 @@ REAL *wulff;
 *  Purpose:  Provide Wulff vector for lens-shaped Wulff shape.
 */
 
-void lens_wulff(normal,wulff)
-REAL *normal;
-REAL *wulff;
+void lens_wulff(
+  REAL *normal,
+  REAL *wulff
+)
 {
   REAL norm;
 
@@ -186,7 +193,7 @@ REAL *wulff;
         wulff[1] = normal[1]/norm;
         wulff[2] = 0.0;
      }
-}
+} // end lens_wulff()
 
 /************************************************************************
 
@@ -194,9 +201,14 @@ REAL *wulff;
 
 **************************************************************************/
 
-void wulff_method_init(mode,mi)
-int mode;
-struct method_instance *mi;
+/************************************************************************
+* function:  wulff_method_init()
+* purpose: initialization for wulff_energy method
+*/
+void wulff_method_init(
+  int mode,
+  struct method_instance *mi
+)
 { char response[200];
 
   if ( web.modeltype != LINEAR )
@@ -207,10 +219,13 @@ struct method_instance *mi;
   { prompt("Enter Wulff name (hemi,lens, or filename): ",response,sizeof(response));
      wulff_initialize(response);
   }
-}
+} // end wulff_method_init()
 
-REAL facet_wulff_value(f_info)
-struct qinfo *f_info;
+/************************************************************************
+* function:  wulff_method_value()
+* purpose: value for wulff_energy method
+*/
+REAL facet_wulff_value(struct qinfo *f_info)
 { REAL normal[MAXCOORD];
   REAL wulff [MAXCOORD];
   REAL density = get_facet_density(f_info->id);
@@ -228,10 +243,13 @@ struct qinfo *f_info;
   (*get_wulff)(normal,wulff);
   energy = SDIM_dot(wulff,normal)/2;
   return density*energy;
-}
+} // end  facet_wulff_value()
 
-REAL facet_wulff_grad(f_info)
-struct qinfo *f_info;
+/************************************************************************
+* function:  wulff_method_grad()
+* purpose: gradient for wulff_energy method
+*/
+REAL facet_wulff_grad(struct qinfo *f_info)
 { REAL normal[MAXCOORD];
   REAL wulff [MAXCOORD];
   REAL temp  [MAXCOORD];
@@ -258,4 +276,5 @@ struct qinfo *f_info;
       }
   energy = SDIM_dot(wulff,normal)/2;
   return density*energy;
-}
+} // end facet_wulff_grad()
+

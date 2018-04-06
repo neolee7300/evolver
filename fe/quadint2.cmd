@@ -1,13 +1,15 @@
 // quadint2.cmd
 // For detecting intersection of quadratic facets in 3D
 // Not suitable for torus model.
-// Needs quadbbox.cmd to be loaded first.
+// Needs quadbbox.cmd.
 
 // Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
 
 // Usage: quadmeet
 // Prints id numbers of pairs of intersecting facets and colors them green.
 
+read "quadbbox.cmd"
+G
 a_refine_order := 4
 b_refine_order := 5
 
@@ -169,3 +171,6 @@ quadmeet := {
   };
   printf "Intersections found: %g\n",intersect_total;
 } // end quadmeet
+
+
+

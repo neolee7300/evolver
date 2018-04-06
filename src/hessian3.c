@@ -24,9 +24,10 @@
 *
 */
 
-void area_hessian(S,rhs)
-struct linsys *S;
-REAL *rhs;
+void area_hessian(
+  struct linsys *S,
+  REAL *rhs
+)
 {
   int i,j,k;
   facet_id f_id;
@@ -118,9 +119,10 @@ REAL *rhs;
 *
 */
 
-void edge_energy_hessian(S,rhs)
-struct linsys *S;
-REAL *rhs;
+void edge_energy_hessian(
+  struct linsys *S,
+  REAL *rhs
+)
 { int i,j;
   int head,tail;
   edge_id e_id;
@@ -169,11 +171,12 @@ REAL *rhs;
 *
 */
 
-void  edge_constr_hessian(S,e_id,first,second)
-struct linsys *S;
-edge_id e_id;
-REAL **first;
-REAL ****second;
+void  edge_constr_hessian(
+  struct linsys *S,
+  edge_id e_id,
+  REAL **first,
+  REAL ****second
+)
 {
   REAL *tcoord,*hcoord;
   struct constraint *constr;
@@ -246,9 +249,10 @@ REAL ****second;
 * return: number of bodies that have volume constraints
 */
 
-int body_hessian(S,rhs)
-struct linsys *S;
-REAL *rhs;
+int body_hessian(
+  struct linsys *S,
+  REAL *rhs
+)
 {
   int i,j;
   int count = 0;
@@ -274,10 +278,11 @@ REAL *rhs;
 
   /* rhs for body constraint rows */
   if ( rhs_flag && !everything_quantities_flag )
-  FOR_ALL_BODIES(b_id)
-  { REAL *current = rhs + S->bodyrowstart + loc_ordinal(b_id);
-    if ( get_battr(b_id) & FIXEDVOL )
-         *current = -(get_body_fixvol(b_id) - get_body_volume(b_id));
+  { FOR_ALL_BODIES(b_id)
+    { REAL *current = rhs + S->bodyrowstart + loc_ordinal(b_id);
+      if ( get_battr(b_id) & FIXEDVOL )
+           *current = -(get_body_fixvol(b_id) - get_body_volume(b_id));
+    }
   }
 
   /* body volume constraints, linear part */
@@ -289,7 +294,7 @@ REAL *rhs;
     REAL *x[FACET_VERTS];  /* for volume calculation */
     body_id bb_id;
     int do_b, do_bb; /* flags for whether bodies fixed */
-    int a;
+    ATTR a;
 
     if ( get_attr(f_id) & NONCONTENT ) continue;
 
@@ -377,7 +382,7 @@ REAL *rhs;
   self[0][1] = self[1][0] = 0.0;
   /* now add constraint hessians to energy hessian */
   if ( hess_flag )
-    FOR_ALL_FACETS(f_id)
+  { FOR_ALL_FACETS(f_id)
      {
         facetedge_id fe_id;         
         struct hess_verlist *v[FACET_VERTS];
@@ -442,14 +447,16 @@ REAL *rhs;
              fill_mixed_entry(S,v_id[i],v_id[jj],otherD); 
           }
       }
+  }
   temp_free((char*)Z);
 
   count = 0;
   if ( !everything_quantities_flag )
-  FOR_ALL_BODIES(b_id)
+  { FOR_ALL_BODIES(b_id)
     { if ( get_battr(b_id) & FIXEDVOL )
           count++;
     }
+  }
   return count;
 } /* end body_hessian() */
 
@@ -459,15 +466,15 @@ REAL *rhs;
 
 /*  C declarations of the YSMP routines  */
 
-int odrv_ ARGS(( integer *, integer *,integer *,REAL *, integer *,integer *,
-integer *,integer *, integer *, integer *));
+int odrv_ ( integer *, integer *,integer *,REAL *, integer *,integer *,
+integer *,integer *, integer *, integer *);
 
-int sdrvmd_ ARGS(( integer *, integer *,integer *, integer *,integer *,REAL *,
+int sdrvmd_ ( integer *, integer *,integer *, integer *,integer *,REAL *,
           REAL *,REAL *, integer *,integer *,REAL *,integer *,
-          integer *, integer *, REAL *));
+          integer *, integer *, REAL *);
                                                      
-void sdrv_flag_check ARGS((integer , integer , integer ));
-void odrv_flag_check ARGS((integer , integer ));
+void sdrv_flag_check (integer , integer , integer );
+void odrv_flag_check (integer , integer );
 
 /*************************************************************************
 *
@@ -476,8 +483,7 @@ void odrv_flag_check ARGS((integer , integer ));
 * purpose: Do YSMP factoring in linear system
 *
 */
-void ysmp_factor(S)
-struct linsys *S;
+void ysmp_factor(struct linsys *S, int mtype)
 { int i,j;
   int PATH,FLAG=0,ESP=0;
   REAL *RSP,EMAX;
@@ -560,10 +566,12 @@ struct linsys *S;
 * purpose: Do YSMP solve in linear system
 *
 */
-void ysmp_solve(S,b,x)
-struct linsys *S;
-REAL *b; /* rhs */
-REAL *x; /* solution, may be B */
+void ysmp_solve(
+  struct linsys *S,
+  REAL *b, /* rhs */
+  REAL *x, /* solution, may be B */
+  int mtype  /* definiteness (not used) */
+)
 { int PATH,FLAG=0,ESP;
   REAL *RSP,EMAX;
 
@@ -577,7 +585,7 @@ REAL *x; /* solution, may be B */
   sdrv_flag_check(ESP,FLAG,S->N);
 
   PROF_FINISH(hessian_factor);
-}
+} // end ysmp_solve()
 
 /**********************************************************************
 *
@@ -587,14 +595,17 @@ REAL *x; /* solution, may be B */
 *
 */
 
-void ysmp_solve_multi(S,b,x,rk)
-struct linsys *S;
-REAL **b; /* rhs */
-REAL **x; /* solution, may be B */
-int rk; /* number of rhs */
+void ysmp_solve_multi(
+  struct linsys *S,
+  REAL **b, /* rhs */
+  REAL **x, /* solution, may be B */
+  int rk, /* number of rhs */
+  int mtype /* definiteness (not used) */
+)
 { int k;
-  for ( k = 0 ; k < rk ; k++ ) ysmp_solve(S,b[k],x[k]);
-}
+  for ( k = 0 ; k < rk ; k++ ) 
+    ysmp_solve(S,b[k],x[k],mtype);
+} // end ysmp_solve_multi()
 
 /**************************************************************************
 *
@@ -602,8 +613,10 @@ int rk; /* number of rhs */
 * 
 * purpose: check error return from odrv().
 */
-void odrv_flag_check(FLAG, N)
-integer FLAG,N;
+void odrv_flag_check(
+  integer FLAG,
+  integer N
+)
 {
   if (!FLAG) return;
 
@@ -618,7 +631,7 @@ integer FLAG,N;
   else
     sprintf(errmsg,"Internal error: Mysterious value of FLAG in ORDV: %d\n",FLAG);
   kb_error(1845,errmsg,RECOVERABLE);
-}
+} // end odrv_flag_check()
 
 /**************************************************************************
 *
@@ -628,8 +641,11 @@ integer FLAG,N;
 *
 */
 
-void sdrv_flag_check(ESP, FLAG, N)
-integer ESP,FLAG,N;
+void sdrv_flag_check(
+  integer ESP,
+  integer FLAG,
+  integer N
+)
 { char *c;
 
   if (ESP<0)
@@ -675,9 +691,10 @@ integer ESP,FLAG,N;
 *              vertex star area metric.
 */
 
-void star_metric_setup(S,M)
-struct linsys *S;  /* hessian to set up metric for */
-struct linsys *M;  /* pointer to empty structure */
+void star_metric_setup(
+  struct linsys *S,  /* hessian to set up metric for */
+  struct linsys *M  /* pointer to empty structure */
+)
 {
   int i,j,k;
   int  Total_entries = 0;
@@ -768,9 +785,10 @@ struct linsys *M;  /* pointer to empty structure */
 *              linear interpolation metric.
 */
 
-void linear_metric_setup(S,M)
-struct linsys *S;  /* hessian to build metric for */
-struct linsys *M;  /* pointer to empty structure */
+void linear_metric_setup(
+  struct linsys *S,  /* hessian to build metric for */
+  struct linsys *M   /* pointer to empty structure */
+)
 {
   int i,jj,k,kk,m;
   size_t j;
@@ -782,12 +800,13 @@ struct linsys *M;  /* pointer to empty structure */
   MAT2D(weights,MAXCOORD+1,MAXCOORD+1);
   MAT2D(temp_mat,MAXCOORD,MAXCOORD);
   REAL **mat;
-  int col,end;
+  int col;
+  size_t end;
   int ii[MAXCOORD+1];
   int dim;
 
-if ( optparamcount > 0 )
-  kb_error(2444,"Sorry; linear_metric not working with optimizing parameters.\n",RECOVERABLE);
+  if ( optparamcount > 0 )
+    kb_error(2444,"Sorry; linear_metric not working with optimizing parameters.\n",RECOVERABLE);
 
   if ( web.modeltype == QUADRATIC )
   { linear_metric_setup_quadratic(S,M); goto apinv_setup; }
@@ -869,10 +888,9 @@ if ( optparamcount > 0 )
       vertex_id headv = get_edge_headv(e_id);
       struct hess_verlist *vt = get_vertex_vhead(tailv),*vhtmp;
       struct hess_verlist *vh = get_vertex_vhead(headv);
-      ti = loc_ordinal(tailv);
-      hi = loc_ordinal(headv);
-      if ( ti > hi ) 
-      { int tt = ti; ti = hi ; hi = tt; 
+
+      if ( vt->rownum > vh->rownum ) 
+      { 
         vhtmp = vh; vh = vt; vt = vhtmp;
       }
       if ( vh->freedom == 0 ) continue;
@@ -922,13 +940,13 @@ if ( optparamcount > 0 )
     { struct hess_verlist *vh[2];
       vertex_id tailv = get_edge_tailv(e_id);
       vertex_id headv = get_edge_headv(e_id);
-      if ( loc_ordinal(tailv) > loc_ordinal(headv) )
-      { vh[0] = get_vertex_vhead(headv);
-        vh[1] = get_vertex_vhead(tailv);
-      }
-      else
-      { vh[0] = get_vertex_vhead(tailv);
-        vh[1] = get_vertex_vhead(headv);
+      vh[0] = get_vertex_vhead(headv);
+      vh[1] = get_vertex_vhead(tailv);
+
+      if ( vh[0]->rownum > vh[1]->rownum )
+      { struct hess_verlist *t = vh[0];
+        vh[0] = vh[1];
+        vh[1] = t;
       }
       len = get_edge_length(e_id);
       for ( i = 0 ; i < 2 ; i++ )
@@ -946,7 +964,7 @@ if ( optparamcount > 0 )
           for ( k = jj ; k < v->freedom ; k++ )
           { col = v->rownum + k + A_OFF;
             end = M->IA[v->rownum+jj+1]-A_OFF;
-            for ( m = M->IA[v->rownum+jj]-A_OFF ; m < end  ; m++ )
+            for ( m = M->IA[v->rownum+jj]-A_OFF ; m < (int)end  ; m++ )
               if ( (M->JA[m] < A_OFF) || (M->JA[m] == col) )
               { M->JA[m] = col;
                 M->A[m] += fudge*(3-linear_metric_mix)*len/6*mat[jj][k];
@@ -1000,7 +1018,7 @@ if ( optparamcount > 0 )
       facetedge_id fe;
       REAL density = get_facet_density(f_id); 
       REAL normal[MAXCOORD];
-      struct hess_verlist *vh[MAXCOORD+1];
+      struct hess_verlist *vh[MAXCOORD+2];
 
       area = get_facet_area(f_id);
       if ( density != 0.0 ) area *= density;
@@ -1018,15 +1036,16 @@ if ( optparamcount > 0 )
       ix[2] = get_fe_headv(fe);
       
       for ( i = 0 ; i <= dim ; i++ )  /* bubble sort vertices */
-      { j = loc_ordinal(ix[i]);
+      { 
+        vh[dim+1] = get_vertex_vhead(ix[i]);
+        j = vh[dim+1]->rownum;
         for ( k = i ; k > 0 ; k-- )
-          if ( ii[k-1] > (int)j ) 
-          { ii[k] = ii[k-1];
+          if ( vh[k-1]->rownum > j ) 
+          {
             vh[k] = vh[k-1];
           }
-          else break;
-        ii[k] = (int)j;
-        vh[k] = get_vertex_vhead(ix[i]);
+          else break;       
+        vh[k] = vh[dim+1];
       }
       for ( i = 0 ; i <= dim ; i++ )
       { struct hess_verlist *v = vh[i];
@@ -1132,8 +1151,6 @@ if ( optparamcount > 0 )
      }
   }
 
-
-
   /* compact matrix by looking for -1 in M->JA */
   for ( i = 0 ; i < M->IA[M->N]-A_OFF ; i++ )
      if ( M->JA[i] < A_OFF ) break;
@@ -1151,6 +1168,25 @@ if ( optparamcount > 0 )
       }
       M->IA[i+1] = (int)(ja_to_spot - M->JA + A_OFF);
     }
+  }
+
+  // Sort within rows to get columns in increasing order.  Just bubble sort.
+  for ( i = 0 ; i < M->N ; i++ )
+  { int start = M->IA[i] - A_OFF + 1;
+    size_t k;
+    end = M->IA[i+1] - A_OFF;
+    for ( j = start ; j < end ; j++ )
+      for ( k = start+1 ; k < end ; k++ )
+        if ( M->JA[k] < M->JA[j] )
+        { int tmp;
+          REAL rtmp;
+          tmp = M->JA[j];
+          M->JA[j] = M->JA[k];
+          M->JA[k] = tmp;
+          rtmp = M->A[j];
+          M->A[j] = M->A[k];
+          M->A[k] = rtmp;
+        }
   }
 
 apinv_setup:
@@ -1198,9 +1234,10 @@ if ( hess_debug)
 *              linear interpolation metric.  Quadratic mode.
 */
 
-void linear_metric_setup_quadratic(S,M)
-struct linsys *S;  /* hessian to set up metric for */
-struct linsys *M;  /* pointer to empty structure */
+void linear_metric_setup_quadratic(
+  struct linsys *S,  /* hessian to set up metric for */
+  struct linsys *M   /* pointer to empty structure */
+)
 {
   int i,j,jj,k,kk,m,n;
   int sum;
@@ -1244,7 +1281,7 @@ struct linsys *M;  /* pointer to empty structure */
     M->IA[i] = 1;
   }
 
-  /* have to count number of higher-ordinal neighbors of each vertex */
+  /* have to count number of higher-row-number neighbors of each vertex */
   FOR_ALL_VERTICES(v_id)
   { struct hess_verlist *vh = get_vertex_vhead(v_id);
     for ( j = vh->rownum, jj = 0 ; jj < vh->freedom ; jj++,j++ )
@@ -1260,35 +1297,36 @@ struct linsys *M;  /* pointer to empty structure */
       vh[i] = get_vertex_vhead(v[i]);
     for ( i = 0 ; i < 3 ; i ++ )
       for ( k = 0 ; k < 3 ; k++ )
-        if ( loc_ordinal(v[i]) < loc_ordinal(v[k]) )
+        if ( vh[i]->rownum < vh[k]->rownum )
            for ( j = vh[i]->rownum, jj = 0 ; jj < vh[i]->freedom ; j++,jj++ )
               M->IA[j] += vh[k]->freedom;
   }
   if ( web.representation == SOAPFILM )
-  FOR_ALL_FACETS(f_id)
-  { vertex_id vv[FACET_CTRL];
-    struct hess_verlist *vh[FACET_CTRL];
-    facetedge_id  fe_id = get_facet_fe(f_id);
-    int v[FACET_CTRL];
-
-    for ( i = 0 ; i < FACET_EDGES ; i++ )
-    {
-       vv[i] = get_fe_tailv(fe_id);
-       vv[i+3] = get_fe_midv(fe_id);
-       fe_id = get_next_edge(fe_id);
-    }
-
-    for ( i = 0 ; i < FACET_CTRL ; i++ ) 
-    { v[i] = loc_ordinal(vv[i]);
-      vh[i] = get_vertex_vhead(v[i]);
-    }
-
+  { FOR_ALL_FACETS(f_id)  // add pairs not on same edge
+    { vertex_id vv[FACET_CTRL];
+      struct hess_verlist *vh[FACET_CTRL];
+      facetedge_id  fe_id = get_facet_fe(f_id);
+      int v[FACET_CTRL];
+  
+      for ( i = 0 ; i < FACET_EDGES ; i++ )
+      {
+         vv[i] = get_fe_tailv(fe_id);
+         vv[i+3] = get_fe_midv(fe_id);
+         fe_id = get_next_edge(fe_id);
+      }
+  
+      for ( i = 0 ; i < FACET_CTRL ; i++ ) 
+      { v[i] = loc_ordinal(vv[i]);
+        vh[i] = get_vertex_vhead(v[i]);
+      }
+  
 #define ADDON(a,b) \
-    if ( v[a] > v[b] ) {lo = b; hi = a; } else { lo= a; hi=b;}\
-    for ( j = vh[lo]->rownum, jj = 0 ; jj < vh[lo]->freedom ; j++,jj++ )\
-        M->IA[j] += vh[hi]->freedom;
-
-    ADDON(0,4); ADDON(1,5); ADDON(2,3); ADDON(4,5); ADDON(3,4); ADDON(3,5);
+      if ( vh[a]->rownum > vh[b]->rownum ) {lo = b; hi = a; } else { lo = a; hi = b;}\
+      for ( j = vh[lo]->rownum, jj = 0 ; jj < vh[lo]->freedom ; j++,jj++ )\
+          M->IA[j] += vh[hi]->freedom;
+  
+      ADDON(0,4); ADDON(1,5); ADDON(2,3); ADDON(4,5); ADDON(3,4); ADDON(3,5);
+    }
   }
   for ( i = 0, sum = 0 ; i < M->N ; i++ ) /* add to running totals */
   { int tmp = sum; 
@@ -1380,7 +1418,7 @@ struct linsys *M;  /* pointer to empty structure */
         /* cross terms */
         for ( k = 0 ; k < 3 ; k++ )
         { struct hess_verlist *vvh = get_vertex_vhead(vv[k]);
-          if ( ii[k] <= ii[i] ) continue;
+          if ( vvh->rownum <= vh->rownum ) continue;
           if ( vh->proj && vvh->proj )
           { tr_mat_mul(vh->proj,vvh->proj,temp_mat,SDIM,vh->freedom,
                vvh->freedom);
@@ -1492,7 +1530,9 @@ struct linsys *M;  /* pointer to empty structure */
          for ( k = 0 ; k < FACET_CTRL ; k++ )
          { struct hess_verlist *vv = get_vertex_vhead(ix[k]);
             
-           if ( ii[k] <= ii[i] ) continue;
+          //if ( ii[k] <= ii[i] ) continue;
+            if ( vv->rownum <= v->rownum ) 
+               continue;
 
             if ( v->proj && vv->proj )
             { tr_mat_mul(v->proj,vv->proj,temp_mat,SDIM,v->freedom,vv->freedom);
@@ -1513,6 +1553,8 @@ struct linsys *M;  /* pointer to empty structure */
                 for ( j = M->IA[v->rownum+jj]+1-A_OFF ; j < end ; j++ )
                   if ( (M->JA[j] < A_OFF) || (M->JA[j] == col)  )
                   { M->JA[j] = col; 
+if ( col <= v->rownum+jj+1 )
+  fprintf(stderr,"Bad col < row\n");
                     M->A[j] += v->slant*vv->slant*mat[jj][kk]*weights[i][k];
                     break;
                   }
@@ -1547,6 +1589,26 @@ struct linsys *M;  /* pointer to empty structure */
      }
   }
 
+  // Seems that JA is not always properly sorted, so check that, and
+  // bubblesort each row.
+  for ( i = 0 ; i < M->N ; i++ )
+  { int ii = M->IA[i]-A_OFF;
+    int jj = M->IA[i+1]-A_OFF;
+    { for (  j = ii+1 ; j < M->IA[i+1]-A_OFF ; j++ )
+      { k = j;
+        while ( k > ii && M->JA[k] < M->JA[k-1] )
+        { REAL temp = M->A[k-1];
+          int itemp = M->JA[k-1];
+          M->A[k-1] = M->A[k];
+          M->A[k] = temp;
+          M->JA[k-1] = M->JA[k];
+          M->JA[k] = itemp;
+          k--;
+        }
+      }
+    }
+  }
+
 } /* end linear_metric_setup_quadratic() */
 
 /************************************************************************
@@ -1557,9 +1619,10 @@ struct linsys *M;  /* pointer to empty structure */
 *              linear interpolation metric.  Lagrange model.
 */
 
-void linear_metric_setup_lagrange(S,M)
-struct linsys *S;  /* hessian to set up metric for */
-struct linsys *M;  /* pointer to empty structure */
+void linear_metric_setup_lagrange(
+  struct linsys *S,  /* hessian to set up metric for */
+  struct linsys *M   /* pointer to empty structure */
+)
 {
   int i,j,jj,k,kk,m,n;
   edge_id e_id;
@@ -1681,6 +1744,8 @@ struct linsys *M;  /* pointer to empty structure */
               for ( kk = 0 ; kk < vv->freedom ; kk++ )  
                 { col = vv->rownum + kk;
                   row = vh->rownum+jj;
+                  if ( col < row )
+                  { int temp = col; col = row; row = temp; }
                   mlist[count].col = col;
                   mlist[count].row = row;
                   mlist[count++].val = vh->slant*vv->slant*mat[jj][kk]*weights[i][k];
@@ -1716,7 +1781,7 @@ struct linsys *M;  /* pointer to empty structure */
         for ( j = 0 ; j < ctrl ; j++ ) weights[i][j] = 0.0;
       /* simple vertex weighting part */
       for ( i = 0 ; i < ctrl ; i++ ) /* not very precise */
-      { int attr = get_vattr(ix[i]);
+      { ATTR attr = get_vattr(ix[i]);
         if ( attr & Q_MIDFACET )
             weights[i][i] = (1-quadratic_metric_mix)/ctrl; 
         else if ( attr & Q_MIDEDGE )
@@ -1784,6 +1849,8 @@ struct linsys *M;  /* pointer to empty structure */
             for ( kk = 0 ; kk < vv->freedom ; kk++ )  
             { col = vv->rownum + kk;
               row = v->rownum+jj;
+              if ( col < row )
+              { int temp = col; col = row; row = temp; }
               mlist[count].col = col;
               mlist[count].row = row;
               mlist[count++].val = 
@@ -1815,7 +1882,6 @@ struct linsys *M;  /* pointer to empty structure */
     mlist[count].val = 0.0;
     count++;
   }
-
 
   /* sort and combine entries */
   temp = (struct mentry *)temp_calloc(count,sizeof(struct mentry));

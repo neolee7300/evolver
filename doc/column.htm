@@ -1,26 +1,30 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML>
 <HTML>
-<HEAD><title>Surface Evolver Documentation - Column Example</title></head>
-<body>
-<center>
-<h1><a href="http://www.susqu.edu/facstaff/b/brakke/evolver/evolver.htm">
-Surface Evolver</a> Documentation</h1>
-</center>
+<HEAD><title>Surface Evolver Documentation - Column Example</title>
+<link rel="stylesheet" type="text/css" href="evdoc-style.css" />
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+</head>
+<body style="font-size:medium">
 
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
-<a href="index.htm">Index.</a>
-<a name="column example"></a> <h1>Example: Column of liquid solder</h1>
+<h1 class="center"><a href="http://www.susqu.edu/brakke/evolver/evolver.htm" class="comic">
+Surface Evolver</a> Documentation</h1>
+
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<a href="index.htm">Index.</a><br>
+<a href="tutorial.htm#tutorial">Back to top of tutorial.</a><br>
+<a id="column_example"></a> <h1>Example: Column of liquid solder</h1>
 
 
 Here we have a tiny drop of liquid solder that bridges between two
-parallel, horizontal planes at z = 0 and z = ZH. 
+parallel, horizontal planes at z = 0 and z = <code>ZH</code>. 
 On each plane there is a circular pad
 that the solder perfectly wets, and the solder is perfectly nonwetting
 off the pads.  This would be just a catenoid problem with fixed volume,
 except that the pads are offset, and it is desired to find out what
 aligning force the solder exerts.  The surface is defined the same 
 way as in the catenoid example, except the lower boundary ring has
-a shift variable "<tt>SHIFT</tt>" in it to provide an offset in the 
+a shift variable <code>SHIFT</code> in it to provide an offset in the 
 y direction.
 This makes the shift adjustable at run time.  
 Since the top and bottom
@@ -29,7 +33,7 @@ for is provided by content integrals around the upper
 boundary, and the gravitational energy is provided by an energy
 integral.
 One could use the volconst attribute of the body instead for the volume,
-but then one would have to reset that every time <tt>ZH</tt> changed.
+but then one would have to reset that every time <code>ZH</code> changed.
 <p>
 
 The interesting part of this example is the calculation of the 
@@ -46,15 +50,15 @@ such as volume, the Lagrange multipliers (pressure for the volume constraint)
 tell how much the energy changes for given change in the constraints:
 <pre>          DE = L*DC
 </pre>
-where DE is the energy change,
-L is the row vector of Lagrange multipliers and DC is the column
+where <code>DE</code> is the energy change,
+<code>L</code> is the row vector of Lagrange multipliers and <code>DC</code> is the column
 vector of constraint value changes.  Therefore, the adjusted energy
 after a change in a parameter is
 <pre>          E_adj = E_raw - L*DC
 </pre>
-where E_raw is the actual energy and DC is the vector of differences of
-constraint values from target values.  The commands do_yforce and
-do_zforce in the datafile do central difference calculations of the
+where <code>E_raw</code> is the actual energy and <code>DC</code> is the vector of differences of
+constraint values from target values.  The commands <code>do_yforce</code> and
+<code>do_zforce</code> in the datafile do central difference calculations of the
 forces on the top pad, and put the surface back to where it was
 originally.  Note that the perturbations are made smoothly, i.e. the
 shear varies linearly from bottom to top.  This is not absolutely
@@ -63,7 +67,7 @@ a bit more accuracy.
 
 <table>
 <tr><td>
-<img src="columnbare.gif" align="middle" alt="column"></td>
+<img src="columnbare.gif" alt="column"></td>
 <td>  The initial column skeleton, with
 vertices and edges numbered. </td></tr>
 </table>
@@ -188,8 +192,9 @@ do_zforce := { oldzh := zh; zh := zh + dz;
 
 </pre>
 <hr>
-<a href="tutorial.htm#tutorial">Back to top of tutorial.</a>
-<a href="evolver.htm#doc top">Back to top of Evolver documentation.</a>
+<a href="tutorial.htm#tutorial">Back to top of tutorial.</a><br>
+<a href="evolver.htm#doc-top">Back to top of Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 </body>
 </html>

@@ -5,13 +5,73 @@
 //        Use the "show edge where ..." command to declare which
 //        edges are to be depicted as thin cylinders.
 //        Set "edge_radius" to desired radius of edge cylinders.
+//        Use the "show facet where ..." command to set facets to do.
 //        Run "povray" and redirect to desired file, e.g.
 //            Enter command: povray >>> "something.pov"
 
 // Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
 
 edge_radius := 0.003; // adjust this for desired radius of edge cylinders
+
+procedure print_color(integer ev_color) {
+      if ( ev_color == white ) then printf " t_white "
+      else if ( ev_color == black ) then printf " t_black "
+      else if ( ev_color == blue) then printf " t_blue "
+      else if ( ev_color == green ) then printf " t_green "
+      else if ( ev_color == cyan ) then printf " t_cyan "
+      else if ( ev_color == red ) then printf " t_red "
+      else if ( ev_color == magenta ) then printf " t_magenta "
+      else if ( ev_color == brown ) then printf " t_brown "
+      else if ( ev_color == lightgray ) then printf " t_lightgray "
+      else if ( ev_color == darkgray ) then printf " t_darkgray "
+      else if ( ev_color == lightblue ) then printf " t_lightblue "
+      else if ( ev_color == lightgreen ) then printf " t_lightgreen "
+      else if ( ev_color == lightcyan ) then printf " t_lightcyan "
+      else if ( ev_color == lightred ) then printf " t_lightred "
+      else if ( ev_color == lightmagenta ) then printf " t_lightmagenta "
+      else if ( ev_color == yellow ) then printf " t_yellow ";
+}
+
 povray := {
+
+
+  // Check assumptions
+  if torus then
+  { errprintf "Cannot run 'povray' command in torus mode. Do 'detorus' first.\n";
+    abort;
+  };
+
+  if symmetry_group then
+  { errprintf "Cannot run 'povray' command in symmetry group mode. Do 'detorus' first.\n";
+    abort;
+  };
+
+  if space_dimension != 3 then
+  { errprintf "The 'povray' command must be run in three-dimensional space.\n";
+    abort;
+  };
+
+  if surface_dimension == 1 then
+  { errprintf "The 'povray' command is not meant for the string model.\n";
+    abort;
+  };
+
+  if simplex_representation then
+  { errprintf "The 'povray' command is not meant for the simplex model.\n";
+    abort;
+  };
+
+  if lagrange_order >= 2 then
+  { errprintf "The 'povray' command is meant for the linear model, not quadratic or Lagrange.\n";
+    abort;
+  };
+
+  if rgb_colors then
+  { errprintf "The 'povray' command does not do RGB colors; do rgb_colors off.\n";
+    abort;
+  };
+
+
    printf "// %s in POV-Ray format.\n\n",datafilename;
 
    printf "light_source { <0,0,300> color rgb <1,1,1> }\n";
@@ -42,37 +102,28 @@ povray := {
    printf "union {\n";
    printf "// All facets in one big mesh object for efficiency.\n";
    printf "   mesh { \n";
-   foreach facet ff do {
-      printf "   triangle { <%f,%f,%f>,<%f,%f,%f>,<%f,%f,%f> texture {",
+   foreach facet ff where show and color >= 0 do {
+     printf "   triangle { <%f,%f,%f>,<%f,%f,%f>,<%f,%f,%f> texture {",
         ff.vertex[1].x,ff.vertex[1].y,ff.vertex[1].z, 
         ff.vertex[2].x,ff.vertex[2].y,ff.vertex[2].z, 
         ff.vertex[3].x,ff.vertex[3].y,ff.vertex[3].z; 
-      if ( ff.color == white ) then printf " t_white "
-      else if ( ff.color == black ) then printf " t_black "
-      else if ( ff.color == blue) then printf " t_blue "
-      else if ( ff.color == green ) then printf " t_green "
-      else if ( ff.color == cyan ) then printf " t_cyan "
-      else if ( ff.color == red ) then printf " t_red "
-      else if ( ff.color == magenta ) then printf " t_magenta "
-      else if ( ff.color == brown ) then printf " t_brown "
-      else if ( ff.color == lightgray ) then printf " t_lightgray "
-      else if ( ff.color == darkgray ) then printf " t_darkgray "
-      else if ( ff.color == lightblue ) then printf " t_lightblue "
-      else if ( ff.color == lightgreen ) then printf " t_lightgreen "
-      else if ( ff.color == lightcyan ) then printf " t_lightcyan "
-      else if ( ff.color == lightred ) then printf " t_lightred "
-      else if ( ff.color == lightmagenta ) then printf " t_lightmagenta "
-      else if ( ff.color == yellow ) then printf " t_yellow ";
-      printf " } }\n";
+     if view_matrix[1][1]*ff.x + view_matrix[1][2]*ff.y + view_matrix[1][3]*ff.z > 0
+     then
+       print_color(ff.frontcolor)
+     else
+       print_color(ff.backcolor);
+     printf " } }\n";
    };
    printf "  }  // end of mesh object\n";
 
    // Do desired edges
    printf "#declare edge_radius = %f;\n",edge_radius; 
-   foreach edge ee where ee.show do
-   { printf "cylinder { <%f,%f,%f>,<%f,%f,%f> edge_radius texture { t_black } }\n",
-       ee.vertex[1].x,ee.vertex[1].y,ee.vertex[1].z,
-       ee.vertex[2].x,ee.vertex[2].y,ee.vertex[2].z;
+   foreach edge ee where ee.show and color >= 0 do
+   {  printf "cylinder { <%f,%f,%f>,<%f,%f,%f> edge_radius texture {",
+      ee.vertex[1].x,ee.vertex[1].y,ee.vertex[1].z,
+      ee.vertex[2].x,ee.vertex[2].y,ee.vertex[2].z;
+      print_color(ee.color);
+      printf "} }\n";
    };
 
    // Windup
@@ -88,4 +139,12 @@ povray := {
    printf " }  // end of all objects\n";
 }
 
+// End povray.cmd
 
+// Usage:
+//        Use the "show edge where ..." command to declare which
+//        edges are to be depicted as thin cylinders.
+//        Set "edge_radius" to desired radius of edge cylinders.
+//        Use the "show facet where ..." command to set facets to do.
+//        Run "povray" and redirect to desired file, e.g.
+//            Enter command: povray >>> "something.pov"

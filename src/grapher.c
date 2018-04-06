@@ -45,13 +45,17 @@ static int showflag;
 */
 void update_display()
 {
+  if ( (torus_display_mode == TORUS_DEFAULT_MODE) && showflag ) 
+    ask_wrap_display();
+
   #ifdef MPI_EVOLVER
   if ( this_task == 0 )
      mpi_update_display();
   #endif
 
   local_update_display();
-}
+
+} // end update_display()
 
 /********************************************************************
 *
@@ -70,7 +74,7 @@ void local_update_display()
     else
       display();
   }
-}
+} // end local_update_display()
 
 /********************************************************************
 *
@@ -108,11 +112,14 @@ void do_show()
 #ifdef MOTIF
       return;
 #endif
-      if ( prompt("Graphics command: ",line,sizeof(line)) == EOF ) break;
+      if ( prompt("Graphics command: ",line,sizeof(line)) == EOF ) 
+        break;
+      else line_no++;
      }
     while ( view_transform(line) );
     iterate_flag = old_flag;
-}
+
+} // end do_show()
 
 /********************************************************************
 *
@@ -123,7 +130,26 @@ void do_show()
 */
 void ask_wrap_display()
 {
-  if ( commandfd != stdin ) return;
+  if ( commandfd != stdin ) 
+  { if ( web.torus_flag && (torus_display_mode == TORUS_DEFAULT_MODE) 
+         && former_torus_display_mode )
+     { switch ( former_torus_display_mode )
+       { case TORUS_CONNECTED_MODE : 
+                       if ( web.skel[BODY].count > 0 )
+                       { web.torus_body_flag = 1; 
+                         web.torus_clip_flag = 0;
+                         torus_display_mode = TORUS_CONNECTED_MODE;
+                       }
+                       break;
+          case TORUS_CLIPPED_MODE : 
+                       web.torus_body_flag = 0; 
+                       web.torus_clip_flag = 1; 
+                       torus_display_mode = TORUS_CLIPPED_MODE;
+                       break;
+        }
+    }
+    return;
+  }
   if ( web.torus_flag )
     {
       char response[100];
@@ -176,7 +202,7 @@ void ask_wrap_display()
                        break;
          }
     }
-}
+} // end ask_wrap_display()
 
 /********************************************************************
 *
@@ -186,15 +212,14 @@ void ask_wrap_display()
 *
 */
 
-int view_transform(string)
-char *string;
+int view_transform(char *string)
 {
   char *c;
   size_t legal; /* number of legal characters at start of string */
 
   /* test for illegal characters */
   legal =  strspn(string,
-          "0123456789.+-udrlcCRmzsABDxqtvwbeETH?h\034\035\036\037\033\133\n\r");
+          "0123456789.+-udrlcCRmzsABDxqtvwbeETH?h()onf\034\035\036\037\033\133\n\r");
   if ( legal != strlen(string) )
   { sprintf(msg,"Illegal character in graphics command: %c",string[legal]);
     kb_error(1044,msg,WARNING);
@@ -362,27 +387,70 @@ char *string;
               ask_wrap_display(); graph_timestamp = ++global_timestamp;
              reps = 0; break;
 
-        case 'B': bdry_showflag = !bdry_showflag; 
+        case 'B': if ( strncmp(c+1,"(on)",4) == 0 )
+                  { bdry_showflag = 1; c += 4; }
+                  else if ( strncmp(c+1,"(off)",4) == 0 )
+                  { bdry_showflag = 0; c += 5; }
+                  else 
+                  { bdry_showflag = !bdry_showflag; }
                   graph_timestamp = ++global_timestamp;
                   reps = 0; break;
 
-        case 'v': ridge_color_flag = !ridge_color_flag; reps = 0;
-                   graph_timestamp = ++global_timestamp;break;
+        case 'v': if ( strncmp(c+1,"(on)",4) == 0 )
+                  { ridge_color_flag = 1; c += 4; }
+                  else if ( strncmp(c+1,"(off)",4) == 0 )
+                  { ridge_color_flag = 0; c += 5; }
+                  else 
+                  { ridge_color_flag = !ridge_color_flag;}
+                  reps = 0;
+                  graph_timestamp = ++global_timestamp; 
+                  break;
 
-        case 'w': no_wall_flag = !no_wall_flag; reps = 0;  
-                  graph_timestamp = ++global_timestamp;break;
+        case 'w': if ( strncmp(c+1,"(on)",4) == 0 )
+                  { no_wall_flag = 1; c += 4; }
+                  else if ( strncmp(c+1,"(off)",4) == 0 )
+                  { no_wall_flag = 0; c += 5; }
+                  else 
+                  { no_wall_flag = !no_wall_flag; }
+                  reps = 0;  
+                  graph_timestamp = ++global_timestamp;
+                  break;
 
-        case 'b': box_flag = !box_flag; reps = 0; 
+        case 'b': if ( strncmp(c+1,"(on)",4) == 0 )
+                  { box_flag = 1; c += 4; }
+                  else if ( strncmp(c+1,"(off)",4) == 0 )
+                  { box_flag = 0; c += 5; }
+                  else 
+                  { box_flag = !box_flag; }
+                  reps = 0; 
                   graph_timestamp = ++global_timestamp; break;
 
-        case 'e': edgeshow_flag = !edgeshow_flag; 
-                  graph_timestamp = ++global_timestamp; break;
+        case 'e': if ( strncmp(c+1,"(on)",4) == 0 )
+                  { edgeshow_flag = 1; c += 4; }
+                  else if ( strncmp(c+1,"(off)",4) == 0 )
+                  { edgeshow_flag = 0; c += 5; }
+                  else 
+                  { edgeshow_flag = !edgeshow_flag; } 
+                  graph_timestamp = ++global_timestamp; reps = 0;
+                  break;
 
-        case 'E': triple_edgeshow_flag = !triple_edgeshow_flag; 
-                  graph_timestamp = ++global_timestamp; break;
+        case 'E': if ( strncmp(c+1,"(on)",4) == 0 )
+                  { triple_edgeshow_flag = 1; c += 4; }
+                  else if ( strncmp(c+1,"(off)",4) == 0 )
+                  { triple_edgeshow_flag = 0; c += 5; }
+                  else 
+                  { triple_edgeshow_flag = !triple_edgeshow_flag; }
+                  graph_timestamp = ++global_timestamp; 
+                  reps = 0; break;
 
-        case 'T': transforms_flag = !transforms_flag; 
-                  graph_timestamp = ++global_timestamp; break;
+        case 'T': if ( strncmp(c+1,"(on)",4) == 0 )
+                  { transforms_flag = 1; c += 4; }
+                  else if ( strncmp(c+1,"(off)",4) == 0 )
+                  { transforms_flag = 0; c += 5; }
+                  else 
+                  transforms_flag = !transforms_flag; 
+                  graph_timestamp = ++global_timestamp;
+                  reps = 0; break;
 
         case '+': fillcolor++;
                   sprintf(msg,"fillcolor %d\n",fillcolor);
@@ -395,10 +463,6 @@ char *string;
                   outstring(msg); 
                   graph_timestamp = ++global_timestamp;
                   reps = 0; break;
-
-        case 'H': web.hide_flag = !web.hide_flag; reps = 0; 
-                  graph_timestamp = ++global_timestamp;
-                  break;
 
         case '?': 
         case 'h':
@@ -498,7 +562,7 @@ void init_view()
   matcopy(to_focus,identmat,SDIM+1,SDIM+1);
   matcopy(from_focus,identmat,SDIM+1,SDIM+1);
 
-}
+} // end init_view()
 
 /********************************************************************
 *
@@ -587,7 +651,7 @@ void reset_view()
      shrink[2][2] = 1.0;
      zoom[2][2] = 1.0;
   }
-}
+} // end reset_view()
 
 /********************************************************************
 *
@@ -727,34 +791,40 @@ void resize()
   /* transformation matrix will be set up to scale object into
       [-1,1]^3 cube */
 
+  if ( identmat == NULL )
+    init_view();
+
   matcopy(view,identmat,HOMDIM,HOMDIM);
-  if ( size != 0.0 )
+  if ( size > 0.0 )
     for ( i = 0 ; i < HOMDIM-1 ; i++ ) 
      { view[i][i] = 2/size;
        view[i][HOMDIM-1] = -mid[i]*2/size;
      }
+  else 
+    matcopy(view,identmat,HOMDIM,HOMDIM);
   if ( to_focus ) /* for oglgraph.c focus reset */
   { matcopy(to_focus,identmat,HOMDIM,HOMDIM); 
     matcopy(from_focus,identmat,HOMDIM,HOMDIM); 
   } 
 
   /* see if clip_view and slice_view need defaults */
-  if ( (clip_coeff[0][0] == 0.0) &&
-       (clip_coeff[0][1] == 0.0) &&
-       (clip_coeff[0][2] == 0.0))
+//  if ( !clip_coeff_set_flag )
+  if ( clip_coeff[0][0]==0.0 && clip_coeff[0][1]==0.0 && 
+       clip_coeff[0][2]==0.0 && clip_coeff[0][3]==0.0 )
   { clip_coeff[0][0] = 1.0;
     clip_coeff[0][3] = mid[0];
   }
-  if ( (slice_coeff[0] == 0.0) &&
-       (slice_coeff[1] == 0.0) &&
-       (slice_coeff[2] == 0.0))
+//  if ( !slice_coeff_set_flag )
+  if ( slice_coeff[0]==0.0 && slice_coeff[1]==0.0 && 
+       slice_coeff[2]==0.0 && slice_coeff[3]==0.0 )
   { slice_coeff[0] = 1.0;
     slice_coeff[3] = mid[0];
   }
 
   overall_size = size;  /* for anybody who wants to know how big */
   if ( !user_thickness_flag ) thickness = 0.001*size;
-}
+
+} // end resize()
 
 /********************************************************************
 *
@@ -764,9 +834,10 @@ void resize()
 *    dragged.
 */
 
-void fix_ctm(viewmat,dx,dy)
-REAL **viewmat; /* matrix to modify */
-REAL dx,dy;  /* pixels mouse dragged */
+void fix_ctm(
+  REAL **viewmat, /* matrix to modify */
+  REAL dx, REAL dy  /* pixels mouse dragged */
+)
 {
   MAT2D(rot,MAXCOORD+1,MAXCOORD+1);
   REAL alpha;  /* angle around axis */

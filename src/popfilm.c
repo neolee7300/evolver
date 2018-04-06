@@ -25,13 +25,15 @@
 
 
 /* comparison routine for qsort */
-static int vfcomp(a,b)
-struct verfacet *a,*b;
+static int vfcomp(
+  struct verfacet *a,
+  struct verfacet *b
+)
 {
   if ( a->v_id < b->v_id ) return -1;
   if ( a->v_id > b->v_id ) return 1;
   return 0;
-}
+} // end vfcomp()
 
 int popfilm()
 {
@@ -46,7 +48,7 @@ int popfilm()
   popped = verpop_film();
   
   return popped;
-}
+} // end popfilm()
 
 
 /********************************************************************
@@ -58,9 +60,9 @@ int popfilm()
 *                common edge on boundary or constraint.
 */
 
-int  edgepop_film()
+int edgepop_film()
 {
-  edge_id e_id,sentinel;
+  edge_id e_id;
   int popped = 0;
 
   /* Loop through all edges, popping as you go.  New edges created
@@ -69,12 +71,12 @@ int  edgepop_film()
    */
 
   e_id = NULLEDGE;
-  while ( generate_all(EDGE,&e_id,&sentinel) )
+  FOR_ALL_EDGES(e_id)
   { popped += pop_one_edge(e_id);
   }
 
   return popped;
-}
+} // end edgepop_film()
 
 /***************************************************************************
 *
@@ -84,10 +86,9 @@ int  edgepop_film()
 *
 */
 
-int vertex_degfree(v_id)
-vertex_id v_id;
+int vertex_degfree(vertex_id v_id)
 { int degfree;
-  int vattr = get_vattr(v_id);
+  ATTR vattr = get_vattr(v_id);
   struct boundary *vbdry;
   conmap_t *vmap;
   int i;
@@ -108,7 +109,7 @@ vertex_id v_id;
   }
  
   return degfree;
-}
+} // end vertex_degfree()
 
 /***************************************************************************
 *
@@ -118,10 +119,9 @@ vertex_id v_id;
 *
 */
 
-int edge_degfree(e_id)
-edge_id e_id;
+int edge_degfree(edge_id e_id)
 { int degfree;
-  int eattr = get_eattr(e_id);
+  ATTR eattr = get_eattr(e_id);
   struct boundary *ebdry;
   conmap_t *emap;
   int i;
@@ -142,7 +142,7 @@ edge_id e_id;
   }
  
   return degfree;
-}
+} // end edge_degfree()
 
 /***************************************************************************
 *
@@ -152,10 +152,9 @@ edge_id e_id;
 *
 */
 
-int facet_degfree(f_id)
-facet_id f_id;
+int facet_degfree(facet_id f_id)
 { int degfree;
-  int fattr = get_fattr(f_id);
+  ATTR fattr = get_fattr(f_id);
   struct boundary *fbdry;
   conmap_t *fmap;
   int i;
@@ -176,7 +175,7 @@ facet_id f_id;
   }
  
   return degfree;
-}
+} // end facet_degfree()
 
 /********************************************************************
 *
@@ -189,8 +188,7 @@ facet_id f_id;
 
 REAL new_displacement[MAXCOORD]; /* one normal of splittin wedge */
 
-int pop_one_edge(e_id)
-edge_id e_id;
+int pop_one_edge(edge_id e_id)
 {
   int facet_count = 0;
   facetedge_id fe_id,fe,key_fe=NULLID,new_key;
@@ -200,9 +198,9 @@ edge_id e_id;
   int didsplit;
   int foundwedge;
   facetedge_id first_fe;
-  int eattr = get_eattr(e_id);
+  ATTR eattr = get_eattr(e_id);
   facet_id f1,f2;
-  int attr1,attr2;
+  ATTR attr1,attr2;
   int i,k;
   REAL midnormal[MAXCOORD];
   int popped = 0;
@@ -213,7 +211,7 @@ edge_id e_id;
   int foundkraynik;
   int maxffree;  /* maximum degrees of freedom of adjacent facets */
   int maxffreen; /* number of adjacent facets with that freedom */
-  int septum_flag=1; /* whether to put in septum joining popped edges */
+  int this_septum_flag=1; /* whether to put in septum joining popped edges */
 
   /* count facets around edge */
   fe_id = first_fe = get_edge_fe(e_id);
@@ -261,12 +259,12 @@ edge_id e_id;
     if ( valid_id(ba) && equal_id(ba,bc) ) 
     { key_fe = feb;
       foundwedge = 1;
-      septum_flag = 0;
+      this_septum_flag = 0;
     }
     else if ( valid_id(bb) && equal_id(bb,bd) ) 
     { key_fe = fea;
       foundwedge = 1;
-      septum_flag = 0;
+      this_septum_flag = 0;
     }
   }
 
@@ -404,13 +402,13 @@ edge_id e_id;
 
   if ( (facet_count == 2) && (degfree==2) )
   { /* special treatment, since may split either way */
-    popped = two_split(key_fe,septum_flag);
+    popped = two_split(key_fe,this_septum_flag);
     if ( popped ) return popped;  /* else do Y pull-out */
   }
 
   /* try propagating split forward */
   new_key = key_fe;
-  while ( try_prop(&new_key,key_fe,septum_flag) ) 
+  while ( try_prop(&new_key,key_fe,this_septum_flag) ) 
   { didsplit = 1;
     if ( verbose_flag )
     { sprintf(msg," Propagating pop to edge %s\n",ELNAME(get_fe_edge(new_key)));
@@ -421,7 +419,7 @@ edge_id e_id;
 
   /* try propagating split backward */
   new_key = inverse_id(get_prev_facet(key_fe));
-  while ( try_prop(&new_key,inverse_id(get_prev_facet(key_fe)),septum_flag) ) 
+  while ( try_prop(&new_key,inverse_id(get_prev_facet(key_fe)),this_septum_flag) ) 
   { didsplit = 1;
     if ( verbose_flag )
     { sprintf(msg," Propagating pop to edge %s\n",ELNAME(get_fe_edge(key_fe)));
@@ -450,15 +448,18 @@ edge_id e_id;
 *                further, it returns the next edge to try in *pass_key.
 *                If the vertex was split, it returns 1, else 0.
 *                Does not split FIXED vertices. Or BOUNDARY vertices.
+*                Wedge to be split off consists of *pass_key facet and
+*                previous facet.
 */
 
-int try_prop(pass_key,start_key,septum_flag)
-facetedge_id *pass_key;
-facetedge_id  start_key; /* to check for complete loop */
-int septum_flag; /* whether to put septum between popped edges */
+int try_prop(
+  facetedge_id *pass_key,
+  facetedge_id  start_key, /* to check for complete loop */
+  int this_septum_flag /* whether to put septum between popped edges */
+)
 {
-  int splitflag;
-  int propflag;
+  int splitflag=0;
+  int propflag=0;
   facetedge_id wing_fe;
   facetedge_id flip_fe;
   facetedge_id new_key=0;
@@ -504,7 +505,8 @@ int septum_flag; /* whether to put septum between popped edges */
         new_key = wing_fe;
         break;
       }
-      if ( equal_element(wing_fe,get_prev_facet(key_fe)) )
+      if ( equal_element(wing_fe,get_prev_facet(key_fe)) &&
+            v_hit_constraint_count(get_fe_headv(key_fe)) )
       { /* have cirque, so OK to split, but no propagation */
         splitflag = 1;
         propflag = 0;
@@ -550,9 +552,10 @@ int septum_flag; /* whether to put septum between popped edges */
     }
   }
 
-  if ( !propflag ) new_key = NULLFACETEDGE;
+  if ( !propflag ) new_key = NULLID;
 
   /* check to see if new_key is already just triple */
+  if ( valid_id(new_key) )
   { facetedge_id feb = get_next_facet(new_key);
     facetedge_id fec = get_next_facet(feb);
     facetedge_id fed = get_next_facet(fec);
@@ -565,7 +568,7 @@ int septum_flag; /* whether to put septum between popped edges */
       propflag = 0;
     }
   } 
-  if ( splitflag ) versplit(key_fe,new_key,septum_flag);
+  if ( splitflag ) versplit(key_fe,new_key,this_septum_flag);
 
   if ( !propflag ) new_key = NULLFACETEDGE;
   *pass_key = new_key;
@@ -586,28 +589,28 @@ int septum_flag; /* whether to put septum between popped edges */
 *                This is essentially the reverse of eliminating an edge.
 */
 
-void versplit(fe_a,fe_b,septum_flag)
-facetedge_id fe_a,fe_b;
-int septum_flag;
+void versplit(
+  facetedge_id fe_a,  // split vertex at head; wedge with prev facet
+  facetedge_id fe_b,  // split vertex at tail; wedge with prev facet
+  int this_septum_flag
+)
 {
   vertex_id old_v = get_fe_headv(fe_a);
   vertex_id new_v;
   edge_id new_e=0,new_a=0,new_b=0,e_id;
   edge_id old_a = get_fe_edge(fe_a);
-  edge_id old_b = get_fe_edge(fe_b);
+  edge_id old_b = NULLID;
   facetedge_id fe_aa = get_prev_facet(fe_a);
-  facetedge_id fe_bb = get_prev_facet(fe_b);
+  facetedge_id fe_bb = NULLID;
   facetedge_id fe_a_old,fe_a_new,fe_a_e;
   facetedge_id fe_b_old=0,fe_b_new=0,fe_b_e=0;
   facet_id new_fa,new_fb=0;
   body_id b_id;
   int i;
   REAL *x;
-  int halfflag;
   facetedge_id fe,first_fe;
   int valence = get_edge_valence(old_a);
   conmap_t *vmap,*emap,*fmap;
-  facetedge_id halffe;
 
   /* create a new vertex, which will be split away with wedge */
   new_v = dup_vertex(old_v);
@@ -615,9 +618,15 @@ int septum_flag;
   for ( i = 0 ; i < SDIM ; i++ )
      x[i] += 0.01*new_displacement[i];
   
-  if ( septum_flag )
+  if ( this_septum_flag )
   { /* create new edge between vertices */
     new_e = new_edge(old_v,new_v,NULLID);
+    if ( get_vattr(old_v) & BOUNDARY )
+      set_edge_boundary_num(new_e,get_vertex_boundary_num(old_v));
+    else if ( get_vattr(old_v) & CONSTRAINT )
+    { vmap = get_v_constraint_map(old_v);
+      set_e_conmap(new_e,vmap);
+    }
   }
   
   /* create new edges split off from wedge */
@@ -626,7 +635,7 @@ int septum_flag;
     new_a = dup_edge(old_a);
     insert_vertex_edge(get_edge_tailv(old_a),new_a);
     insert_vertex_edge(old_v,inverse_id(new_a));
-  }
+  }  
 
   /* fix up attributes of old edge, in case pulling off wall */
   unset_attr(old_a,FIXED);
@@ -642,7 +651,8 @@ int septum_flag;
   else set_attr(old_a,CONSTRAINT);
 
   if ( valid_id(fe_b) )
-  {
+  { old_b = get_fe_edge(fe_b);
+    fe_bb = get_prev_facet(fe_b);
     new_b = dup_edge(old_b);
     insert_vertex_edge(old_v,new_b);
     insert_vertex_edge(get_edge_headv(old_b),inverse_id(new_b));
@@ -661,80 +671,55 @@ int septum_flag;
   }
  
   /* reset edge endpoints coming into new_v */
-  fe = fe_a;
-  halfflag = 0;
-  halffe = NULLID; /* for attributes of new_v */
-  do
-  { e_id = get_fe_edge(fe);
-    remove_vertex_edge(old_v,inverse_id(e_id));
-    set_edge_headv(e_id,new_v);
-    if ( equal_id(fe,get_next_facet(fe)) )
-    { halfflag = 1; /* need to go back and do other side of wedge */
-      halffe = fe;
-      break;
+  { 
+#define FESTACKSIZE 20
+    facetedge_id fe_stack[FESTACKSIZE];
+    int stackcount = 0;
+
+    fe_stack[stackcount++] = fe_a;
+    fe_stack[stackcount++] = inverse_id(get_next_edge(fe_a));
+    fe_stack[stackcount++] = inverse_id(get_next_edge(fe_aa));
+    if ( valid_id(fe_b) )
+    { fe_stack[stackcount++] = inverse_id(fe_b);
+      fe_stack[stackcount++] = get_prev_edge(fe_b);
+      fe_stack[stackcount++] = get_prev_edge(fe_bb);
     }
-    fe = get_next_facet(inverse_id(get_next_edge(fe)));
-    if ( !valid_id(halffe) ) halffe = fe;
-  } while ( !equal_id(fe,fe_a) );
-  if ( halfflag )
-  { fe = get_prev_facet(inverse_id(get_next_edge(fe_aa)));
-    if ( !valid_id(halffe) ) halffe = fe;
-    do
-    {
+    while ( stackcount )
+    { fe = fe_stack[--stackcount];
       e_id = get_fe_edge(fe);
+      if ( equal_id(get_edge_headv(e_id),new_v) )
+        continue;
       remove_vertex_edge(old_v,inverse_id(e_id));
       set_edge_headv(e_id,new_v);
-      if ( equal_id(fe,get_next_facet(fe)) )
-        break;
-      fe = get_prev_facet(inverse_id(get_next_edge(fe)));
-    } while ( !equal_id(fe,fe_aa) );
-  }
-  /* fix up attributes of new_v, which was clone of old_v */
-  unset_attr(new_v,FIXED);
-  if ( valid_id(halffe) )
-  { /* set attributes to same as halffe */
-    e_id = get_fe_edge(halffe);
-    if ( get_eattr(e_id) & BOUNDARY )
-    { if ( get_boundary(new_v) != get_edge_boundary(e_id) )
-        kb_error(2440,"Trying to pop vertex not on same boundary as incoming edge.",RECOVERABLE);
-    }
-    else
-    { set_boundary_num(new_v,0);
-      unset_attr(new_v,BOUNDARY);
-    }
-    vmap = get_v_constraint_map(new_v);
-    emap = get_e_constraint_map(e_id);
-    for ( i = 1 ; i <= (int)emap[0] ; i++ ) vmap[i] = emap[i];
-    for ( ; i <= (int)vmap[0] ; i++ ) vmap[i] = 0;
-    vmap[0] = emap[0];
-    if ( vmap[0] ) set_attr(new_v,CONSTRAINT);
-    else unset_attr(new_v,CONSTRAINT);
+
+      // add adjacent facet next edges
+      if ( !equal_id(fe,fe_a) && !equal_id(fe,fe_aa)
+            && !equal_id(fe,inverse_id(fe_b)) &&
+            !equal_id(fe,inverse_id(fe_bb)) )
+      {
+        facetedge_id start_fe = fe;
+        do
+        { facetedge_id next_fe = inverse_id(get_next_edge(fe));
+          edge_id next_e = get_fe_edge(next_fe);
+          if ( !equal_id(get_edge_headv(next_e),new_v) )
+          { // add to stack
+            fe_stack[stackcount++] = next_fe;
+          }
+          fe = get_next_facet(fe);
+        } while ( !equal_id(fe,start_fe) );
+      }
+    } 
   }
 
-  if ( septum_flag )
+  if ( this_septum_flag )
   {
-    /* fix up attributes of new_e, which was brand new */
-    if ( valid_id(halffe) )
-    { /* set attributes to same as halffe */
-      e_id = get_fe_edge(halffe);
-      if ( get_eattr(e_id) & BOUNDARY )
-      { set_edge_boundary_num(new_e,get_edge_boundary_num(e_id));
-        set_attr(new_e,BOUNDARY);
-      }
-      if ( get_eattr(e_id) & CONSTRAINT )
-      { conmap_t *eemap = get_e_constraint_map(new_e);
-        emap = get_e_constraint_map(e_id);
-        for ( i = 1 ; i <= (int)emap[0] ; i++ ) eemap[i] = emap[i];
-        eemap[0] = emap[0];
-        set_attr(new_e,CONSTRAINT);
-      }
-    }
-
     /* create two new facets */
     new_fa = dup_facet(get_fe_facet(fe_a));
+    set_original(new_fa,NULLID);
     if ( valid_id(fe_b) )
     {
        new_fb = dup_facet(get_fe_facet(fe_b));
+       set_original(new_fb,NULLID);
     }
   
     /* create new facet-edges */
@@ -869,7 +854,7 @@ int septum_flag;
       for ( i = 0 ; i < SDIM ; i++ )
          velocity[i] = new_displacement[i];
     }
-  } /* end if septum_flag */
+  } /* end if this_septum_flag */
   else
   { /* no septum, so just reset facetedge links */
     
@@ -903,7 +888,7 @@ int septum_flag;
       set_edge_fe(new_b,fe_b_next);
     }
   }
-}
+} // end versplit()
 
 /***************************************************************************
 *
@@ -918,11 +903,11 @@ int septum_flag;
 * return:  Number of edges split.
 */
 
-int two_split(key_fe,septum_flag)
-facetedge_id key_fe;  /* starting edge */
-int septum_flag; /* no septum not implemented yet */
+int two_split(
+  facetedge_id key_fe,  /* starting edge */
+  int this_septum_flag /* no septum not implemented yet */
+)
 {
-
   facetedge_id headsplitlist[10];
   int headsplitcount = 0;
   int headsplitflag = 0; /* whether to split end vertex */
@@ -1144,7 +1129,7 @@ int septum_flag; /* no septum not implemented yet */
   popped = splitcount;
 
   return popped;
-}  
+} // end two_split()
 
 /**********************************************************************
 
@@ -1162,7 +1147,7 @@ int septum_flag; /* no septum not implemented yet */
 #define KRAYNIKCONE    7
 #define CUBECONE      8
 #define ODD4CONE      9
-static  facetedge_id *felist;  /* for cell-ordered list */
+
 
 
 /*************************************************************************
@@ -1182,7 +1167,7 @@ int verpop_film()
   }
 
   return popcount;
-}
+} // end verpop_film()
 
 /************************************************************************
 *
@@ -1203,7 +1188,7 @@ int find_vertex_to_pop()
   int count,maxcount;
   int spot,dups,conetype;
   int popcount = 0;  
-
+  struct cone_info cinfo;
 
   /* Allocate list, with room for each facet thrice */
   maxcount = 3*web.skel[FACET].count;
@@ -1248,22 +1233,22 @@ int find_vertex_to_pop()
 
     if ( get_vattr(v_id) & FIXED ) continue;
 
-    conetype = cone_analyze(vflist + spot,dups);
+    conetype = cone_analyze(vflist + spot,dups,&cinfo);
     if ( conetype == KRAYNIKCONE ) 
-      popcount += kraynik_pop(v_id,dups);
+      popcount += kraynik_pop(v_id,dups,&cinfo);
     else if ( conetype == CUBECONE ) 
-      popcount += cubecone_pop(v_id,dups);
+      popcount += cubecone_pop(v_id,dups,&cinfo);
     else if ( conetype == ODD4CONE )
-      popcount += odd4cone_pop(v_id,dups);
+      popcount += odd4cone_pop(v_id,dups,&cinfo);
     else if ( conetype == OTHERCONE )
-      popcount += pop_vertex(v_id,dups);
-    temp_free((char *)felist);
+      popcount += pop_vertex(v_id,dups,&cinfo);
+    temp_free((char *)(cinfo.felist));
     if ( popcount ) break;  /* one vertex at a time */
   }
              
   temp_free((char *)vflist);
   return popcount;
-}
+} // end find_vertex_to_pop()
 
 /**************************************************************************
 *
@@ -1273,8 +1258,7 @@ int find_vertex_to_pop()
 *
 */
 
-int pop_given_vertex(v_id)
-vertex_id v_id;
+int pop_given_vertex(vertex_id v_id)
 {
   struct verfacet *vflist;
   facetedge_id fe,start_fe,loop_fe;
@@ -1283,6 +1267,7 @@ vertex_id v_id;
   int spot,dups,conetype;
   int popcount = 0;  
   int con_hits;
+  struct cone_info cinfo;
 
   if ( !valid_id(get_vertex_edge(v_id)) )
   { if ( !(get_vattr(v_id) & FIXED) )
@@ -1350,22 +1335,22 @@ vertex_id v_id;
 
     if ( get_vattr(v_id) & FIXED ) continue;
 
-    conetype = cone_analyze(vflist + spot,dups);
+    conetype = cone_analyze(vflist + spot,dups,&cinfo);
     if ( conetype == KRAYNIKCONE ) 
-      popcount += kraynik_pop(v_id,dups);
+      popcount += kraynik_pop(v_id,dups,&cinfo);
     else if ( conetype == CUBECONE ) 
-      popcount += cubecone_pop(v_id,dups);
+      popcount += cubecone_pop(v_id,dups,&cinfo);
     else if ( conetype == ODD4CONE )
-      popcount += odd4cone_pop(v_id,dups);
+      popcount += odd4cone_pop(v_id,dups,&cinfo);
     else if ( conetype == OTHERCONE )
-      popcount += pop_vertex(v_id,dups);
-    temp_free((char *)felist);
+      popcount += pop_vertex(v_id,dups,&cinfo);
+    temp_free((char *)(cinfo.felist));
     break;  /* one vertex at a time */
   }
              
   temp_free((char *)vflist);
   return popcount;
-}
+} // end pop_given_vertex()
 
 /**************************************************************************
 *
@@ -1375,37 +1360,17 @@ vertex_id v_id;
 *
 */
 
-#define CELLMAX 300
-#define ARCMAX  600
-
-static struct cell { int start;     /* arc list start in arclist */
-                  int festart;  /* starting place in felist */
-                  int num;        /* number of arcs                */
-                  int fenum;     /* number of facetedges */
-                  REAL area;     /* external angle deficit     */
-                  body_id b_id; /* which body, if any */
-                } cell[CELLMAX];
-static struct arc  { int start;     /* edge list start in felist */
-                  int num;        /* number of edges              */
-                  int valence;  /* number of arcs into head node */
-/*                int headtype; */  /* type of head node */
-                } arclist[ARCMAX];
-static  int cells;
-
-int figure_type ARGS((int));
-
-int figure_type(arcs)
-int arcs;
+int figure_type(struct cone_info *cinfo)
 { int k,type;
 
   /* Classifying cone */
-  switch ( cells )
+  switch ( cinfo->cells )
      {
         case 1: /* wire boundary */
                   type = WIREBOUNDARY;
                   break;
 
-        case 2: switch ( arcs )
+        case 2: switch ( cinfo->arcs )
                     {
                       case 2: /* internal plane */
                          type = PLANECONE;
@@ -1419,12 +1384,13 @@ int arcs;
                     }
                   break;
 
-        case 3: switch ( arcs ) 
+        case 3: switch ( cinfo->arcs ) 
                     {
                       case 6: /* triple edge */
                          type = TRIPLE_EDGER;
-                         for ( k = 0 ; k < cells ; k++ )
-                            if ( cell[k].num != 2 ) type = OTHERCONE;
+                         for ( k = 0 ; k < cinfo->cells ; k++ )
+                            if ( cinfo->cell[k].num != 2 ) 
+                              type = OTHERCONE;
                          break;
                       default:
                          type = OTHERCONE;
@@ -1432,12 +1398,12 @@ int arcs;
                     }
                   break;
 
-        case 4: switch ( arcs )
+        case 4: switch ( cinfo->arcs )
                     { 
                       case 12: /* maybe tetrahedral cone */
                       { int twos=0,threes=0,fours=0;
-                         for ( k = 0 ; k < cells ; k++ )
-                         { switch ( cell[k].num )
+                         for ( k = 0 ; k < cinfo->cells ; k++ )
+                         { switch ( cinfo->cell[k].num )
                            { case 2: twos++; break;
                              case 3: threes++; break;
                              case 4: fours++; break;
@@ -1456,19 +1422,19 @@ int arcs;
                     }
                   break;
 
-        case 5: if ( !kraynikpopvertex_flag || (arcs != 18) ) 
+        case 5: if ( !kraynikpopvertex_flag || (cinfo->arcs != 18) ) 
                 { type = OTHERCONE; break; }
                 type = KRAYNIKCONE;
-                for ( k = 0 ; k < cells ; k++ )
-                  if ( (cell[k].num < 3) || (cell[k].num > 4) )
+                for ( k = 0 ; k < cinfo->cells ; k++ )
+                  if ( (cinfo->cell[k].num < 3) || (cinfo->cell[k].num > 4) )
                     { type = OTHERCONE; break; }
                 break;
 
          case 6: type = CUBECONE;
-                 if ( arcs != 24 )
+                 if ( cinfo->arcs != 24 )
                  { type = OTHERCONE; break; }
-                 for ( k = 0 ; k < cells ; k++ )
-                  if ( cell[k].num != 4 )
+                 for ( k = 0 ; k < cinfo->cells ; k++ )
+                  if ( cinfo->cell[k].num != 4 )
                     { type = OTHERCONE; break; }              
                  break;
 
@@ -1477,7 +1443,7 @@ int arcs;
                     break;
       }
   return type;
-}
+} // end figure_type()
 
 /***************************************************************************
 *
@@ -1488,21 +1454,21 @@ int arcs;
 *
 */
 
-int cone_analyze(vf,count)
-struct verfacet *vf;
-int count;
+int cone_analyze(
+  struct verfacet *vf,
+  int count,
+  struct cone_info *cinfo)
 {
   int type;  /* final classification */
   facetedge_id fe,nextfe,ray,nextray;
   vertex_id v_id = vf->v_id;
   int cellstart,arcstart,cellsides;
   int arclen,valence;
-  int arcs;
   int k,j;
   int nodeflag;  /* whether any interesting node has been found for cell */
 
   /* First, set up network structure of edges opposite central vertex */
-  felist = (facetedge_id *)temp_calloc(sizeof(facetedge_id),2*count);
+  cinfo->felist = (facetedge_id *)temp_calloc(sizeof(facetedge_id),2*count);
 
   /* fill with outside edges of facets */
   for ( k = 0 ; k < count ; k++ )
@@ -1512,20 +1478,20 @@ int count;
       fe = get_next_edge(fe);
     else if ( equal_id(v_id,get_fe_headv(fe)) )
       fe = get_prev_edge(fe);
-    felist[2*k] = fe;
-    felist[2*k+1] = inverse_id(fe);
+    cinfo->felist[2*k] = fe;
+    cinfo->felist[2*k+1] = inverse_id(fe);
   }
 
   /* order into arcs and cell boundaries */
   k = 0;        /* current edge number */
-  cells = 0;    /* current cell number */
-  arcs = 0;     /* current arc number */
+  cinfo->cells = 0;    /* current cell number */
+  cinfo->arcs = 0;     /* current arc number */
   while ( k < 2*count )
   {
 CELLSTART:
     /* starting new cell */
     if ( k >= 2*count ) break;
-    if ( cells >= CELLMAX )
+    if ( cinfo->cells >= CELLMAX )
     { sprintf(errmsg,"pop: Too many cells around vertex %s in cone_analyze().\n",
          ELNAME(v_id));
       kb_error(1301,errmsg, RECOVERABLE);
@@ -1534,18 +1500,18 @@ CELLSTART:
     nodeflag = 0;  /* whether interesting node found on cell */
     cellstart = k;
     cellsides = 0;
-    cell[cells].start = arcs;
+    cinfo->cell[cinfo->cells].start = cinfo->arcs;
 
 ARCSTART:
     /* starting new arc */
-    if ( arcs >= ARCMAX )
+    if ( cinfo->arcs >= ARCMAX )
     { sprintf(errmsg,"pop: Too many arcs around vertex %s in cone_analyze().\n",
          ELNAME(v_id));
       kb_error(1302,errmsg, RECOVERABLE);
     }
 
     arcstart = k;
-    arclist[arcs].start = arcstart;
+    cinfo->arclist[cinfo->arcs].start = arcstart;
 ARCRESTART:
     arclen = 0;
 
@@ -1553,7 +1519,7 @@ ARCRESTART:
     {
       /* starting next edge */
       arclen++;
-      fe = felist[k];
+      fe = cinfo->felist[k];
       nextray = ray = get_next_edge(fe);
       for ( valence = 1 ; ; valence++ )
       { nextray = get_next_facet(nextray);
@@ -1561,22 +1527,22 @@ ARCRESTART:
       }
       nextray = get_next_facet(ray);
       nextfe = get_next_edge(inverse_id(nextray));
-      if ( equal_id(nextfe,felist[cellstart]) )  /* have gone around */
+      if ( equal_id(nextfe,cinfo->felist[cellstart]) )  /* have gone around */
       {
-        arclist[arcs].num = arclen;
-        arclist[arcs].valence = valence;
-        arcs++;
+        cinfo->arclist[cinfo->arcs].num = arclen;
+        cinfo->arclist[cinfo->arcs].valence = valence;
+        cinfo->arcs++;
         cellsides++;
-        cell[cells].num = cellsides;
-        cells++;
+        cinfo->cell[cinfo->cells].num = cellsides;
+        cinfo->cells++;
         k++;
         goto CELLSTART;
       }
 
       /* linear search list until nextfe found */
       for ( j = k+1 ; j < 2*count ; j++ )
-        if ( equal_id(nextfe,felist[j]) ) break;
-      if ( !equal_id(nextfe,felist[j]) ) 
+        if ( equal_id(nextfe,cinfo->felist[j]) ) break;
+      if ( !equal_id(nextfe,cinfo->felist[j]) ) 
       { sprintf(errmsg,
        "Internal error: cone_analyze vertex %s: can't find nextfe in felist.\n",
           ELNAME(v_id));
@@ -1584,8 +1550,8 @@ ARCRESTART:
       }
       if ( j > k+1 ) /* swap into place */
       {
-        felist[j] = felist[k+1];
-        felist[k+1] = nextfe;
+        cinfo->felist[j] = cinfo->felist[k+1];
+        cinfo->felist[k+1] = nextfe;
       }
 
       /* see if node between is interesting */
@@ -1594,15 +1560,15 @@ ARCRESTART:
         if ( nodeflag == 0 ) 
         { /* first interesting node for cell */
           /* reset felist so cell and arc start are same */
-          felist[k] = felist[arcstart];
-          felist[arcstart] = nextfe;
-          felist[k+1] = fe;
+          cinfo->felist[k] = cinfo->felist[arcstart];
+          cinfo->felist[arcstart] = nextfe;
+          cinfo->felist[k+1] = fe;
           nodeflag = 1;
           goto ARCRESTART;
         }
-        arclist[arcs].num = arclen;
-        arclist[arcs].valence = valence;
-        arcs++;
+        cinfo->arclist[cinfo->arcs].num = arclen;
+        cinfo->arclist[cinfo->arcs].valence = valence;
+        cinfo->arcs++;
         cellsides++;
         k++;
         goto ARCSTART;
@@ -1610,10 +1576,10 @@ ARCRESTART:
     }
   }
 
-  type = figure_type(arcs);  /* so stupid SUN can optimize */
+  type = figure_type(cinfo);  /* so stupid SUN can optimize */
 
   return  type;
-}
+} // end cone_analyze()
 
 
 /*******************************************************************
@@ -1627,9 +1593,11 @@ ARCRESTART:
 *                 boundary.
 */
 
-int pop_vertex(v_id,count)
-vertex_id v_id;
-int count;  /* number of entries in vflist */
+int pop_vertex(
+  vertex_id v_id,
+  int count,  /* number of entries in vflist */
+  struct cone_info *cinfo
+ )
 {
   int i,j,k,m;
   struct arc *ar;
@@ -1660,19 +1628,19 @@ int count;  /* number of entries in vflist */
   }
 
   /* fix up cell structures */
-  for ( i = 0 ; i < cells ; i++ )
-  { cell[i].fenum = 0;
-    ar = arclist + cell[i].start;
-    cell[i].festart = ar->start;
-    for ( j = 0 ; j < cell[i].num ; j++, ar++ )
-      cell[i].fenum += ar->num;
+  for ( i = 0 ; i < cinfo->cells ; i++ )
+  { cinfo->cell[i].fenum = 0;
+    ar = cinfo->arclist + cinfo->cell[i].start;
+    cinfo->cell[i].festart = ar->start;
+    for ( j = 0 ; j < cinfo->cell[i].num ; j++, ar++ )
+      cinfo->cell[i].fenum += ar->num;
   }
 
   /* check for special configuration of touching disjoint cones
      that may want to be merged rather than split
   */
-  if ( (cells == 4) && (cell[0].num == 1) && (cell[1].num == 1)
-          && (cell[2].num == 1) && (cell[3].num == 1) )
+  if ( (cinfo->cells == 4) && (cinfo->cell[0].num == 1) && (cinfo->cell[1].num == 1)
+          && (cinfo->cell[2].num == 1) && (cinfo->cell[3].num == 1) )
   { REAL cosa,bestcosa; 
     facetedge_id bestray1=NULLID, bestray2=NULLID,fe_1,fe_2;
     int samecell,othercell;
@@ -1688,10 +1656,10 @@ int count;  /* number of entries in vflist */
  
     /* first, see which cells are really the same cones */
     samecell = 0;
-    for ( i = 1 ; i < cells ; i++ )
-    { for ( j = 0 ; j < cell[0].fenum ; j++ )
-       for ( k = 0 ; k < cell[i].fenum ; k++ )
-        if (equal_element(felist[cell[0].festart+j],felist[cell[i].festart+k])) 
+    for ( i = 1 ; i < cinfo->cells ; i++ )
+    { for ( j = 0 ; j < cinfo->cell[0].fenum ; j++ )
+       for ( k = 0 ; k < cinfo->cell[i].fenum ; k++ )
+        if (equal_element(cinfo->felist[cinfo->cell[0].festart+j],cinfo->felist[cinfo->cell[i].festart+k])) 
         { samecell = i;
           break;
         }
@@ -1703,7 +1671,6 @@ int count;  /* number of entries in vflist */
     }
     othercell = (samecell == 1) ? 2 : 1;
 
-
     /* get axis and see if cones wide enough to pop this way */
     area1 = area2 = 0.0;
     memset((char*)axis1,0,sizeof(axis1));
@@ -1711,8 +1678,8 @@ int count;  /* number of entries in vflist */
     memset((char*)totnorm1,0,sizeof(totnorm1));
     memset((char*)totnorm2,0,sizeof(totnorm2));
     totside1length = totside2length = 0.0;
-    for ( i = 0 ; i < cell[samecell].fenum ; i++ )
-    { fe_1 = felist[cell[samecell].festart+i];
+    for ( i = 0 ; i < cinfo->cell[samecell].fenum ; i++ )
+    { fe_1 = cinfo->felist[cinfo->cell[samecell].festart+i];
       f_1 = get_fe_facet(fe_1);
       get_facet_normal(f_1,normal1);
       area1 += sqrt(dot(normal1,normal1,SDIM));
@@ -1723,8 +1690,8 @@ int count;  /* number of entries in vflist */
         axis1[j] += side1[j];
       totside1length += sqrt(dot(side1,side1,SDIM));
     }
-    for ( i = 0 ; i < cell[othercell].fenum ; i++ )
-    { fe_2 = felist[cell[othercell].festart+i];
+    for ( i = 0 ; i < cinfo->cell[othercell].fenum ; i++ )
+    { fe_2 = cinfo->felist[cinfo->cell[othercell].festart+i];
       f_2 = get_fe_facet(fe_2);
       get_facet_normal(f_2,normal2);
       area2 += sqrt(dot(normal2,normal2,SDIM));
@@ -1734,10 +1701,12 @@ int count;  /* number of entries in vflist */
       for ( j = 0 ; j < SDIM ; j++ )
         axis2[j] += side2[j];
       totside2length += sqrt(dot(side2,side2,SDIM));
-       }
+    }
 
-    if ( pop_disjoin_flag ) goto narrowcones;
-    if ( pop_enjoin_flag ) goto widecones;
+    if ( pop_disjoin_flag ) 
+      goto narrowcones;
+    if ( pop_enjoin_flag ) 
+      goto widecones;
     
     /* test wideness */
     ratio = (sqrt(dot(totnorm1,totnorm1,SDIM))+sqrt(dot(totnorm2,totnorm2,SDIM)))
@@ -1747,7 +1716,7 @@ int count;  /* number of entries in vflist */
     
 widecones: 
     /* choose cones to get facet normals going same way */
-    for ( j = 1 ; j < cells ; j++ )
+    for ( j = 1 ; j < cinfo->cells ; j++ )
         if ( (j != samecell) && (j != othercell) ) break;
       othercell2 = j;
     samecell2 = 0;
@@ -1778,10 +1747,10 @@ widecones:
       tmp = samecell2; samecell2 = othercell2; othercell2 = tmp;
     }
 
-    bs1 = get_facet_body(get_fe_facet(felist[cell[samecell].festart]));
-    bs2 = get_facet_body(get_fe_facet(felist[cell[samecell2].festart]));
-    bo1 = get_facet_body(get_fe_facet(felist[cell[othercell].festart]));
-    bo2 = get_facet_body(get_fe_facet(felist[cell[othercell2].festart]));
+    bs1 = get_facet_body(get_fe_facet(cinfo->felist[cinfo->cell[samecell].festart]));
+    bs2 = get_facet_body(get_fe_facet(cinfo->felist[cinfo->cell[samecell2].festart]));
+    bo1 = get_facet_body(get_fe_facet(cinfo->felist[cinfo->cell[othercell].festart]));
+    bo2 = get_facet_body(get_fe_facet(cinfo->felist[cinfo->cell[othercell2].festart]));
     if ( !equal_id(bs2,bo1) )
     { /* have to flip sides */
       int tmp;
@@ -1797,28 +1766,28 @@ widecones:
     }
       
     /* test bodies to see if we want septum */
-    fe_1 = felist[cell[samecell].festart];
+    fe_1 = cinfo->felist[cinfo->cell[samecell].festart];
     f_1  = get_fe_facet(fe_1);
-    fe_2 = felist[cell[othercell].festart];
+    fe_2 = cinfo->felist[cinfo->cell[othercell].festart];
     f_2  = get_fe_facet(fe_2);
     b_1 = get_facet_body(f_1);
     b_2 = get_facet_body(inverse_id(f_2));
-    if ( !valid_id(b_1) || !valid_id(b_2) || !equal_id(b_1,b_2) )
+    if ( (septum_flag != 0) && (!valid_id(b_1) || !valid_id(b_2) || !equal_id(b_1,b_2)) )
     { middleflag = 1;
       f_septum = dup_facet(f_1);
+      set_original(f_septum,NULLID);
       set_facet_body(f_septum,b_1);
       set_facet_body(inverse_id(f_septum),b_2);
     }
 
-
     /* now find closest rays on opposite cells */
     bestcosa = -1.0;
-    for ( i = 0 ; i < cell[samecell].fenum ; i++ )
+    for ( i = 0 ; i < cinfo->cell[samecell].fenum ; i++ )
     { REAL edge1[MAXCOORD],edge2[MAXCOORD];
-      facetedge_id ray1 = get_prev_edge(felist[cell[samecell].festart+i]);
+      facetedge_id ray1 = get_prev_edge(cinfo->felist[cinfo->cell[samecell].festart+i]);
       get_fe_side(ray1,edge1);
-      for ( j = 0 ; j < cell[othercell].fenum ; j++ )
-      { facetedge_id ray2 = get_prev_edge(felist[cell[othercell].festart+j]);
+      for ( j = 0 ; j < cinfo->cell[othercell].fenum ; j++ )
+      { facetedge_id ray2 = get_prev_edge(cinfo->felist[cinfo->cell[othercell].festart+j]);
         get_fe_side(ray2,edge2);
         cosa = dot(edge1,edge2,SDIM)/sqrt(dot(edge1,edge1,SDIM)*
                      dot(edge2,edge2,SDIM));
@@ -1827,7 +1796,7 @@ widecones:
       }
     } 
     /* get lower number of sides in first cone */
-    if ( cell[samecell].fenum > cell[othercell].fenum )
+    if ( cinfo->cell[samecell].fenum > cinfo->cell[othercell].fenum )
     { int tmp = samecell;
       facetedge_id fetmp = bestray1;
       samecell = othercell;
@@ -1841,7 +1810,7 @@ widecones:
     fe_1 = bestray1;
     fe_2 = bestray2;
     prev_fe3 = NULLID;
-    for ( j = 0 ; j < cell[samecell].fenum ; j++ )
+    for ( j = 0 ; j < cinfo->cell[samecell].fenum ; j++ )
     { edge_id e_1,e_1next,e_2next,newe;
       facetedge_id fe_1next,fe_2next,newfe1,newfe2;
       facet_id f_1,f_2;
@@ -1855,7 +1824,7 @@ widecones:
       e_2next = get_fe_edge(fe_2next);
       f_1 = get_fe_facet(fe_1next);
       f_2 = get_fe_facet(fe_2next);
-      if ( j < cell[samecell].fenum - 1 )
+      if ( j < cinfo->cell[samecell].fenum - 1 )
       { newv = dup_vertex(v_id);
         remove_vertex_edge(v_id,e_1next);
         remove_vertex_edge(v_id,e_2next);
@@ -1921,8 +1890,8 @@ widecones:
     if ( middleflag )
     { set_next_edge(prev_fe3,first_fe3);
       set_prev_edge(first_fe3,prev_fe3);
-      if ( cell[samecell].fenum > 3 )
-        face_triangulate(f_septum,cell[samecell].fenum);
+      if ( cinfo->cell[samecell].fenum > 3 )
+        face_triangulate(f_septum,cinfo->cell[samecell].fenum);
     }
     return 1;
 
@@ -1930,35 +1899,35 @@ widecones:
   }
 
   /* see if any cells are totally detachable */
-  for ( i = 0 ; i < cells ; i++ )
+  for ( i = 0 ; i < cinfo->cells ; i++ )
   { vertex_id newv;
-    ar = arclist + cell[i].start;
-    if ( (cell[i].num != 1) || (ar->valence != 2) ) continue;
+    ar = cinfo->arclist + cinfo->cell[i].start;
+    if ( (cinfo->cell[i].num != 1) || (ar->valence != 2) ) continue;
     /* now have one */
     newv = dup_vertex(v_id);
     for ( j = 0 ; j < ar->num ; j++ )
-    { fe = felist[ar->start+j];
+    { fe = cinfo->felist[ar->start+j];
       ray_e = get_fe_edge(get_next_edge(fe));
       remove_vertex_edge(v_id,inverse_id(ray_e));
       set_edge_headv(ray_e,newv);
     }
     return 1;    /* safe to do only one at a time */
   }
-
+ 
   /* calculate areas of each cell */
-  for ( i = 0 ; i < cells ; i++ )
+  for ( i = 0 ; i < cinfo->cells ; i++ )
   {
     total_angle = 0.0;
-    fenum = cell[i].festart;
-    fe = felist[fenum+cell[i].fenum-1];
-    cell[i].b_id = get_facet_body(get_fe_facet(inverse_id(fe)));
+    fenum = cinfo->cell[i].festart;
+    fe = cinfo->felist[fenum+cinfo->cell[i].fenum-1];
+    cinfo->cell[i].b_id = get_facet_body(get_fe_facet(inverse_id(fe)));
     get_fe_side(fe,side);
     get_fe_side(get_prev_edge(fe),ray);
     cross_prod(ray,side,prevnormal);
     prevnorm = sqrt(SDIM_dot(prevnormal,prevnormal));
-    for ( k = 0 ; k < cell[i].fenum ; k++,fenum++ )
+    for ( k = 0 ; k < cinfo->cell[i].fenum ; k++,fenum++ )
     { 
-      fe = felist[fenum];
+      fe = cinfo->felist[fenum];
       get_fe_side(fe,side);
       get_fe_side(get_prev_edge(fe),ray);
       cross_prod(ray,side,thisnormal);
@@ -1977,8 +1946,8 @@ widecones:
       memcpy((char *)prevnormal,(char *)thisnormal,sizeof(prevnormal));
     }
 
-    cell[i].area = 2*M_PI - total_angle;
-    total_area += cell[i].area;
+    cinfo->cell[i].area = 2*M_PI - total_angle;
+    total_area += cinfo->cell[i].area;
   }                  
 
   /* kludge to adjust for 2*pi ambiguity in turning angle that can
@@ -1986,19 +1955,19 @@ widecones:
   while ( total_area > 4*M_PI + 1 )
   { int maxi = -1; 
     REAL maxa = -1e30;
-    for ( i = 0 ; i < cells ; i++ )
-     if ( cell[i].area > maxa )
-     { maxi = i; maxa = cell[i].area; }
-    cell[maxi].area -= 2*M_PI;
+    for ( i = 0 ; i < cinfo->cells ; i++ )
+     if ( cinfo->cell[i].area > maxa )
+     { maxi = i; maxa = cinfo->cell[i].area; }
+    cinfo->cell[maxi].area -= 2*M_PI;
     total_area -= 2*M_PI;
   }
   while ( total_area < 4*M_PI - 1)
   { int mini = -1; 
     REAL mina = 1e30;
-    for ( i = 0 ; i < cells ; i++ )
-     if ( cell[i].area < mina )
-     { mini = i; mina = cell[i].area; }
-    cell[mini].area += 2*M_PI;
+    for ( i = 0 ; i < cinfo->cells ; i++ )
+     if ( cinfo->cell[i].area < mina )
+     { mini = i; mina = cinfo->cell[i].area; }
+    cinfo->cell[mini].area += 2*M_PI;
     total_area += 2*M_PI;
   }
 
@@ -2018,9 +1987,9 @@ widecones:
   }
   
   /* see which cell is the largest */
-  for ( i = 0 ; i < cells ; i++ )
-    if ( cell[i].area > maxarea ) 
-    { bigcell = i; maxarea = cell[i].area; }
+  for ( i = 0 ; i < cinfo->cells ; i++ )
+    if ( cinfo->cell[i].area > maxarea ) 
+    { bigcell = i; maxarea = cinfo->cell[i].area; }
 
   /* Now go around covering over all cells but bigcell or cells
       bigger than hemisphere */
@@ -2033,7 +2002,7 @@ widecones:
   }
   for ( j = 0 ; j < 2*count ; j++ )
   { REAL rayvec[MAXCOORD];
-    fe = felist[j];
+    fe = cinfo->felist[j];
     ray_fe = get_prev_edge(fe);
     if ( !equal_id(v_id,get_fe_tailv(ray_fe)) ) continue; /* done this */
     ray_e = get_fe_edge(ray_fe);
@@ -2056,7 +2025,7 @@ widecones:
     vertex_id v1,v2;
     edge_id new_e;
  
-    fe = felist[j];
+    fe = cinfo->felist[j];
     ray_fe = get_prev_edge(fe);
     inray_fe = get_next_edge(fe);
     v1 = get_fe_tailv(ray_fe);
@@ -2093,35 +2062,36 @@ widecones:
       set_prev_facet(new_fe_prev,new_fe_next);
       set_prev_facet(new_fe_next,new_fe);
       
-      felist[j] = inverse_id(new_fe_next);    /* new inner fe */
+      cinfo->felist[j] = inverse_id(new_fe_next);    /* new inner fe */
     }
     else
-    { felist[j] = inverse_id(get_next_facet(get_next_edge(inray_fe)));
+    { cinfo->felist[j] = inverse_id(get_next_facet(get_next_edge(inray_fe)));
       divide_quad(fe);
     }
   }
           
         
   /* now connect up insides of cells */
-  for ( i = 0 ; i < cells ; i++ )
+  for ( i = 0 ; i < cinfo->cells ; i++ )
   {
     facet_id new_f=0,old_f;
     facetedge_id prev_fe=0;  /* last in edge chain */
 
-    fenum = cell[i].festart;
-    if ( (i != bigcell) && (cell[i].area < 2*M_PI) )
-    { prev_fe = felist[fenum+cell[i].fenum-1];
+    fenum = cinfo->cell[i].festart;
+    if ( (i != bigcell) && (cinfo->cell[i].area < 2*M_PI) )
+    { prev_fe = cinfo->felist[fenum+cinfo->cell[i].fenum-1];
       old_f = facet_inverse(get_fe_facet(get_next_facet(prev_fe)));
       new_f = dup_facet(old_f);
-      set_facet_body(new_f,cell[bigcell].b_id);
-      set_facet_body(inverse_id(new_f),cell[i].b_id);
+      set_original(new_f,NULLID);
+      set_facet_body(new_f,cinfo->cell[bigcell].b_id);
+      set_facet_body(inverse_id(new_f),cinfo->cell[i].b_id);
       set_facet_fe(new_f,prev_fe);
     }
 
-    for ( k = 0 ; k < cell[i].fenum ; k++,fenum++ )
+    for ( k = 0 ; k < cinfo->cell[i].fenum ; k++,fenum++ )
     { 
-      fe = felist[fenum];
-      if ( (i == bigcell) || (cell[i].area >= 2*M_PI) )
+      fe = cinfo->felist[fenum];
+      if ( (i == bigcell) || (cinfo->cell[i].area >= 2*M_PI) )
       { /* have to excise fe */
         set_prev_facet(get_next_facet(fe),get_prev_facet(fe));
         set_next_facet(get_prev_facet(fe),get_next_facet(fe));
@@ -2137,10 +2107,10 @@ widecones:
     }
 
     /* if necessary, triangulate new cell facet */
-    if ( (i != bigcell) && (cell[i].area < 2*M_PI) ) 
-    { if ( cell[i].fenum >= 5 )
-         face_triangulate(new_f,cell[i].fenum);
-      else if ( cell[i].fenum == 4 )
+    if ( (i != bigcell) && (cinfo->cell[i].area < 2*M_PI) ) 
+    { if ( cinfo->cell[i].fenum >= 5 )
+         face_triangulate(new_f,cinfo->cell[i].fenum);
+      else if ( cinfo->cell[i].fenum == 4 )
       divide_quad(get_facet_fe(new_f));
     } 
  }
@@ -2150,7 +2120,7 @@ widecones:
   free_element(v_id);
 
   return 1;
-}
+} // end pop_vertex()
 
 /*******************************************************************
 *
@@ -2159,9 +2129,11 @@ widecones:
 *  Purpose:    pops one non-minimal vertex of type KRAYNIKCONE.
 */
 
-int kraynik_pop(v_id,count)
-vertex_id v_id;
-int count;  /* number of entries in vflist */
+int kraynik_pop(
+  vertex_id v_id,
+  int count,  /* number of entries in vflist */
+  struct cone_info *cinfo
+)
 {
   int i,j,k,m,kk;
   struct arc *ar;
@@ -2174,11 +2146,11 @@ int count;  /* number of entries in vflist */
   REAL mag;
 
   /* find the 3-arc cells */
-  for ( k = 0 ; k < cells ; k++ )
-     if ( cell[k].num == 3 ) break;
-  for ( kk = k+1 ; kk < cells ; kk++ )
-     if ( cell[kk].num == 3 ) break;
-  if ( kk == cells )
+  for ( k = 0 ; k < cinfo->cells ; k++ )
+     if ( cinfo->cell[k].num == 3 ) break;
+  for ( kk = k+1 ; kk < cinfo->cells ; kk++ )
+     if ( cinfo->cell[kk].num == 3 ) break;
+  if ( kk == cinfo->cells )
     return 0; /* failure */
 
   for ( i = 0 ; i < SDIM ; i++ )
@@ -2186,16 +2158,16 @@ int count;  /* number of entries in vflist */
 
   /* get triple lines and vectors to see which way to pop */
   for ( m = 0 ; m < 3 ; m++ )
-  { ar = arclist + cell[k].start + m;
-    fe = felist[ar->start];
+  { ar = cinfo->arclist + cinfo->cell[k].start + m;
+    fe = cinfo->felist[ar->start];
     tail_triples[m] = get_fe_edge(get_prev_edge(fe));
     get_edge_side(tail_triples[m],tailside);
     mag = sqrt(dot(tailside,tailside,SDIM));
     if ( mag != 0 )
      for ( i = 0 ; i < SDIM ; i++ )
       tailforce[i] += tailside[i]/mag;
-    ar = arclist + cell[kk].start + m;
-    fe = felist[ar->start];
+    ar = cinfo->arclist + cinfo->cell[kk].start + m;
+    fe = cinfo->felist[ar->start];
     head_triples[m] = get_fe_edge(get_prev_edge(fe));
     get_edge_side(head_triples[m],headside);
     mag = sqrt(dot(headside,headside,SDIM));
@@ -2218,27 +2190,28 @@ int count;  /* number of entries in vflist */
     edge_id ray_e,newray_e;
     facet_id newf;
 
-    ar = arclist + cell[k].start + m;
+    ar = cinfo->arclist + cinfo->cell[k].start + m;
     for ( j = 0 ; j < ar->num ; j++ )
-    { fe = felist[ar->start+j];
+    { fe = cinfo->felist[ar->start+j];
       ray_e = get_fe_edge(get_next_edge(fe));
       remove_vertex_edge(v_id,inverse_id(ray_e));
       set_edge_headv(ray_e,newv);
     }
     /* last one for splitting triple edge */
     j = ar->num-1;
-    fe = felist[ar->start+j];
+    fe = cinfo->felist[ar->start+j];
     ray_fe = get_next_edge(fe);
     ray_e = get_fe_edge(ray_fe);
     newray_e = dup_edge(ray_e);
     set_edge_headv(newray_e,v_id);
     set_edge_tailv(newray_e,get_edge_tailv(ray_e));
-    other_ray_fe = inverse_id(get_prev_edge(felist[(ar+(m==2?-2:1))->start]));
+    other_ray_fe = inverse_id(get_prev_edge(cinfo->felist[(ar+(m==2?-2:1))->start]));
     third_ray_fe = get_next_facet(ray_fe);
     if ( equal_id(third_ray_fe,other_ray_fe) )
        third_ray_fe = get_prev_facet(ray_fe);
 
     newf = dup_facet(get_fe_facet(third_ray_fe));
+    set_original(newf,NULLID);
     newfe_a = new_facetedge(newf,newe);
     newfe_b = new_facetedge(newf,inverse_id(newray_e));
     newfe_c = new_facetedge(newf,ray_e);
@@ -2298,7 +2271,7 @@ int count;  /* number of entries in vflist */
   new_vertex_average(v_id,RAWEST);
 
   return 1;  /* success */
-}
+} // end kraynik_pop()
 
 
 /*******************************************************************
@@ -2309,9 +2282,11 @@ int count;  /* number of entries in vflist */
 *              Inserts central square in most favorable orientation.
 */
 
-int cubecone_pop(v_id,count)
-vertex_id v_id;
-int count;  /* number of entries in vflist */
+int cubecone_pop(
+  vertex_id v_id,
+  int count,  /* number of entries in vflist */
+  struct cone_info *cinfo
+)
 {
   int i,k,m;
   struct arc *ar;
@@ -2332,8 +2307,8 @@ int count;  /* number of entries in vflist */
       faceforce[i] = 0.0;
   
     for ( m = 0 ; m < 4 ; m++ )
-    { ar = arclist + cell[k].start + m;
-      fe = felist[ar->start];
+    { ar = cinfo->arclist + cinfo->cell[k].start + m;
+      fe = cinfo->felist[ar->start];
       triples[k][m] = get_fe_edge(get_prev_edge(fe));
       get_edge_side( triples[k][m],side);
       mag = sqrt(dot(side,side,SDIM));
@@ -2350,7 +2325,7 @@ int count;  /* number of entries in vflist */
 
   return pop_vertex_to_quad(v_id,triples[bestk]);
 
-}
+} // end cubecone_pop()
 
 /********************************************************************
 *
@@ -2361,10 +2336,11 @@ int count;  /* number of entries in vflist */
 *          determining pop directions.  Note the vector in fvec
 *          is the force, i.e. the negative of the area gradient.
 */
-void facet_force_on_vertex(f_id,v_id,fvec)
-facet_id f_id;
-vertex_id v_id;
-REAL *fvec; /* returned force */
+void facet_force_on_vertex(
+  facet_id f_id,
+  vertex_id v_id,
+  REAL *fvec /* returned force */
+)
 {
   REAL sides[2][MAXCOORD];
   MAT2D(vx,FACET_VERTS,MAXCOORD);
@@ -2420,9 +2396,11 @@ REAL *fvec; /* returned force */
 *              two tetrahedral points with septum between.
 */
 
-int odd4cone_pop(v_id,count)
-vertex_id v_id;
-int count;  /* number of entries in vflist */
+int odd4cone_pop(
+  vertex_id v_id,
+  int count,  /* number of entries in vflist */
+  struct cone_info *cinfo
+)
 {
   int i,j,k;
   facetedge_id fe_a=NULLID,fe_b=NULLID; /* triple edge fe's on septum side*/
@@ -2443,21 +2421,21 @@ int count;  /* number of entries in vflist */
   
   /* identify key parts */
   /* find two triple lines on one side */
-  for ( i = 0, flag = 0 ; i < cells ; i++ )
-  { if ( cell[i].num == 2 )
+  for ( i = 0, flag = 0 ; i < cinfo->cells ; i++ )
+  { if ( cinfo->cell[i].num == 2 )
     { if ( flag )
-      { fe_c = felist[arclist[cell[i].start].start]; /* outer fe */
+      { fe_c = cinfo->felist[cinfo->arclist[cinfo->cell[i].start].start]; /* outer fe */
         fe_c = get_prev_edge(fe_c); /* radial fe */
         fe_c = get_prev_facet(fe_c); /* on septum */
-        fe_d = felist[arclist[cell[i].start+1].start];
+        fe_d = cinfo->felist[cinfo->arclist[cinfo->cell[i].start+1].start];
         fe_d = get_prev_edge(fe_d); /* radial fe */
         fe_d = get_prev_facet(fe_d); /* on septum */
       }
       else
-      { fe_a = felist[arclist[cell[i].start].start]; /* outer fe */
+      { fe_a = cinfo->felist[cinfo->arclist[cinfo->cell[i].start].start]; /* outer fe */
         fe_a = get_prev_edge(fe_a); /* radial fe */
         fe_a = get_prev_facet(fe_a); /* on septum */
-        fe_b = felist[arclist[cell[i].start+1].start];
+        fe_b = cinfo->felist[cinfo->arclist[cinfo->cell[i].start+1].start];
         fe_b = get_prev_edge(fe_b); /* radial fe */
         fe_b = get_prev_facet(fe_b); /* on septum */
         split_cell = i;
@@ -2512,13 +2490,13 @@ int count;  /* number of entries in vflist */
   /* determine which way to split */
   /* First, if pull triple lines apart*/
   tripnetforce = 0.0;
-  for ( i = 0, flag = 0 ; i < cells ; i++ )
+  for ( i = 0, flag = 0 ; i < cinfo->cells ; i++ )
   { /* forces from existing facets */
-    if ( cell[i].num == 2 )
-    { for ( k = 0 ; k < cell[i].num ; k++ )
-      { struct arc *a = arclist + cell[i].start + k;
+    if ( cinfo->cell[i].num == 2 )
+    { for ( k = 0 ; k < cinfo->cell[i].num ; k++ )
+      { struct arc *a = cinfo->arclist + cinfo->cell[i].start + k;
         for ( j = 0 ; j < a->num ; j++ )
-        { facetedge_id fe = felist[a->start + j];
+        { facetedge_id fe = cinfo->felist[a->start + j];
           REAL force[MAXCOORD];
           facet_force_on_vertex(get_fe_facet(fe),v_id,force);
           if ( flag )
@@ -2551,12 +2529,12 @@ int count;  /* number of entries in vflist */
   /* assuming splits at the a->num/2 edge in the side arcs */
   quadnetforce = 0.0;
 
-  for ( i = 0, flag = 0 ; i < cells ; i++ )
-  { if ( cell[i].num == 2 ) 
-    { for ( k = 0 ; k < cell[i].num ; k++ )
-      { struct arc *a = arclist + cell[i].start + k;
+  for ( i = 0, flag = 0 ; i < cinfo->cells ; i++ )
+  { if ( cinfo->cell[i].num == 2 ) 
+    { for ( k = 0 ; k < cinfo->cell[i].num ; k++ )
+      { struct arc *a = cinfo->arclist + cinfo->cell[i].start + k;
         for ( j = 0 ; j < a->num ; j++ )
-        { facetedge_id fe = felist[a->start + j];
+        { facetedge_id fe = cinfo->felist[a->start + j];
           REAL force[MAXCOORD];
           facet_force_on_vertex(get_fe_facet(fe),v_id,force);
           if ( !flag || !cdswap )
@@ -2585,13 +2563,13 @@ int count;  /* number of entries in vflist */
   quadnetforce += sqrt(bb*dd-bd*bd)/4*get_facet_density(f_b);
 
   /* force from introduced facets */
-  for ( i = 0 ; i < cells ; i++ )
-  { if ( cell[i].num == 2 ) 
-    { for ( k = 0 ; k < cell[i].num ; k++ )
-      { struct arc *a = arclist + cell[i].start + k;
+  for ( i = 0 ; i < cinfo->cells ; i++ )
+  { if ( cinfo->cell[i].num == 2 ) 
+    { for ( k = 0 ; k < cinfo->cell[i].num ; k++ )
+      { struct arc *a = cinfo->arclist + cinfo->cell[i].start + k;
         REAL tension;
         
-        fe = felist[a->start + a->num/2];
+        fe = cinfo->felist[a->start + a->num/2];
         fe = get_prev_edge(fe);
         get_edge_side(get_fe_edge(fe),eside);
         ee = dot(eside,eside,SDIM); 
@@ -2638,10 +2616,10 @@ int count;  /* number of entries in vflist */
     }
 
     /* reconnected other edges on split-off part */
-    for ( i = 0 ; i < cell[split_cell].num ; i++ )
-    { struct arc *a = arclist + cell[split_cell].start + i;
+    for ( i = 0 ; i < cinfo->cell[split_cell].num ; i++ )
+    { struct arc *a = cinfo->arclist + cinfo->cell[split_cell].start + i;
       for ( j = 0 ; j < a->num ; j++ )
-      { facetedge_id fe = felist[a->start + j];
+      { facetedge_id fe = cinfo->felist[a->start + j];
         edge_id e_id;
         fe = get_prev_edge(fe);
         e_id = get_fe_edge(fe);
@@ -2701,18 +2679,18 @@ int count;  /* number of entries in vflist */
     set_edge_tailv(e_a,newv);
     set_edge_tailv(e_c,newv);
 
-    for ( i = 0, flag = 0 ; i < cells ; i++ )
-    { if ( cell[i].num != 2 ) 
+    for ( i = 0, flag = 0 ; i < cinfo->cells ; i++ )
+    { if ( cinfo->cell[i].num != 2 ) 
         continue;
-      for ( k = 0 ; k < cell[i].num ; k++ )
-      { struct arc *a = arclist + cell[i].start + k;
+      for ( k = 0 ; k < cinfo->cell[i].num ; k++ )
+      { struct arc *a = cinfo->arclist + cinfo->cell[i].start + k;
         int upflag = (!flag && (k==0)) || (flag && !cdswap && (k==0))
             || (flag && cdswap && (k==1)) ;
         facet_id ff;
         facetedge_id new_fe,fe_prev,e_fe;
         
         for ( j = 1 ; j < a->num ; j++ )
-        { facetedge_id fe = felist[a->start + j];
+        { facetedge_id fe = cinfo->felist[a->start + j];
           edge_id e_id;
           fe = get_prev_edge(fe);
           e_id = get_fe_edge(fe);
@@ -2720,7 +2698,7 @@ int count;  /* number of entries in vflist */
             set_edge_tailv(e_id,newv);
         }
         /* now expand some facets to quads */
-        fe = felist[a->start + a->num/2];
+        fe = cinfo->felist[a->start + a->num/2];
         fe = get_prev_edge(fe);
         if ( !upflag )
           fe = get_next_facet(fe);
@@ -2766,8 +2744,7 @@ int count;  /* number of entries in vflist */
 * return: 1 for success, 0 for failure.
 */
 
-int pop_tri_to_edge(f_id)
-facet_id f_id;
+int pop_tri_to_edge(facet_id f_id)
 { edge_id ea,eb,ec,newe;
   vertex_id va,vb,vc,keepv=NULLID,newv;
   facetedge_id fe,next_fe,fa,fb,fc;
@@ -2855,16 +2832,16 @@ facet_id f_id;
     outstring(msg);
   }
 
-  retval = eliminate_facet(f_id);
+  retval = delete_facet(f_id);
   if ( retval == 0 ) return 0;
 
   /* now finish elimination by eliminating the remaining facet edge */
   if ( valid_element(ea) ) 
-  { retval = eliminate_edge(ea); free_element(ea); }
+  { retval = delete_edge(ea); free_element(ea); }
   else if ( valid_element(eb) ) 
-  { retval = eliminate_edge(eb); free_element(eb); }
+  { retval = delete_edge(eb); free_element(eb); }
   else if ( valid_element(ec) ) 
-  { retval = eliminate_edge(ec); free_element(ec); }
+  { retval = delete_edge(ec); free_element(ec); }
   else retval = 0;
   if ( retval == 0 )
   { if ( verbose_flag )
@@ -3016,8 +2993,8 @@ facet_id f_id;
 
   fe_reorder(newe);
  
-  return 1;
-}
+  return 1; 
+} // end pop_tri_to_edge()
 
 
 /*****************************************************************************
@@ -3030,8 +3007,7 @@ facet_id f_id;
 * return: 1 for success, 0 for failure.
 */
 
-int pop_edge_to_tri(e_id)
-edge_id e_id;
+int pop_edge_to_tri(edge_id e_id)
 { int triples;
   vertex_id tail_triples[3],head_triples[3];
   vertex_id headv,tailv;
@@ -3177,12 +3153,12 @@ edge_id e_id;
   }
 
   /* Delete the edge */
-  retval = eliminate_edge(e_id);
+  retval = delete_edge(e_id);
   if ( retval == 0 ) return 0;
   free_element(e_id);
 
   return pop_vertex_to_tri((valid_element(headv) ? headv : tailv),tail_triples);
-}
+} // end pop_edge_to_tri()
 
 /**************************************************************************
 *
@@ -3191,9 +3167,10 @@ edge_id e_id;
 * purpose: main work for pop_edge_to_tri and kraynik pop.
 */
 
-int pop_vertex_to_tri(v_id,tail_triples)
-vertex_id v_id;
-edge_id *tail_triples;
+int pop_vertex_to_tri(
+  vertex_id v_id,
+  edge_id *tail_triples
+)
 { int i,j;
   vertex_id newv[3],keepv;
   edge_id newe[3];
@@ -3209,7 +3186,8 @@ edge_id *tail_triples;
   newe[1] = new_edge(newv[1],newv[2],NULLID);
   newe[2] = new_edge(newv[2],newv[0],NULLID);
   fe = get_vertex_first_facet(newv[0]);
-  newf    = dup_facet(get_fe_facet(fe));
+  newf = dup_facet(get_fe_facet(fe));
+  set_original(newf,NULLID);
   set_facet_body(newf,NULLID);
   set_facet_body(inverse_id(newf),NULLID);
   newfe[0] = new_facetedge(newf,newe[0]); set_edge_fe(newe[0],newfe[0]);
@@ -3437,9 +3415,10 @@ edge_id *tail_triples;
 * purpose: main work for pop_cubecone.
 */
 
-int pop_vertex_to_quad(v_id,tail_triples)
-vertex_id v_id;
-edge_id *tail_triples;
+int pop_vertex_to_quad(
+  vertex_id v_id,
+  edge_id *tail_triples
+)
 { int i,j;
   vertex_id newv[4],keepv;
   edge_id newe[4];
@@ -3457,7 +3436,8 @@ edge_id *tail_triples;
   newe[2] = new_edge(newv[2],newv[3],NULLID);
   newe[3] = new_edge(newv[3],newv[0],NULLID);
   fe = get_vertex_first_facet(newv[0]);
-  newf    = dup_facet(get_fe_facet(fe));
+  newf = dup_facet(get_fe_facet(fe));
+  set_original(newf,NULLID);
   set_facet_body(newf,NULLID);
   set_facet_body(inverse_id(newf),NULLID);
   newfe[0] = new_facetedge(newf,newe[0]); set_edge_fe(newe[0],newfe[0]);
@@ -3697,9 +3677,9 @@ edge_id *tail_triples;
 * return: 1 for success, 0 for failure.
 */
 
-int pop_quad_to_quad(f_id)
-facet_id f_id; /* one facet of the quadrilateral */
-{ facetedge_id fe,next_fe,start_fe,quad_triples[4],newfe[4],fea,keepfe;
+int pop_quad_to_quad(facet_id f_id /* one facet of the quadrilateral */)
+{ 
+  facetedge_id fe,next_fe,start_fe,quad_triples[4],newfe[4],fea,keepfe;
   edge_id e_id,ee_id,eee_id,other_triples[4][2],ea,eb,ec,keepe,newe[4];
   vertex_id newv[4];
   facet_id newf,fa,fb,fc;
@@ -3863,6 +3843,7 @@ facet_id f_id; /* one facet of the quadrilateral */
   /* use old facet to get attributes for new before deleting old */
   /*  newf = new_facet(); */
   newf = dup_facet(f_id);
+  set_original(newf,NULLID);
   set_facet_body(newf,NULLID); 
   set_facet_body(inverse_id(newf),NULLID);
 
@@ -3895,16 +3876,16 @@ facet_id f_id; /* one facet of the quadrilateral */
   /* Delete original quadrilateral by deleting the short edges */
   keepfe = get_next_facet(quad_triples[0]);
   e_id = get_fe_edge(quad_triples[1]);
-  eliminate_edge(e_id);
+  delete_edge(e_id);
   free_element(e_id);
   e_id = get_fe_edge(quad_triples[3]);
-  eliminate_edge(e_id);
+  delete_edge(e_id);
   free_element(e_id);
 
   /* now delete any leftover quadrilateral facets */
   for ( i = 0 ; i < qfcount ; i++ )
     if ( valid_element(quadfacets[i]) )
-      eliminate_facet(quadfacets[i]);
+      delete_facet(quadfacets[i]);
 
   /* make sure all the triple lines are left */
   for ( i = 0 ; i < 4 ; i++ )
@@ -4468,8 +4449,7 @@ facet_id f_id; /* one facet of the quadrilateral */
 * return: 1 if popped, 0 if not.
 */
 
-int pop_constrained_vertex(v_id)
-vertex_id v_id;
+int pop_constrained_vertex(vertex_id v_id)
 {
   conmap_t *vmap = get_v_constraint_map(v_id);
   int vhits = v_hit_constraint_count(v_id);
@@ -4562,7 +4542,7 @@ vertex_id v_id;
   }
 
   return 0;
-}
+} // end pop_constrained_vertex()
 
 /*****************************************************************************
 *
@@ -4576,8 +4556,7 @@ vertex_id v_id;
 * return: 1 if successful, 0 if not
 */
 
-int triple_con_pop(v_id)
-vertex_id v_id;
+int triple_con_pop(vertex_id v_id)
 {
   conmap_t *vmap = get_v_constraint_map(v_id);
   edge_id e_id, start_e;
@@ -4592,7 +4571,6 @@ vertex_id v_id;
   do
   { conmap_t *emap = get_e_constraint_map(e_id);
     int this_hits = 0;
-
 
     for ( i = 1 ; i <= emap[0] ; i++ )
     { 
@@ -4626,7 +4604,7 @@ vertex_id v_id;
   }
 
   return 0;
-}
+} // end triple_con_pop()
 
 /*****************************************************************************
 *
@@ -4641,10 +4619,11 @@ vertex_id v_id;
 * return: 1 if successful, 0 if not
 */
 
-int double_con_pop(v_id,triple,con_edges)
-vertex_id v_id;
-edge_id triple;  /* the triple edge */
-edge_id *con_edges;  /* the edges on constraints */
+int double_con_pop(
+  vertex_id v_id,
+  edge_id triple,  /* the triple edge */
+  edge_id *con_edges  /* the edges on constraints */
+)
 {
   conmap_t *vmap = get_v_constraint_map(v_id);
   conmap_t cons[2];
@@ -4733,7 +4712,7 @@ edge_id *con_edges;  /* the edges on constraints */
   }
 
   return 1;
-}
+} // end double_con_pop()
 
 /***************************************************************************
 *
@@ -4745,11 +4724,12 @@ edge_id *con_edges;  /* the edges on constraints */
 * return: 1 if successful
 */
 
-int one_con_pop_2(v_id,triples,con_edges,mode)
-vertex_id  v_id;
-edge_id *triples;
-edge_id *con_edges;
-int mode; /* POP_TO_OPEN or POP_TO_TWIST or POP_BETTER */
+int one_con_pop_2(
+  vertex_id  v_id,
+  edge_id *triples,
+  edge_id *con_edges,
+  int mode /* POP_TO_OPEN or POP_TO_TWIST or POP_BETTER */
+)
 { vertex_id newv;
   edge_id newe,e_id;
   facetedge_id fe,start_fe,newfe;
@@ -4996,7 +4976,7 @@ int mode; /* POP_TO_OPEN or POP_TO_TWIST or POP_BETTER */
   }
   return 1;
 
-}
+} // end one_con_pop_2()
 
 
 /***************************************************************************
@@ -5012,12 +4992,13 @@ int mode; /* POP_TO_OPEN or POP_TO_TWIST or POP_BETTER */
 
 #define MAXTRIPS 20
 
-int one_con_pop_3(v_id,tripcount,triples,con_edges,mode)
-vertex_id  v_id;
-int tripcount;
-edge_id *triples;
-edge_id *con_edges;
-int mode; /* POP_TO_OPEN or POP_TO_TRIPLE or POP_BETTER */
+int one_con_pop_3(
+  vertex_id  v_id,
+  int tripcount,
+  edge_id *triples,
+  edge_id *con_edges,
+  int mode /* POP_TO_OPEN or POP_TO_TRIPLE or POP_BETTER */
+)
 {
   edge_id e_id;
   unsigned int i;
@@ -5197,7 +5178,7 @@ int mode; /* POP_TO_OPEN or POP_TO_TRIPLE or POP_BETTER */
   }
   return 1;
 
-}
+} // end one_con_pop_3()
 
 
 /***************************************************************************
@@ -5211,10 +5192,11 @@ int mode; /* POP_TO_OPEN or POP_TO_TRIPLE or POP_BETTER */
 * return: 1 if successful
 */
 
-int one_con_pop_4(v_id,con_edges,mode)
-vertex_id  v_id;
-edge_id *con_edges;
-int mode; /* POP_TO_OPEN or POP_TO_TRIANGLE or POP_TO_BETTER */
+int one_con_pop_4(
+  vertex_id  v_id,
+  edge_id *con_edges,
+  int mode /* POP_TO_OPEN or POP_TO_TRIANGLE or POP_TO_BETTER */
+)
 {
   vertex_id newv[2];
   int i;
@@ -5226,7 +5208,7 @@ int mode; /* POP_TO_OPEN or POP_TO_TRIANGLE or POP_TO_BETTER */
   
   /* see which constraint edges belong together */
   fe = get_edge_fe(con_edges[0]); 
-  do 
+  for(;;) 
   { fe = inverse_id(get_prev_edge(fe));
     next_fe = get_next_facet(fe);
     if ( equal_id(fe,next_fe) )
@@ -5240,7 +5222,7 @@ int mode; /* POP_TO_OPEN or POP_TO_TRIANGLE or POP_TO_BETTER */
       break;
     }
     fe = next_fe;
-  } while (1);
+  } 
 
 
   /* get side vectors */
@@ -5410,7 +5392,7 @@ int mode; /* POP_TO_OPEN or POP_TO_TRIANGLE or POP_TO_BETTER */
   } /* end pulled-out triangle */
   return 1;
 
-}
+} // end one_con_pop_4()
 
 /**************************************************************************
 *
@@ -5423,8 +5405,7 @@ int mode; /* POP_TO_OPEN or POP_TO_TRIANGLE or POP_TO_BETTER */
 *
 * return: 1 if successful, 0 if not.
 */
-int pop_edge_to_tri_con(e_id)
-edge_id e_id;
+int pop_edge_to_tri_con(edge_id e_id)
 { vertex_id v_id = get_edge_tailv(e_id);
   edge_id ee_id, start_e;
   int retval;
@@ -5432,10 +5413,10 @@ edge_id e_id;
   edge_id triples[20];
   edge_id con_edges[20];
 
-  retval = eliminate_edge(e_id);
+  retval = delete_edge(e_id);
   if ( retval == 0 ) 
     return 0;
-  free_element(e_id); /* quirk of eliminate_edge */
+  free_element(e_id); /* quirk of delete_edge */
 
   /* gather data for one_con_pop_3 */
   ee_id = start_e = get_vertex_edge(v_id);
@@ -5463,4 +5444,4 @@ edge_id e_id;
     return 0;
   }
   return one_con_pop_3(v_id,tripcount,triples,con_edges,POP_TO_OPEN);
-}
+} // end pop_edge_to_tri_con()

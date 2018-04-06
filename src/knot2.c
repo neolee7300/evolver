@@ -31,8 +31,7 @@ between midpoints of edges, but projected on normal to edge.
 *
 */
 
-REAL proj_knot_energy(e_info)
-struct qinfo *e_info;
+REAL proj_knot_energy(struct qinfo *e_info)
 { edge_id e1 = e_info->id,e2;
   REAL *x1,*x2,*yy1,*y2; /* end coordinates */
   REAL power;
@@ -71,7 +70,7 @@ struct qinfo *e_info;
       energy += L1*L2*p*(c1 + c2);
     }
   return 2*energy; /* since doing each pair once */
-}
+} // end proj_knot_energy()
 
 /**************************************************************
 *
@@ -84,8 +83,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL proj_knot_energy_gradient(e_info)
-struct qinfo *e_info;
+REAL proj_knot_energy_gradient(struct qinfo *e_info)
 { edge_id e1 = e_info->id,e2;
   REAL *x1,*x2,*yy1,*y2; /* end coordinates */
   REAL power,poww;
@@ -157,7 +155,7 @@ struct qinfo *e_info;
     }
 
   return energy;  /* since doing all pairs */
-}
+} // end proj_knot_energy_gradient()
 
 /******************************************************************
 
@@ -180,9 +178,10 @@ Energy tries to equalize lengths of edges coming in to any one vertex
 static int local_hooke_flag;
 #define HOOKE_FLAG_NAME "local_hooke_flag"
 
-void local_hooke_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void local_hooke_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 {
   int flag_var;
   flag_var = lookup_global(HOOKE_FLAG_NAME);
@@ -192,7 +191,7 @@ struct method_instance *mi;
     globals(flag_var)->flags |=  ORDINARY_PARAM | RECALC_PARAMETER | ALWAYS_RECALC;
   }
   local_hooke_flag = (int)globals(flag_var)->value.real;
-}
+}  // end local_hooke_init()
 
 /**************************************************************
 *
@@ -204,8 +203,7 @@ struct method_instance *mi;
 *
 */
 
-REAL local_hooke(v_info)
-struct qinfo *v_info;
+REAL local_hooke(struct qinfo *v_info)
 { vertex_id v0 = v_info->id;
   edge_id e1,e2;
   REAL l1,l2,energy;
@@ -222,7 +220,7 @@ struct qinfo *v_info;
   energy = energy*energy;
 
   return energy;
-}
+} // end local_hooke()
 
 /**************************************************************
 *
@@ -235,8 +233,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL local_hooke_gradient(v_info)
-struct qinfo *v_info;
+REAL local_hooke_gradient(struct qinfo *v_info)
 { vertex_id v0 = v_info->id;
   edge_id e1,e2, e0,e3;
   REAL l1,l2,grad,sum,energy, l0,l3;
@@ -273,7 +270,7 @@ struct qinfo *v_info;
      v_info->grad[0][i] -= ev2[i]*grad*l3/l2;
 
   return energy*energy;
-}
+} // end local_hooke_gradient()
 
 /******************************************************************
 
@@ -299,8 +296,7 @@ E = 1/d^3 * (e1,e2,d)
 *
 */
 
-REAL average_crossing(e_info)
-struct qinfo *e_info;
+REAL average_crossing(struct qinfo *e_info)
 { edge_id e1 = e_info->id,e2;
   REAL *x1,*x2,*yy1,*y2; /* end coordinates */
   REAL ee,energy = 0.0;
@@ -336,7 +332,7 @@ struct qinfo *e_info;
             energy += sqrt(ee)/dd;
     }
   return energy/2/M_PI;
-}
+} // end average_crossing()
 
 /*****************************************************
 
@@ -367,8 +363,7 @@ Gradient not implemented.
 *
 */
 
-REAL twist(e_info)
-struct qinfo *e_info;
+REAL twist(struct qinfo *e_info)
 { edge_id e1 = e_info->id, e0,e2;
   REAL a0[MAXCOORD],a1[MAXCOORD],a2[MAXCOORD]; /* edge vectors */
   REAL a01[MAXCOORD], a12[MAXCOORD];
@@ -390,7 +385,179 @@ struct qinfo *e_info;
 
   if ( l0*l2 == 0.0 ) return 0.0;
   return asin(triple_prod(a0,a1,a2)*sqrt(l1/l0/l2))/2/M_PI;
+} // end twist()
+
+/*****************************************************
+
+sq_torsion method
+
+Integral of squared torsion for curves.
+
+
+The torsion is approximated by looking at triples of adjacent
+edges; if A,B,C are the edge vectors, then the sin of the angle the
+osculating plane twists by (from AxB to BxC) is
+       [A,B,C] |B|
+  S =  -----------
+       |AxB| |BxC|
+(This is analogous to t = [T,T',T'']/k^2.)  Then the torsion is
+
+   T = arcsin(S)/|B|
+   
+and the integral of the square of the torsion is
+   T^2 |B| = arcsin(S)^2/|B|
+
+This function assumes the edges in each component are consistently oriented.
+
+Since this method is meant to be used on boundary wires of surfaces, it
+uses a "sq_torsion_mark" attribute on edges to tell which edges are to be
+included.
+
+*/
+
+/************************************************************************
+*
+*  function: sq_torsion_init()
+*
+*  purpose: Initialization for sq_torsion evaluation.
+*           If parameter_2 present in method, mark is tested for
+*           bit present, else just nonzero mark.
+*/
+void sq_torsion_init(
+  int mode,
+  struct method_instance *mi
+)
+{ int eltype;
+
+  if ( web.modeltype != LINEAR )
+    kb_error(2865,"Method sq_torsion only for LINEAR model.\n",
+       RECOVERABLE);
+
+  sqtor_marked_edge_attr = find_extra("sq_torsion_mark",&eltype);
+
+  if ( sqtor_marked_edge_attr <= 0 )
+      kb_error(2184,"The sq_torsion_mark edge attribute is missing; needed for the sq_torsion method.\n",
+        RECOVERABLE);
+
+} // end sq_torsion_init()
+
+REAL sq_torsion_all(
+      struct qinfo *e_info,
+      int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+      )
+{
+  REAL *a = NULL,*b = NULL,*c = NULL;
+  REAL AxB[MAXCOORD], BxC[MAXCOORD], AxC[MAXCOORD],ABC,bb,ab,bc;
+  REAL dbb[4][3],dab_da[3],dab_db[3],dbc_db[3],dbc_dc[3],dABC[4][3],dab[4][3],dbc[4][3];
+  REAL dangle[4][3],denergy[4][3];
+  REAL angle,energy;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
+  int i,j,k,k1=0,k2=0;
+  
+  // find the marked edges
+  b = e_info->sides[0][0];
+  for ( k = 1 ; k < e_info->vcount ; k++ )
+  { if ( e_info->marked[k] )
+    { if ( a == NULL ) 
+      { a = e_info->sides[0][k]; k1 = k; }  // note: negative orientation
+	  else if ( c == NULL )
+	  { c = e_info->sides[0][k]; k2 = k; }
+	  else 
+	  { 
+	    sprintf(errmsg,"More than 2 marked edges at vertex %s\n",ELNAME(e_info->id));
+		kb_error(2666,errmsg,RECOVERABLE);
+	  }
+    }
+  }
+
+  if ( k2 == 0 ) return 0.0;
+
+  AxB[0] = -(a[1]*b[2] - a[2]*b[1]);
+  AxB[1] = -(a[2]*b[0] - a[0]*b[2]);
+  AxB[2] = -(a[0]*b[1] - a[1]*b[0]);
+
+  BxC[0] = b[1]*c[2] - b[2]*c[1];
+  BxC[1] = b[2]*c[0] - b[0]*c[2];
+  BxC[2] = b[0]*c[1] - b[1]*c[0];
+
+  AxC[0] = -(a[1]*c[2] - a[2]*c[1]);
+  AxC[1] = -(a[2]*c[0] - a[0]*c[2]);
+  AxC[2] = -(a[0]*c[1] - a[1]*c[0]);
+
+  ABC = AxB[0]*c[0] + AxB[1]*c[1] + AxB[2]*c[2];
+
+  bb = b[0]*b[0]+b[1]*b[1]+b[2]*b[2];
+  ab = AxB[0]*AxB[0]+AxB[1]*AxB[1]+AxB[2]*AxB[2];
+  bc = BxC[0]*BxC[0]+BxC[1]*BxC[1]+BxC[2]*BxC[2];
+  angle = asin(ABC*sqrt(bb)/sqrt(ab)/sqrt(bc));
+  energy = angle*angle/sqrt(bb);
+
+  if ( mode == METHOD_VALUE ) 
+      return energy;
+
+    
+  // Now the gradient
+ 
+  dab_da[0] = -(2*b[1]*(-a[1]*b[0]+a[0]*b[1])-2*b[2]*(a[2]*b[0]-a[0]*b[2]));
+  dab_da[1] = -(-2*b[0]*(-a[1]*b[0]+a[0]*b[1])+2*b[2]*(-a[2]*b[1]+a[1]*b[2]));
+  dab_da[2] = -(2*b[0]*(a[2]*b[0]-a[0]*b[2])-2*b[1]*(-a[2]*b[1]+a[1]*b[2]));
+  dab_db[0] = -2*a[1]*(-a[1]*b[0]+a[0]*b[1])+2*a[2]*(a[2]*b[0]-a[0]*b[2]);
+  dab_db[1] = 2*a[0]*(-a[1]*b[0]+a[0]*b[1])-2*a[2]*(-a[2]*b[1]+a[1]*b[2]);
+  dab_db[2] = -2*a[0]*(a[2]*b[0]-a[0]*b[2])+2*a[1]*(-a[2]*b[1]+a[1]*b[2]);
+  dbc_db[0] = 2*c[1]*(-b[1]*c[0]+b[0]*c[1])-2*c[2]*(b[2]*c[0]-b[0]*c[2]);
+  dbc_db[1] = -2*c[0]*(-b[1]*c[0]+b[0]*c[1])+2*c[2]*(-b[2]*c[1]+b[1]*c[2]);
+  dbc_db[2] = 2*c[0]*(b[2]*c[0]-b[0]*c[2])-2*c[1]*(-b[2]*c[1]+b[1]*c[2]);
+  dbc_dc[0] = -2*b[1]*(-b[1]*c[0]+b[0]*c[1])+2*b[2]*(b[2]*c[0]-b[0]*c[2]);
+  dbc_dc[1] = 2*b[0]*(-b[1]*c[0]+b[0]*c[1])-2*b[2]*(-b[2]*c[1]+b[1]*c[2]);
+  dbc_dc[2] = -2*b[0]*(b[2]*c[0]-b[0]*c[2])+2*b[1]*(-b[2]*c[1]+b[1]*c[2]);
+
+  for ( i = 0 ; i < SDIM ; i++ )
+  { dbb[0][i] = -2*b[i];
+    dbb[1][i] =  2*b[i];
+    dbb[2][i] = 0;
+    dbb[3][i] = 0;
+    dab[0][i] = dab_da[i] - dab_db[i];
+    dab[1][i] = dab_db[i];
+    dab[2][i] = -dab_da[i];
+    dab[3][i] = 0.0;
+    dbc[0][i] = -dbc_db[i];
+    dbc[1][i] = dbc_db[i] - dbc_dc[i];
+    dbc[2][i] = 0.0;
+    dbc[3][i] = dbc_dc[i];
+  }
+
+
+  for ( i = 0 ; i < SDIM ; i++ )
+  { dABC[0][i] = AxC[i]+BxC[i];
+    dABC[1][i] = -AxC[i]-AxB[i];
+    dABC[2][i] = -BxC[i];
+    dABC[3][i] = AxB[i];
+  }
+
+  for ( j = 0 ; j < 4 ; j++ )
+   for ( i = 0 ; i < SDIM ; i++ )
+    dangle[j][i] = 1/sqrt(1.0 - ABC*ABC*bb/ab/bc)*(dABC[j][i]*sqrt(bb)/sqrt(ab)/sqrt(bc)
+       + ABC*0.5/sqrt(bb)*dbb[j][i]/sqrt(ab)/sqrt(bc)
+       + ABC*sqrt(bb)*(-0.5)/ab/sqrt(ab)*dab[j][i]/sqrt(bc)
+       + ABC*sqrt(bb)/sqrt(ab)*(-0.5)/bc/sqrt(bc)*dbc[j][i]);
+
+  for ( j = 0 ; j < 4 ; j++ )
+   for ( i = 0 ; i < SDIM ; i++ )
+   { denergy[j][i] = 2*angle*dangle[j][i]/sqrt(bb) - 0.5*angle*angle/bb/sqrt(bb)*dbb[j][i];
+     e_info->grad[j][i] += denergy[j][i];
+   }
+
+  return energy;
+} // end sq_torsion_all()
+
+REAL sq_torsion_energy(struct qinfo *e_info)
+{  return sq_torsion_all(e_info,METHOD_VALUE);
 }
+
+REAL sq_torsion_gradient(struct qinfo *e_info)
+{  return sq_torsion_all(e_info,METHOD_GRADIENT);
+}
+
 
 /*****************************************************
 
@@ -416,8 +583,7 @@ E = 1/d^3 * (e1,e2,d)
 *
 */
 
-REAL writhe(e_info)
-struct qinfo *e_info;
+REAL writhe(struct qinfo *e_info)
 { edge_id e1 = e_info->id,e2;
   vertex_id e1h,e2h,e1t,e2t;
   REAL *x1,*x2,*yy1,*y2; /* end coordinates */
@@ -450,7 +616,7 @@ struct qinfo *e_info;
       energy += triple_prod(dx1,d,dx2)/dd/sqrt(dd);
     }
   return energy/4/M_PI;
-}
+} // end writhe()
 
 /**************************************************************
 *
@@ -462,8 +628,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL writhe_gradient(e_info)
-struct qinfo *e_info;
+REAL writhe_gradient(struct qinfo *e_info)
 { 
   edge_id e1 = e_info->id,e2;
   vertex_id e1h,e2h,e1t,e2t;
@@ -512,7 +677,7 @@ struct qinfo *e_info;
       }
     }
   return energy/4/M_PI;
-}
+} // end writhe_gradient()
 
 /******************************************************************
 
@@ -546,11 +711,10 @@ This sign just comes from the sign of the volume of the tetrahedron abcd.
 *
 */
 
-REAL true_ax_wr ARGS((struct qinfo *, int));
-
-REAL true_ax_wr(e_info, absval)
-struct qinfo *e_info;
-int absval;
+REAL true_ax_wr(
+  struct qinfo *e_info,
+  int absval
+)
 { edge_id e1 = e_info->id,e2;
   vertex_id e1t,e1h,e2t,e2h;
   REAL *a,*b,*c,*d; /* end coordinates */
@@ -605,7 +769,7 @@ int absval;
     }
 
   return energy;
-}
+} // end true_ax_wr()
 
 REAL true_average_crossing(e_info)
 struct qinfo *e_info;
@@ -627,8 +791,7 @@ struct qinfo *e_info;
 */
 NOT IMPLEMENTED YET
 
-REAL true_writhe_gradient(e_info)
-struct qinfo *e_info;
+REAL true_writhe_gradient(struct qinfo *e_info)
 { 
   edge_id e1 = e_info->id,e2;
   vertex_id e1h,e2h,e1t,e2t;

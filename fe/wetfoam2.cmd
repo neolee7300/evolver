@@ -16,6 +16,8 @@
 
 // Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
 
+// Modified Sept. 15, 2010 to elimnate problems with valence 1 edges.
+
 /* Parameter for initial size of Plateau borders */
 /* Note this is relative to the size of facets, not absolute. */
 spread := .2
@@ -25,6 +27,7 @@ ccount := 0
 voffset := 0
 wrapnum := 0; 
 border_body := 0;
+weterrors := 0;
 
 init_attributes := {
  // some useful attributes, all as dimensioned so can be shrunk to zero size
@@ -61,24 +64,30 @@ shrink_attributes := {
 
 /* tests and preliminaries */
 vertest := { foreach vertex vv do 
-                 vv.hivalence[1] := sum(vv.edge where valence >= 3,1);
+               vv.hivalence[1] := sum(vv.edge where valence >= 3,1);
+             if sum(vertex vv, sum(vv.edge, valence==1) >= 3) > 0 then
+             { errprintf "wetfoam does not handle triple lines ending at a border. Aborting.\n";
+               abort;
+             }
            }
 
-facettest := { local triple;
-               foreach facet ff do
-               { triple := sum(ff.edge where valence >= 3, 1);
-                 if ( triple >= 2 ) then
-                 {  refine ff;  
-                 }
-               }
-             }
+facettest := {
+   local triple;
+   foreach facet ff do
+   { triple := sum(ff.edge where valence >= 3, 1);
+     if ( triple >= 2 ) then
+     {  refine ff;  
+     }
+   };
+   reset_counts; // kludge to prevent refine count showing up in datafile
+ }
 
 wettests := {  vertest; facettest; }
 
 /* enumerate and consolidate facet corners */
 /* corner number of 0 means not adjacent to hi-valence vertex */
 do_corners := {
-    local inx;
+    local inx; // ,ffid,vvid;
 
     /* enumerate */
     ccount := 1;
@@ -212,7 +221,7 @@ wetedges := { local ecounter;
               ecounter := max(edge,id)+1; /* start of new edges */
               printf "\nedges\n";
               /* first, old edges that we keep */
-              foreach edge ee where valence == 2 do
+              foreach edge ee where valence <= 2 do
               { printf "%d  ", ee.id;
                 wrapnum := ee.wrap;
                 foreach ee.vertex vv do
@@ -494,6 +503,7 @@ do_one_vertex_face :=
 
 /* print face list, less triangles at nodes */
 wetfaces := { 
+              // local ffid,vvid,fcounter;
 
               fstart := max(facet,id)+1;
               fcounter := fstart;
@@ -504,7 +514,7 @@ wetfaces := {
               foreach facet ff do
               { printf "%d   ",ff.id;
                 foreach ff.edge ee do
-                { if ( ee.valence == 2 ) then printf "%d ",ee.oid
+                { if ( ee.valence <= 2 ) then printf "%d ",ee.oid
                   else 
                     printf "%d ",(ee.oid<0?-(ff.newedge[1]):ff.newedge[1])
                 };
@@ -525,6 +535,7 @@ wetfaces := {
                   diag := ee.facet[finx].diagedge[1];
                   inx := 1;
                   ffid := ee.facet[finx].id;
+                  eb := 0;
                   while inx <= 3 do
                   { if facet[ffid].vertex[inx].id == ee.vertex[1].id then
                       eb := facet[ffid].corneredge1[inx];
@@ -532,14 +543,27 @@ wetfaces := {
                       ed := facet[ffid].corneredge1[inx];
                     inx += 1;
                   };
-                  printf "%d   %d %d %d tension 0.5 ftype tubefacet\n",
+                  if ed == 0 then 
+                  { errprintf "wetfoam: confused at edge %d\n",ee.id;
+                    weterrors++;
+                  }
+                  else
+                  { printf "%d   %d %d %d tension 0.5 ftype tubefacet\n",
                                              fcounter,-ea,diag,-ed;
-                  borderbody[fcounter] := ee.facet[finx].backbody;
-                  fcounter += 1;
-                  printf "%d   %d %d %d tension 0.5 ftype tubefacet\n",
+                    borderbody[fcounter] := ee.facet[finx].backbody;
+                    fcounter += 1;
+                  };
+                  if eb == 0 then 
+                  { errprintf "wetfoam: confused at edge %d\n",ee.id;
+                    weterrors++;
+                  }
+                  else
+                  { printf "%d   %d %d %d tension 0.5 ftype tubefacet\n",
                                              fcounter,eb,ec,-diag;
-                  borderbody[fcounter] := ee.facet[finx].backbody;
-                  fcounter += 1;
+                    borderbody[fcounter] := ee.facet[finx].backbody;
+                    fcounter += 1;
+                  };
+
                   finx += 1;
                 }
               };
@@ -578,7 +602,7 @@ wetbodies := { printf "\nbodies \n";
                border_volume := sum(edge where valence==3,length)*
                   ss*ss*0.8;
                foreach body bod do 
-               { printf "%d  ",bod.id,bod.target;
+               { printf "%d   ",bod.id;
                  nn := 0;
                  foreach bod.facet ff do
                  { printf "%d ",ff.oid;
@@ -599,6 +623,7 @@ wetbodies := { printf "\nbodies \n";
                 
                /* border body can be given its facets */ 
                border_body := max(body,id)+1;
+               if border_body <= 0 then border_body := 1;
                printf "%d   ",border_body;
                local fnum;
                for ( fnum := fstart ; fnum < fcounter ; fnum := fnum )
@@ -627,8 +652,6 @@ wetfoam := {
              { errprintf "wetfoam only works for surface dimension 2.\n"; 
                return; 
              };
-//             if  !torus  then
-//             { errprintf "wetfoam only works for torus domain.\n"; return; };
              if lagrange_order != 1  then
              { errprintf "wetfoam only works for linear model.\n"; return; };
 
@@ -639,6 +662,7 @@ wetfoam := {
              define cornerz real[1];
              define cornern integer[1];  // number of facets in corner
 
+             weterrors := 0;
              shrink_attributes;
              list topinfo;
              init_attributes; 
@@ -649,17 +673,25 @@ wetfoam := {
              printf "parameter oldfacet = 1 // original facet\n";
              printf "parameter tubefacet = 2 // new facet along tube\n";
              printf "parameter vertexfacet = 3 // new facet around vertex\n\n";
+             border_body := max(body,id)+1;
+             if border_body <= 0 then border_body := 1;
+             printf "parameter border_body = %d\n",border_body;
              do_corners; 
              wetverts; 
              wetedges; 
              wetfaces; 
-             wetbodies; 
+             if weterrors == 0 then wetbodies; 
              read_section;
              shrink_attributes;
            }
 
-// To user: run wetfoam with output redirected to desired file, i.e.
+// End wetfoam2.cmd
+
+// Usage: Run wetfoam with output redirected to desired file, i.e.
 // Enter command: wetfoam >>> "wetfile.fe"
+
+
+
 
 
 

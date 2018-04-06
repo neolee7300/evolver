@@ -15,8 +15,8 @@
 
 #include "include.h"
 
-void sqgauss_method_cleanup ARGS((void));
-REAL levine_energy_all ARGS(( struct qinfo *, int )); 
+void sqgauss_method_cleanup (void);
+REAL levine_energy_all ( struct qinfo *, int); 
 
 /*********************************************************************
 *
@@ -31,9 +31,10 @@ REAL levine_energy_all ARGS(( struct qinfo *, int ));
 #define GAUSS_BDRY_E_NAME "gauss_bdry_e"
 int gauss_bdry_v_attr,gauss_bdry_e_attr;
 
-void gauss_integral_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void gauss_integral_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   if ( web.dimension != 2 )
      kb_error(1590,"gauss_integral method only for 2D facets.\n",RECOVERABLE);
@@ -46,7 +47,8 @@ struct method_instance *mi;
 
     gauss_bdry_v_attr = find_attribute(VERTEX,GAUSS_BDRY_V_NAME);
     gauss_bdry_e_attr = find_attribute(EDGE,GAUSS_BDRY_E_NAME);
-}
+
+} // end gauss_integral_init()
 
 /********************************************************************
 *
@@ -57,8 +59,7 @@ struct method_instance *mi;
 *
 */
 
-REAL gauss_int_energy(f_info)
-struct qinfo *f_info;
+REAL gauss_int_energy(struct qinfo *f_info)
 { REAL s1[MAXCOORD],s2[MAXCOORD];
   facetedge_id fe;
   vertex_id v_id;
@@ -90,7 +91,8 @@ struct qinfo *f_info;
      energy += acos(a);
   }
   return energy;
-}
+
+}  // end gauss_int_energy()
 
 
 /********************************************************************
@@ -102,8 +104,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL gauss_int_gradient(f_info)
-struct qinfo *f_info;
+REAL gauss_int_gradient(struct qinfo *f_info)
 { REAL s1[MAXCOORD],s2[MAXCOORD];
   facetedge_id fe;
   vertex_id v_id;
@@ -148,7 +149,8 @@ struct qinfo *f_info;
 
   }
   return energy;
-}
+ 
+} // end gauss_int_gradient()
 
 
 /********************************************************************
@@ -216,9 +218,9 @@ void sqgauss_energy()
       binary_tree_add(web.total_energy_addends,modulus*gc*gc*vg->star_area);
     }
 
-
   temp_free((char*)gverts);
-}
+
+} // end sqgauss_energy()
 
 /*************************************************************************
 *
@@ -230,8 +232,7 @@ void sqgauss_energy()
 *             calculate angle between 2 constraints
 */
 
-REAL wedge_angle(v_id)
-vertex_id v_id;
+REAL wedge_angle(vertex_id v_id)
 { int concount;
   conmap_t *conmap = get_v_constraint_map(v_id);
   REAL normal[2][MAXCOORD];
@@ -262,8 +263,10 @@ vertex_id v_id;
   c = SDIM_dot(normal[0],normal[1])
         /sqrt(SDIM_dot(normal[0],normal[0])) 
         /sqrt(SDIM_dot(normal[1],normal[1]));
+
   return M_PI - acos(c);
-}
+
+}  // end wedge_angle()
 
 
 /********************************************************************
@@ -408,7 +411,8 @@ void sqgauss_force()
 
   temp_free((char*)gverts);
   temp_free((char*)gedges);
-}
+
+} // end sqgauss_force()
 
 
 /********************************************************************
@@ -439,9 +443,10 @@ static  struct gedge { REAL area_grad[2][MAXCOORD];
 *             Should really be replaced by local gathering.
 */
 
-void sqgauss_method_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void sqgauss_method_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   vertex_id v[3];
   edge_id e_id,e[3];
@@ -549,7 +554,7 @@ struct method_instance *mi;
         }
     }
   } 
-}
+} // end sqgauss_method_init()
 
 /************************************************************************
 *
@@ -562,7 +567,8 @@ void sqgauss_method_cleanup()
 {
   temp_free((char*)gverts);
   temp_free((char*)gedges);
-}
+
+} // end sqgauss_method_cleanup()
 
 /********************************************************************
 *
@@ -572,8 +578,7 @@ void sqgauss_method_cleanup()
 *
 */
 
-REAL sqgauss_method_value(v_info)
-struct qinfo *v_info;
+REAL sqgauss_method_value(struct qinfo *v_info)
 { 
   REAL modulus = sqgauss_flag ? globals(sqgauss_param)->value.real : 0.0;
   REAL gc;  /* gaussian curvarture */
@@ -583,7 +588,8 @@ struct qinfo *v_info;
   if ( get_vattr(v_info->id) & (FIXED|BOUNDARY) ) return 0.0;
   gc = (wedge_angle(v_info->id) - vg->angle)/vg->area;
   return modulus*gc*gc*vg->star_area;
-}
+
+} // end sqgauss_method_value()
 
 
 /********************************************************************
@@ -594,8 +600,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL sqgauss_method_grad(v_info)
-struct qinfo *v_info;
+REAL sqgauss_method_grad(struct qinfo *v_info)
 { 
   REAL modulus = sqgauss_flag ? globals(sqgauss_param)->value.real : 0.0;
   vertex_id v_id;
@@ -637,7 +642,8 @@ struct qinfo *v_info;
     } while ( !equal_element(start_e,e_id) );
 
  return energy;
-}
+
+} // end sqgauss_method_grad()
 
 /*****************************************************************************
 
@@ -645,18 +651,33 @@ struct qinfo *v_info;
 
 ******************************************************************************/
 
-void star_gauss_method_init(mode,mi)
-int mode;
-struct method_instance *mi;
+/*****************************************************************************
+*
+* function: star_gauss_method_init()
+*
+* purpose: called at start of method evaluation.
+*/
+void star_gauss_method_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   if ( web.modeltype != LINEAR )
     kb_error(2869,"Method gauss_curvature only for LINEAR model.\n",
        RECOVERABLE);
-}
 
-REAL star_gauss_method_all(v_info,mode)
-struct qinfo *v_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+} // end star_gauss_method_init()
+
+/*****************************************************************************
+* function: star_gauss_method_all()
+*
+* purpose: implements value, gradient, and hessian of star_gauss_method.
+*/
+
+REAL star_gauss_method_all(
+  struct qinfo *v_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 { REAL deficit = 2*M_PI;
   int k,i,j;
   int fudge = (v_info->flags & INCOMPLETE_STAR) ? 1 : 0;
@@ -734,10 +755,15 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 
   }
 
-
   return deficit;
-}
 
+} // end star_gauss_method_all()
+
+/****************************************************************************
+* functions: star_gauss_method_value(), etc.
+*
+* purpose: wrappers for star_gauss_method functions
+*/
 REAL star_gauss_method_value(v_info)
 struct qinfo *v_info;
 { return star_gauss_method_all(v_info,METHOD_VALUE);
@@ -757,34 +783,45 @@ struct qinfo *v_info;
 
 ******************************************************************************/
 
-
-void star_sqgauss_method_init(mode,mi)
-int mode;
-struct method_instance *mi;
+/*****************************************************************************
+*
+* function: star_sqgauss_method_init()
+*
+* purpose: called at start of method evaluation.
+*/
+void star_sqgauss_method_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   if ( web.modeltype != LINEAR )
     kb_error(2867,"Method sq_gauss_curvature only for LINEAR model.\n",
        RECOVERABLE);
-}
 
-REAL star_sqgauss_method_all(v_info,mode)
-struct qinfo *v_info;
-int mode; /* METHOD_VALUE, etc. */
+} // end star_sqgauss_method_init()
+
+/*****************************************************************************
+*
+* function: star_sqgauss_method_all()
+*
+* purpose: implementation of star_sqgauss_method value, gradient, and hessian.
+*/
+REAL star_sqgauss_method_all(
+  struct qinfo *v_info,
+  int mode /* METHOD_VALUE, etc. */
+)
 { REAL deficit = 2*M_PI;
   REAL area = 0.0;
   int k,kk,i,j;
   REAL **dadv=NULL,**ddefdv=NULL; /* gradient storage */
-  int pairs,final_edge;
+  int pairs;
 
   if ( v_info->vcount <= 1 ) return 0.0;
   pairs = (v_info->vcount - 1);
   if ( pairs <= 0 ) return 0.0;
   if ( v_info->flags & INCOMPLETE_STAR )
   { pairs--;
-    final_edge = pairs;
   }
-  else 
-    final_edge = 0;
 
   if ( mode == METHOD_HESSIAN )
   { dadv = temp_dmatrix(0,v_info->vcount,0,SDIM-1);
@@ -935,9 +972,13 @@ int mode; /* METHOD_VALUE, etc. */
   }
    
   return deficit*deficit/area;
-}
 
+} // end star_sqgauss_method_all()
 
+/*****************************************************************
+*
+* wrappers for star_sqgauss_method
+*/
 REAL star_sqgauss_method_value(v_info)
 struct qinfo *v_info;
 { return star_sqgauss_method_all(v_info,METHOD_VALUE);
@@ -969,9 +1010,16 @@ struct qinfo *v_info;
 
 static REAL levine_a=1.0,levine_t=1.0,levine_c=1.0;
 
-void levine_energy_init(mode,meth)
-int mode;
-struct method_instance *meth;
+/**************************************************************************
+*
+* function: levine_energy_init()
+*
+* purpose: called before levine_energy evaluation.
+*/
+void levine_energy_init(
+  int mode,
+  struct method_instance *meth
+)
 { int k;
 
   /* find the two variables */
@@ -990,11 +1038,18 @@ struct method_instance *meth;
   if ( k >= 0 )
       levine_c = globals(k)->value.real;
   else levine_c = 1.0;
-}
+} // levine_energy_init()
 
-REAL levine_energy_all(v_info,mode)
-struct qinfo *v_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */ 
+/**************************************************************************
+*
+* function: levine_energy_all()
+*
+* purpose: implementation of levine_energy value,gradient,hessian
+*/
+REAL levine_energy_all(
+  struct qinfo *v_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */ 
+)
 { REAL deficit = 2*M_PI;
   REAL area = 0.0;
   REAL coeff = levine_c*levine_t/levine_a;
@@ -1268,7 +1323,13 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 
   /* No hessian yet */
   return energy;
-}
+
+} // end levine_energy_all(
+
+/**************************************
+*
+* wrappers for levine_energy
+*/
 
 REAL levine_energy_value(v_info)
 struct qinfo *v_info;

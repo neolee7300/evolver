@@ -20,7 +20,13 @@ int crit_count; /* debugging */
 #endif
 #include "include.h"
 
+#ifdef WIN32
+#include <psapi.h>
+#endif
+
 int just_lex_flag = 0;  /* for -l option */
+
+int cpu_affinity_flag = 0 ;  /* for -A option, fix thread affinities */
 
 /***********************************************************************/
 /* System-specific thread stuff is all in this file.                   */
@@ -62,7 +68,8 @@ int spincount = 0;  /* times to try spinlock before sleeping */
 /* End of thread stuff.                                                */
 /***********************************************************************/
 
-
+char cmdstring[10000]; // for -r option
+int cmdstring_flag; // for -r option
 
 /* Separate thread for periodically printing state; useful when deadlocked */
 int web_locks;
@@ -72,45 +79,6 @@ int web_unlocks;
 int thread_unlocks;
 int element_unlocks;
 
-void * reporter_thread ARGS((void * ));
-
-void * reporter_thread(void * arg)
-{ puts("Reporter thread running.");
-  
- for (;;)
- {
-#ifdef WIN32
-     Sleep(10000);
-#else
-  sleep(10);
-#endif
-  printf("Reporter: global_id %08LX\n",global_id);
-  printf("web_locks %d  element_locks %d  thread_locks %d\n",
-          web_locks,element_locks,thread_locks);
-  printf("web_unlocks %d  element_unlocks %d  thread_unlocks %d\n",
-          web_unlocks,element_unlocks,thread_unlocks);
-#ifdef XXXX
-  if ( pthread_mutex_trylock(&thread_mutex) == EBUSY )
-    puts("thread_mutex locked");
-  else
-  { pthread_mutex_unlock(&thread_mutex);
-    puts("thread_mutex unlocked");
-  }
-  if ( pthread_mutex_trylock(&web_mutex) == EBUSY )
-    puts("web_mutex locked");
-  else
-  { pthread_mutex_unlock(&web_mutex);
-    puts("web_mutex unlocked");
-  }
-  if ( pthread_mutex_trylock(&element_mutex) == EBUSY )
-    puts("element_mutex locked");
-  else
-  { pthread_mutex_unlock(&element_mutex);
-    puts("element_mutex unlocked");
-  }
-#endif
- }
-}
 int tty_flag;  /* to do tty interface instead of menus */
 
 #if  defined(MOTIF) || defined(MAC_APP) || defined(WIN32S) || defined(MAC_CW)
@@ -125,23 +93,50 @@ void m_set_idlist()
 #if defined(MPI_EVOLVER)
 #define main old_main 
 #endif
- 
-int main ARGS2((argc,argv),
-int argc,
-char *argv[]) 
+
+/********************************************************************
+*
+* function: main()
+*
+* purpose: program entry point
+*/
+int main(int argc,char *argv[]) 
 { int pause_flag=0;  /* whether to pause after banner message */
 
   msgmax = 2000; 
   if ( !msg ) msg = my_list_calloc(1,msgmax,ETERNAL_BLOCK); 
   set_ctypes();
 
-  outfd = stdout;  
-  sprintf(msg,"Surface Evolver %s\n\n",VERSION);
+  outfd = stdout;
+  erroutfd = stderr;
+  sprintf(msg,"Surface Evolver %s, %d-bit\n",VERSION,8*(int)sizeof(int*));
   outstring(msg);
-#ifdef LONGDOUBLE
-  sprintf(msg,"Compiled for %d byte long double.\n\n",sizeof(REAL));
+#ifdef LONG_ID
+  if ( sizeof(int*) == 8 )
+  { sprintf(msg,"Compiled with LONG_ID, for extraordinarily large models.\n",
+      OFFSETMASK);
+    outstring(msg);
+  }
+#endif
+
+  // Calculate REAL precision
+  /* find machine resolution */
+  { REAL eps,one = 1.0;
+    for ( eps = 1.0 ; one + eps != one ; eps /= 2.0 ) ;
+    machine_eps = 2.0*eps;
+    root8machine_eps = sqrt(sqrt(sqrt(machine_eps)));
+    DPREC = floor(-log(machine_eps)/log(10.0));
+    DWIDTH = DPREC + 3;
+  }
+
+#ifdef FLOAT128
+  sprintf(msg,"Compiled for float128, %d digits precision.\n",DPREC);
+  outstring(msg);
+#elif defined(LONGDOUBLE)
+  sprintf(msg,"Compiled for %d-byte long double, %d digits precision.\n",(int)sizeof(REAL),DPREC);
   outstring(msg);
 #endif
+  outstring("\n");
 
 #ifdef MPI_EVOLVER
   MPI_Barrier(MPI_COMM_WORLD); /* wait for everybody to print */
@@ -166,32 +161,26 @@ char *argv[])
 /* Nameless to prevent interference between separate processes. */
   graphmutex = CreateMutex(NULL,0,NULL);
   mem_mutex = CreateMutex(NULL,0,NULL);
-#if defined(PROF_EVALS) || defined(PROFILING)
-  SetThreadAffinityMask(GetCurrentThread(),1);
-#endif
+  transforms_mutex = CreateMutex(NULL,0,NULL);
+
+
 #ifdef MPI_EVOLVER
   mpi_mutex = CreateMutex(NULL,0,NULL);
 #endif
 #elif defined(PTHREADS)
   pthread_mutex_init(&graphmutex,NULL);
+  pthread_mutex_init(&transforms_mutex,NULL);
   pthread_mutex_init(&mem_mutex,NULL);
 #ifdef MPI_EVOLVER
   pthread_mutex_init(&mpi_mutex,NULL);
 #endif
 #endif
 
+
+
   print_express(NULL,0); /* just to initialize string allocation */
 
-  /* find machine resolution */
-  { REAL eps,one = 1.0;
-    for ( eps = 1.0 ; one + eps != one ; eps /= 2.0 ) ;
-    machine_eps = 2.0*eps;
-  }
-
   find_cpu_speed();
-
-  initialize_perm_globals(); /* put some internal variable names in
-     permanent symbol table */
   
   /* parse command line options */
   if ( argc > 0 )
@@ -199,7 +188,11 @@ char *argv[])
      argv++; argc--;
      while (  argc && (argv[0] != NULL) && (argv[0][0] == '-') )
      { switch ( argv[0][1] )
-       {  
+     {    case 'U': 
+#ifdef WIN32
+          FreeConsole();
+#endif
+            break;
           case 'E': err_tok_gen_flag = 1;
                     break;
           case 'a': auto_convert_flag = (argv[0][2]=='-') ? 0 : 1; break;
@@ -211,20 +204,51 @@ char *argv[])
           case 'z': mpi_debug = 1; break;
 #endif
           case 't': tty_flag = 1;
-                break;
+                break; 
           case 'u': tty_flag = 1; 
-                break;
+                break; 
           case 'f' : /* commands from file */
                  cmdfilename = argv[0]+2;
                  if ( cmdfilename[0] == 0 ) /* probably a space inserted */
                     { cmdfilename = *++argv; argc--; }
                  break;
+
+          case 'r' : // -r command line option
+                 if ( argv[0][2] )
+                   strncpy(cmdstring,argv[0]+2,sizeof(cmdstring));
+                 else /* probably a space inserted */
+                 { strncpy(cmdstring,argv[1],sizeof(cmdstring));
+                   ++argv; argc--; 
+                 }
+                 // convert escapes
+                 { char *c;
+                   for ( c = cmdstring ; *c ; c++ )
+                   { if ( *c == '\\' )
+                     { *c = ' ';
+                       switch ( c[1] )
+                       { case 't': c[1] = '\t'; break;
+                         case 'n': c[1] = '\n'; break;
+                       }
+                     }
+                   }
+                 }
+                 cmdstring_flag = 1;
+                 break;
+
           case 'd' :  /* parser debug */
                  yydebug = 1;
                  break;
-          case 'i' : match_id_flag = 1; break;
+          case 'i' : match_id_flag = 1; sparse_ibase_flag = 1; break;
           case 'I' : sparse_ibase_flag = 1; break;
-          case 'p' : procs_requested = atoi(argv[0]+2); 
+          case 's' : default_random_seed = atoi(argv[0]+2); 
+                     break;
+          case 'p' : 
+                if ( argv[0][2] )
+                  procs_requested = atoi(argv[0]+2);
+                else 
+                { procs_requested = atoi(argv[1]);
+                  argv++; argc--;
+                }
 #if defined(SGI_MULTI) || defined (THREADS)
                 if ( procs_requested < 1 )
                   { kb_error(1321, 
@@ -248,9 +272,9 @@ char *argv[])
 #endif
 #else
                 kb_error(1322,"-p option not effective.  This Evolver not compiled for multithreading.\n", WARNING);
-
 #endif
                 break; 
+          case 'A' : cpu_affinity_flag = 1; break;
           case 'x' : exit_after_error = 1; break;
           case 'w' : exit_after_warning = exit_after_error = 1; break;
           case 'y' : break_after_warning = 1; break;
@@ -283,9 +307,18 @@ char *argv[])
   }
 
   if ( pause_flag )
-  { prompt("Hit ENTER to continue.\n",msg,sizeof(msg));
+  { 
+    #ifdef MPI_EVOLVER
+      MPI_Barrier(MPI_COMM_WORLD);   // to get all banners printed first
+      if ( this_task == MASTER_TASK )  // only master gets input, but all tasks wait on master anyway.
+         prompt("\nPausing due to -Z option. Hit ENTER to continue.\n",msg,sizeof(msg));
+      MPI_Barrier(MPI_COMM_WORLD);
+    #else
+         prompt("Pausing due to -Z option. Hit ENTER to continue.\n",msg,sizeof(msg));
+    #endif
   }
 
+ 
 #ifdef SGI_MULTI
   sprintf(msg,"Using %d processes on %d processors.\n\n",
       procs_requested,m_get_numprocs()); 
@@ -315,6 +348,14 @@ char *argv[])
   nprocs = procs_requested;
 
 #ifdef WINTHREADS
+  main_thread_id = GetCurrentThreadId();
+  if ( cpu_affinity_flag )
+  { SetThreadAffinityMask(GetCurrentThread(),1);
+    outstring("Set affinity of main thread to cpu 0.\n");
+  }
+  else if ( procs_requested <= 1 )
+    affinity_mongering();
+
   /* Set up worker threads for MS-Windows multiprocessor machines */
   thread_data_key = TlsAlloc();
   TlsSetValue(thread_data_key,(void*)&default_thread_data);  // for main thread
@@ -338,6 +379,9 @@ char *argv[])
       InitializeCriticalSection(&web_cs); 
     }
 #endif
+    if ( cpu_affinity_flag )  
+      SetThreadAffinityMask(GetCurrentThread(),1);
+
     threadlist = (HANDLE*)my_list_calloc(procs_requested,sizeof(HANDLE),
                        ETERNAL_BLOCK);
     thread_data_ptrs = (struct thread_data**)my_list_calloc(procs_requested,
@@ -362,6 +406,21 @@ char *argv[])
         erroutstring("Cannot create worker threads.\n");
         kb_error(2190,errmsg,UNRECOVERABLE);
       }
+      if ( cpu_affinity_flag )
+      { DWORD_PTR  proc_affinity_mask,system_affinity_mask;
+        GetProcessAffinityMask(GetCurrentProcess(),&proc_affinity_mask,
+            &system_affinity_mask);
+        if ( proc_affinity_mask & (2<<i) )
+        { SetThreadAffinityMask(threadlist[i],2<<i);
+          sprintf(msg,"Set affinity of worker thread %d to cpu %d.\n",i+1,i);
+          outstring(msg);
+        }
+        else
+        { sprintf(errmsg,"Cannot set affinity of worker thread %d to cpu %d; \n  process affinity mask is 0x%X.\n",
+                  i+1,i+1,proc_affinity_mask);
+          kb_error(1932,errmsg,WARNING);
+        }
+      }
     }
     WaitForSingleObject(mainthread_wakeup,INFINITE);
     sprintf(msg,"Created %d worker threads on %d processor machine.\n",
@@ -374,6 +433,7 @@ char *argv[])
 #endif
 
 #ifdef PTHREADS
+  main_thread_id = pthread_self();
   /* Set up worker threads for Unix multiprocessor machines with pthreads */
   pthread_key_create(&thread_data_key,NULL);
   pthread_setspecific(thread_data_key,(void*)&default_thread_data); // for main thread
@@ -448,13 +508,12 @@ char *argv[])
   ENTER_GRAPH_MUTEX;
   scoeff_init();
   vcoeff_init();  
-  reset_web();  /* in case no datafile on command line */
-  init_view();
+//  reset_web();  /* in case no datafile on command line */
+//  init_view();
   LEAVE_GRAPH_MUTEX;
- 
+
   if ( argc && argv &&  argv[0] && argv[1] )
      kb_error(1323,"Extra command line arguments ignored.\n",WARNING);
-
 
   /* command sources stack */
   push_commandfd(stdin,"stdin");
@@ -505,8 +564,9 @@ char *argv[])
     if ( this_task == MASTER_TASK )
        mpi_loadfile();
 #endif
+    mpi_initialization_flag = 1;
     startup(loadfilename);
-
+    mpi_initialization_flag = 0;
   }
   else
   { if ( setjmp(jumpbuf[subshell_depth]) )    /* return here after datafile errors */
@@ -548,12 +608,97 @@ char *argv[])
   my_exit(0);
 
   return 0; /* success return code */
-}
+} // end main()
 
 #ifdef __cplusplus
 void loadstub()
 { struct loadexcep something;
   throw something;
+}
+#endif
+
+#ifdef WINTHREADS
+/********************************************************************
+* Function: affinity_mongering()
+*
+* Purpose: Since Windows wants to run all programs of the same name
+*          on the same CPU, this function looks for other processes
+*          whose name starts with "ev" and tries to set affinity
+*          to an unused CPU.
+*/
+void affinity_mongering()
+{   char szProcessName[MAX_PATH];
+    DWORD aProcesses[1024];
+	DWORD this_process = GetCurrentProcessId();
+	unsigned int cbNeeded, cProcesses;
+    unsigned int i;
+	DWORD_PTR procmask = 0,sysmask = 0,cummask = 0, maskcopy = 0, mainmask = 0, graphmask = 0;
+	unsigned int cpu_top;
+	unsigned int prime;
+
+	// Get the list of process identifiers.
+    if ( !EnumProcesses( aProcesses, sizeof(aProcesses), &cbNeeded ) )
+        return ;
+
+    // Calculate how many process identifiers were returned.
+    cProcesses = cbNeeded / sizeof(DWORD);
+
+	for ( i = 0; i < cProcesses; i++ )
+    { if( (aProcesses[i] != 0) && (aProcesses[i] != this_process) )
+      { HANDLE hProcess = OpenProcess( PROCESS_QUERY_INFORMATION |
+                                   PROCESS_VM_READ, FALSE, aProcesses[i] );
+	    if (NULL != hProcess )
+        { HMODULE hMod;
+          DWORD cbNeeded;
+
+          if ( EnumProcessModules( hProcess, &hMod, sizeof(hMod), &cbNeeded) )
+          { GetModuleBaseName( hProcess, hMod, szProcessName, sizeof(szProcessName)/sizeof(TCHAR) );
+		    if ( strncmp(szProcessName,"ev",2) == 0 )
+			{ GetProcessAffinityMask(hProcess,&procmask,&sysmask);
+			  cummask |= procmask;
+			}
+		  }
+		}
+   	  }
+	}
+	// Be sure to get sysmask, in case this first Evolver
+	GetProcessAffinityMask(GetCurrentProcess(),&procmask,&sysmask);
+
+	// get highest cpu number
+	for ( cpu_top = 0, maskcopy = sysmask ; maskcopy ; maskcopy >>= 1 )
+		cpu_top++;
+
+	// Now pick an unused CPU, if there are any.  Complicated by the fact
+	// there might be hyperthreading, and we would rather not assign two
+	// processes to the same physical core.  Also, want to give affinity
+	// to two CPUs so graphics thread can have one.  To take care of
+	// both kinds of hyperthread numbering, we increment by a prime
+	// not dividing cpu_top.
+	prime = 3;
+	if ( (cpu_top % prime) == 0 ) prime = 5;
+	if ( (cpu_top % prime) == 0 ) prime = 7;
+
+	for ( i = 0 ; i < cpu_top ; i++ )
+	{ unsigned int spot = (i*prime) % cpu_top;
+	  unsigned int mask = 1 << spot;
+	  if ( !(cummask & mask) )
+	  { if ( mainmask )
+	       graphmask = mask;
+	    else
+		   mainmask = mask;
+	  }
+	  if ( graphmask )
+		 break;
+	}
+
+    if ( !graphmask )
+		// nothing free, so don't do anything
+		return;
+
+//	SetProcessAffinityMask(GetCurrentProcess(),mainmask+graphmask);
+	SetThreadAffinityMask(GetCurrentThread(),mainmask);
+	graphics_affinity_mask = graphmask; // for graphics thread to use when launched
+
 }
 #endif
 
@@ -564,8 +709,7 @@ void loadstub()
 *  purpose: graceful exit from program
 */
 
-void my_exit ARGS1((code),
-int code)
+void my_exit(int code)
 {
   if ( OOGL_flag ) End_OOGL();
 
@@ -590,7 +734,7 @@ int code)
   
 
   exit(code);
-}
+} // end my_exit()
 
 /********************************************************************
 *
@@ -600,9 +744,10 @@ int code)
 *              pops command file stack whenever end of file.
 */
 
-int exec_commands ARGS2((basefd,promptstring),
-FILE *basefd,  /* stop when get back to this input source */
-char *promptstring)  /* prompt to use */
+int exec_commands(
+  FILE *basefd,  /* stop when get back to this input source */
+  char *promptstring  /* prompt to use */
+)
 { /* main event loop of program */
   while ( commandfd && (commandfd != basefd))
   {
@@ -622,7 +767,7 @@ char *promptstring)  /* prompt to use */
          return END_COMMANDS;
   }
   return 0;
-}
+} // end exec_commands()
 
 #ifdef MAC_OS_X
 /********************************************************************
@@ -633,8 +778,7 @@ char *promptstring)  /* prompt to use */
 *          the draw thread) can call with one argument.
 */
 struct thread_data mac_exec_thread_data;
-void *mac_exec_commands ARGS1((arg),
-FILE *arg)
+void *mac_exec_commands(FILE *arg)
 {
 
 #ifdef __cplusplus
@@ -713,7 +857,7 @@ FILE *arg)
 #endif
 
   return NULL;
-}
+} // end mac_exec_commands()
 #endif
 
 /********************************************************************
@@ -725,9 +869,10 @@ FILE *arg)
 *              can be used in the middle of executing a command.
 */
 
-void exec_file ARGS2((fd,name),
-FILE *fd,  /* file, if already opened, like stdin */
-char *name) /* file name, if not already opened */
+void exec_file(
+  FILE *fd,  /* file, if already opened, like stdin */
+  char *name /* file name, if not already opened */
+)
 { int old_read_depth = read_depth;
   push_commandfd(fd,name);
   do  /* main event loop of program */
@@ -743,7 +888,7 @@ char *name) /* file name, if not already opened */
       old_menu(response);
   }
   while ( read_depth > old_read_depth ); 
-}
+} // end exec_file()
 
 /****************************************************************
 *
@@ -753,12 +898,11 @@ char *name) /* file name, if not already opened */
 *
 *****************************************************************/
 
-void startup ARGS1((file_name),
-char *file_name)  /* NULL if need to ask for name */
+void startup(char *file_name)  /* NULL if need to ask for name */
 {
   char *name = file_name;
   char response[100];
-  FILE *newfd;
+  FILE *newfd = NULL;
 
   /* be sure graphics thread is ok before loading new file */
   ENTER_GRAPH_MUTEX;
@@ -780,12 +924,25 @@ file_retry:
        response,sizeof(response));
     c = strchr(response,'\n');
     if ( c ) *c = 0;
-    c = strchr(response,' ');
-    if ( c ) *c = 0;
+    // strip quotes
+    if ( response[0] == '"' )
+    { for ( c = response+1 ; *c ; c++ )
+      { if ( *c == '"' && c[-1] != '\\' )
+        { c[-1] = 0;
+          break;
+        }
+        c[-1] = *c;
+      }
+    }
     if ( (strcmp(response,"q") == 0) || (strcmp(response,"quit")==0)
            || (strcmp(response,"bye")==0) || (strcmp(response,"exit")==0))
              my_exit(0);
-    else if ( !response[0] ) return; /* continue same */
+    else if ( !response[0] ) 
+    { if ( datafilename[0] ) 
+        return; /* continue same */
+      else
+        goto emptybailout;
+    }
     name = response;
 #ifdef MPI_EVOLVER
 	strcpy(loadfilename,name);
@@ -808,15 +965,19 @@ file_retry:
 
 #ifdef WIN32
 #ifdef MPI_EVOLVER
-  sprintf(msg,"Surface Evolver MPI - %s",name);
+  sprintf(console_title,"Surface Evolver MPI - %s",name);
 #else
-  sprintf(msg,"Surface Evolver - %s",name);
+  sprintf(console_title,"Surface Evolver - %s",name);
 #endif
-  SetConsoleTitle(msg);
+  SetConsoleTitleA(console_title);
 #endif
 
+emptybailout:
+
   ENTER_GRAPH_MUTEX;
+
   reset_web(); 
+
   init_view();
 
 if (memdebug) memory_report();
@@ -833,7 +994,8 @@ if ( heapcheck() < 0 )
   datafile_input_flag = 1;  /* so lex input knows */
   cmdptr = 0;
 
-  initialize();
+  if ( newfd ) 
+    initialize();
   LEAVE_GRAPH_MUTEX;
 
   datafile_flag = 0;
@@ -871,7 +1033,7 @@ if ( heapcheck() < 0 )
   target_length = web.total_area; /* for square curvature string model */
   if ( OOGL_flag ) ask_wrap_display();
   #endif 
-}
+} // end startup()
 
 #ifdef THREADS
 /****************************************************************************
@@ -879,7 +1041,7 @@ if ( heapcheck() < 0 )
     Multi-threading for multi-processing with shared memory.
 ****************************************************************************/
 
-void thread_stage_setup ARGS((void));
+void thread_stage_setup (void);
 
 /*****************************************************************************
 *
@@ -888,19 +1050,16 @@ void thread_stage_setup ARGS((void));
 * purpose: provide common place for various type worker threads to
 *          call the desired task.
 */
-void task_caller ARGS1((thread_tasknum),
-int thread_tasknum)
+void task_caller(int thread_tasknum)
 { 
   struct thread_data *data = GET_THREAD_DATA;
-__int32 task_caller_elapsed_time[2];
-__int32 now[2];
-task_caller_elapsed_time[0] = 0;
-task_caller_elapsed_time[1] = 0;
-data->task_state = 1;
+  long long int task_caller_elapsed_time;
+  long long int now;
+  data->task_state = 1;
 
 PROF_NOW(now);
 #ifdef _MSC_VER
-data->stagestart[0] = *(__int64*)now;
+data->stagestart[0] = now;
 #endif
 
 PROF_START(task_caller)
@@ -917,6 +1076,10 @@ PROF_START(task_caller)
       case TH_FIX_GRADS: m_fix_grads(); break;
       case TH_MULTI_QUANT_HESS: m_calc_quant_hess(m_type,m_mode,m_rhs); break;
       case TH_MOVE_VERTICES: thread_move_vertices(); break;
+      case TH_CALC_FACET_VOLUME: thread_calc_facet_volume(); break;
+      case TH_CALC_EDGE_CON_VOLUME: thread_calc_edge_con_volume(); break;
+      case TH_EQUIANGULATE: thread_equiangulate(); break;
+      case TH_CALC_EDGES: thread_calc_edges(); break;
       default: sprintf(errmsg,"Invalid thread task: %d\n",thread_tasknum);
                kb_error(2192,errmsg,UNRECOVERABLE);
     }
@@ -936,6 +1099,8 @@ if(verbose_flag)
       case TH_MULTI_QUANT_GRADS: taskname="m_calc_quant_grads"; break;
       case TH_FIX_GRADS: taskname="m_fix_grads"; break;
       case TH_MULTI_QUANT_HESS: taskname="m_calc_quant_hess"; break;
+      case TH_CALC_FACET_VOLUME: taskname="thread_calc_facet_volume"; break;
+      case TH_CALC_EDGE_CON_VOLUME: taskname="thread_calc_edge_con_volume"; break;
       default: taskname="default";
     }
 printf("%30s",taskname);
@@ -945,7 +1110,7 @@ PROF_PRINT(task_caller)
 
   data->task_state = 2;
 
-}
+} // end task_caller()
 #endif
 
 #ifdef WINTHREADS
@@ -958,7 +1123,7 @@ PROF_PRINT(task_caller)
 *
 */
 
-DWORD WINAPI winthread_worker ( void * arg )
+DWORD WINAPI winthread_worker( void * arg )
 { struct thread_data *data = (struct thread_data *)arg;
 
   /* set per-thread data */
@@ -986,7 +1151,7 @@ DWORD WINAPI winthread_worker ( void * arg )
     WaitForSingleObject(workthread_wakeup,INFINITE);
     task_caller(thread_task);
   }
-}
+} // end winthread_worker()
 #endif
 
 #ifdef PTHREADS
@@ -1047,14 +1212,161 @@ void *pthread_worker( void * arg )
 * purpose: comparison function for sorting partition coordinates.
 */
 struct pcoord { REAL p_coord; vertex_id v_id; };
-int pcomp ARGS((struct pcoord*,struct pcoord*));
 
-int pcomp ARGS2((a,b),
-struct pcoord *a, struct pcoord *b)
+int pcomp(struct pcoord *a, struct pcoord *b)
 {
   if ( a->p_coord < b->p_coord ) return -1;
   if ( a->p_coord > b->p_coord ) return  1;
   return 0;
+} // end pcomp()
+
+/*******************************************************************************
+*
+* function: make_thread_lists()
+*
+* purpose: Construct per-stage element lists for all processors,
+*          based on the partition_proc and partition_stage attributes.
+*          Called by thread_stage_setup() or by the user command make_thread_lists.
+*/
+void make_thread_lists()
+{ int i,proc,stage;
+  vertex_id v_id;
+  edge_id e_id;
+  facet_id f_id;
+  struct thread_stages_data *th;
+
+   for ( proc = 0 ; proc < nprocs ; proc++ )
+    for ( stage = 0 ; stage < MAXTHREADSTAGES ; stage++ )
+      thread_stages[proc].counts[VERTEX][stage] = 0;
+
+   max_thread_stages = 0;
+
+   FOR_ALL_VERTICES(v_id) 
+   { proc = *(int*)get_extra(v_id,v_partition_proc_attr);
+     stage = *(int*)get_extra(v_id,v_partition_stage_attr);
+     if ( proc < 0 )
+     { sprintf(errmsg,"Illegal negative value of vertex %s v_partition_proc: %d\n",
+          ELNAME(v_id),proc);
+       kb_error(5991,errmsg,RECOVERABLE);
+     }
+     if ( proc >= nprocs )
+     { sprintf(errmsg,"Vertex %s v_partition_proc %d exceeds number of threads %d\n",
+          ELNAME(v_id),proc,nprocs);
+       kb_error(5992,errmsg,RECOVERABLE);
+     }
+     if ( stage < 0 )
+     { sprintf(errmsg,"Illegal negative value of vertex %s v_partition_stage: %d\n",
+          ELNAME(v_id),stage);
+       kb_error(5993,errmsg,RECOVERABLE);
+     }
+     if ( stage >= MAXTHREADSTAGES )
+     { sprintf(errmsg,"Vertex %s v_partition_stage %d exceeds allowed maximum %d\n",
+          ELNAME(v_id),proc,MAXTHREADSTAGES-1);
+       kb_error(5994,errmsg,RECOVERABLE);
+     }
+     if ( stage >= max_thread_stages )
+       max_thread_stages = stage+1;
+
+     th = thread_stages+proc;
+     if ( th->counts[VERTEX][stage] >= th->allocated[VERTEX][stage] )
+     { int newalloc = th->allocated[VERTEX][stage] + 10
+                 + 2*web.skel[VERTEX].count/(nprocs*max_thread_stages);
+       th->blocks[VERTEX][stage] = (element_id *)kb_realloc(
+            (char*)(th->blocks[VERTEX][stage]),newalloc*sizeof(element_id));
+       th->allocated[VERTEX][stage] = newalloc;
+     }
+     th->blocks[VERTEX][stage][th->counts[VERTEX][stage]++] = v_id;
+   }
+
+   for ( proc = 0 ; proc < nprocs ; proc++ )
+    for ( stage = 0 ; stage < max_thread_stages ; stage++ )
+      thread_stages[proc].counts[EDGE][stage] = 0;
+   thread_stages[0].counts[EDGE][max_thread_stages] = 0;
+
+   FOR_ALL_EDGES(e_id) 
+   { vertex_id head = get_edge_headv(e_id); 
+     vertex_id tail = get_edge_tailv(e_id); 
+     int hproc = *(int*)get_extra(head,v_partition_proc_attr);
+     int tproc = *(int*)get_extra(tail,v_partition_proc_attr);
+     int hstage = *(int*)get_extra(head,v_partition_stage_attr);
+     int tstage = *(int*)get_extra(tail,v_partition_stage_attr);
+     int hband = hstage + max_thread_stages*hproc;
+     int tband = tstage + max_thread_stages*tproc;
+     if ( abs(hband-tband) <= 1 )
+     { if ( hband < tband ) { proc = hproc; stage = hstage; } 
+       else { proc = tproc; stage = tstage;}
+     }
+     else if ( web.symmetry_flag && (hband == 0) && 
+                (tband == nprocs*max_thread_stages-1 ) )
+       { proc = tproc; stage = tstage;}
+     else if ( web.symmetry_flag && (tband == 0) && 
+                (hband == nprocs*max_thread_stages-1 ) )
+       { proc = hproc; stage = hstage;}
+     else /* big element */
+       { proc = 0; stage = max_thread_stages; }
+
+     th = thread_stages+proc;
+     if ( th->counts[EDGE][stage] >= th->allocated[EDGE][stage] )
+     { int newalloc = th->allocated[EDGE][stage] + 10
+                 + 2*web.skel[EDGE].count/(nprocs*max_thread_stages);
+       th->blocks[EDGE][stage] = (element_id *)kb_realloc(
+            (char*)(th->blocks[EDGE][stage]),newalloc*sizeof(element_id));
+       th->allocated[EDGE][stage] = newalloc;
+     }
+     th->blocks[EDGE][stage][th->counts[EDGE][stage]++] = e_id;
+     *((int *)(get_extra(e_id,e_partition_proc_attr))) = proc;
+     *((int *)(get_extra(e_id,e_partition_stage_attr))) = stage;
+   }
+   thread_stages[0].counts[VERTEX][max_thread_stages] = 0;
+
+   for ( proc = 0 ; proc < nprocs ; proc++ )
+    for ( stage = 0 ; stage < max_thread_stages ; stage++ )
+      thread_stages[proc].counts[FACET][stage] = 0;
+   thread_stages[0].counts[FACET][max_thread_stages] = 0;
+
+   FOR_ALL_FACETS(f_id) 
+   { facetedge_id fe = get_facet_fe(f_id);
+     int topband = -1;
+     int lowband = 1000000;
+     int vproc,vstage,vband;
+
+     for ( i = 0 ; i < FACET_VERTS ; i++ )
+     { v_id = get_fe_headv(fe); 
+       vproc = *(int*)get_extra(v_id,v_partition_proc_attr);
+       vstage = *(int*)get_extra(v_id,v_partition_stage_attr);
+       vband = vstage + max_thread_stages*vproc;
+       if ( vband < lowband ) lowband = vband;
+       if ( vband > topband ) topband = vband;
+       fe = get_next_edge(fe);
+     }
+
+     if ( topband-lowband <= 1 )
+     { proc = lowband/max_thread_stages; 
+       stage = lowband % max_thread_stages;
+     }
+     else if ( web.symmetry_flag && (lowband == 0) && 
+                (topband == nprocs*max_thread_stages-1 ) )
+     { proc = topband/max_thread_stages; 
+       stage = topband % max_thread_stages;
+     }
+     else /* big element */
+     { proc = 0; stage = max_thread_stages; }
+
+     th = thread_stages+proc;
+     if ( th->counts[FACET][stage] >= th->allocated[FACET][stage] )
+     { int newalloc = th->allocated[FACET][stage] + 10
+                 + 2*web.skel[FACET].count/(nprocs*max_thread_stages);
+       th->blocks[FACET][stage] = (element_id *)kb_realloc(
+            (char*)(th->blocks[FACET][stage]),newalloc*sizeof(element_id));
+       th->allocated[FACET][stage] = newalloc;
+     }
+     th->blocks[FACET][stage][th->counts[FACET][stage]++] = f_id;
+     *((int *)(get_extra(f_id,f_partition_proc_attr))) = proc;
+     *((int *)(get_extra(f_id,f_partition_stage_attr))) = stage;
+   }
+
+
+  partition_timestamp = global_timestamp;
 }
 
 /**************************************************************************
@@ -1064,14 +1376,14 @@ struct pcoord *a, struct pcoord *b)
 * purpose: Initialize element lists for thread stages.
 */
 
+REAL oblique_coeff[MAXCOORD] = { 0.123458010988482,1.087072702850924,
+  0.827769070277524,0.462988927027};
+
 void thread_stage_setup()
 { int i,pcount,pspot,perstage;
   vertex_id v_id;
-  edge_id e_id;
-  facet_id f_id;
   int proc,stage;
   struct pcoord *pcoords;
-  struct thread_stages_data *th;
   int one = 1;
 
   max_thread_stages = 2;  /* simple 1-D partitioning */
@@ -1080,45 +1392,50 @@ void thread_stage_setup()
   v_partition_coord_attr = find_attribute(VERTEX,"v_partition_coord");
   if ( v_partition_coord_attr < 0 )
   { v_partition_coord_attr = add_attribute(VERTEX,"v_partition_coord",
-        REAL_TYPE,0,&one,0,NULL);
+        REAL_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
   }
 
-  /* default for now: use x coordinate as partition coordinate */
+  /* default for now: use oblique coordinate as partition coordinate */
   FOR_ALL_VERTICES(v_id)
-  { *((REAL*)(get_extra(v_id,v_partition_coord_attr))) = get_coord(v_id)[0];
+  { int i;
+    REAL sum = 0.0;
+    REAL *x = get_coord(v_id);
+    for ( i = 0 ; i < SDIM ; i++ )
+      sum += oblique_coeff[i]*x[i];
+    *((REAL*)(get_extra(v_id,v_partition_coord_attr))) = sum;
   }
   
   v_partition_stage_attr = find_attribute(VERTEX,"v_partition_stage");
   if ( v_partition_stage_attr < 0 )
   { v_partition_stage_attr = add_attribute(VERTEX,"v_partition_stage",
-        INTEGER_TYPE,0,&one,0,NULL);
+        INTEGER_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
   }
   v_partition_proc_attr = find_attribute(VERTEX,"v_partition_proc");
   if ( v_partition_proc_attr < 0 )
   { v_partition_proc_attr = add_attribute(VERTEX,"v_partition_proc",
-        INTEGER_TYPE,0,&one,0,NULL);
+        INTEGER_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
   }
   
   e_partition_stage_attr = find_attribute(EDGE,"e_partition_stage");
   if ( e_partition_stage_attr < 0 )
   { e_partition_stage_attr = add_attribute(EDGE,"e_partition_stage",
-        INTEGER_TYPE,0,&one,0,NULL);
+        INTEGER_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
   }
   e_partition_proc_attr = find_attribute(EDGE,"e_partition_proc");
   if ( e_partition_proc_attr < 0 )
   { e_partition_proc_attr = add_attribute(EDGE,"e_partition_proc",
-        INTEGER_TYPE,0,&one,0,NULL);
+        INTEGER_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
   }
   
   f_partition_stage_attr = find_attribute(FACET,"f_partition_stage");
   if ( f_partition_stage_attr < 0 )
   { f_partition_stage_attr = add_attribute(FACET,"f_partition_stage",
-        INTEGER_TYPE,0,&one,0,NULL);
+        INTEGER_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
   }
   f_partition_proc_attr = find_attribute(FACET,"f_partition_proc");
   if ( f_partition_proc_attr < 0 )
   { f_partition_proc_attr = add_attribute(FACET,"f_partition_proc",
-        INTEGER_TYPE,0,&one,0,NULL);
+        INTEGER_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
   }
   
   /* Find percentiles, for load balancing */
@@ -1150,115 +1467,16 @@ void thread_stage_setup()
                          sizeof(struct thread_stages_data));
 
   /* set up all element's stage lists */
-
-       for ( proc = 0 ; proc < nprocs ; proc++ )
-        for ( stage = 0 ; stage < max_thread_stages ; stage++ )
-          thread_stages[proc].counts[VERTEX][stage] = 0;
-       thread_stages[0].counts[VERTEX][max_thread_stages] = 0;
-    
-       FOR_ALL_VERTICES(v_id) 
-       { proc = *(int*)get_extra(v_id,v_partition_proc_attr);
-         stage = *(int*)get_extra(v_id,v_partition_stage_attr);
-         th = thread_stages+proc;
-         if ( th->counts[VERTEX][stage] >= th->allocated[VERTEX][stage] )
-         { int newalloc = th->allocated[VERTEX][stage] + 10
-                     + 2*web.skel[VERTEX].count/(nprocs*max_thread_stages);
-           th->blocks[VERTEX][stage] = (element_id *)kb_realloc(
-                (char*)(th->blocks[VERTEX][stage]),newalloc*sizeof(element_id));
-           th->allocated[VERTEX][stage] = newalloc;
-         }
-         th->blocks[VERTEX][stage][th->counts[VERTEX][stage]++] = v_id;
-       }
-
-       for ( proc = 0 ; proc < nprocs ; proc++ )
-        for ( stage = 0 ; stage < max_thread_stages ; stage++ )
-          thread_stages[proc].counts[EDGE][stage] = 0;
-       thread_stages[0].counts[EDGE][max_thread_stages] = 0;
-
-       FOR_ALL_EDGES(e_id) 
-       { vertex_id head = get_edge_headv(e_id); 
-         vertex_id tail = get_edge_tailv(e_id); 
-         int hproc = *(int*)get_extra(head,v_partition_proc_attr);
-         int tproc = *(int*)get_extra(tail,v_partition_proc_attr);
-         int hstage = *(int*)get_extra(head,v_partition_stage_attr);
-         int tstage = *(int*)get_extra(tail,v_partition_stage_attr);
-         int hband = hstage + max_thread_stages*hproc;
-         int tband = tstage + max_thread_stages*tproc;
-         if ( abs(hband-tband) <= 1 )
-         { if ( hband < tband ) { proc = hproc; stage = hstage; } 
-           else { proc = tproc; stage = tstage;}
-         }
-         else if ( web.symmetry_flag && (hband == 0) && 
-                    (tband == nprocs*max_thread_stages-1 ) )
-           { proc = tproc; stage = tstage;}
-         else if ( web.symmetry_flag && (tband == 0) && 
-                    (hband == nprocs*max_thread_stages-1 ) )
-           { proc = hproc; stage = hstage;}
-         else /* big element */
-           { proc = 0; stage = max_thread_stages; }
-
-         th = thread_stages+proc;
-         if ( th->counts[EDGE][stage] >= th->allocated[EDGE][stage] )
-         { int newalloc = th->allocated[EDGE][stage] + 10
-                     + 2*web.skel[EDGE].count/(nprocs*max_thread_stages);
-           th->blocks[EDGE][stage] = (element_id *)kb_realloc(
-                (char*)(th->blocks[EDGE][stage]),newalloc*sizeof(element_id));
-           th->allocated[EDGE][stage] = newalloc;
-         }
-         th->blocks[EDGE][stage][th->counts[EDGE][stage]++] = e_id;
-         *((int *)(get_extra(e_id,e_partition_proc_attr))) = proc;
-         *((int *)(get_extra(e_id,e_partition_stage_attr))) = stage;
-       }
-
-       for ( proc = 0 ; proc < nprocs ; proc++ )
-        for ( stage = 0 ; stage < max_thread_stages ; stage++ )
-          thread_stages[proc].counts[FACET][stage] = 0;
-       thread_stages[0].counts[FACET][max_thread_stages] = 0;
-
-       FOR_ALL_FACETS(f_id) 
-       { facetedge_id fe = get_facet_fe(f_id);
-         int topband = -1;
-         int lowband = 1000000;
-         int vproc,vstage,vband;
-
-         for ( i = 0 ; i < FACET_VERTS ; i++ )
-         { v_id = get_fe_headv(fe); 
-           vproc = *(int*)get_extra(v_id,v_partition_proc_attr);
-           vstage = *(int*)get_extra(v_id,v_partition_stage_attr);
-           vband = vstage + max_thread_stages*vproc;
-           if ( vband < lowband ) lowband = vband;
-           if ( vband > topband ) topband = vband;
-           fe = get_next_edge(fe);
-         }
-
-         if ( topband-lowband <= 1 )
-         { proc = lowband/max_thread_stages; 
-           stage = lowband % max_thread_stages;
-         }
-         else if ( web.symmetry_flag && (lowband == 0) && 
-                    (topband == nprocs*max_thread_stages-1 ) )
-         { proc = topband/max_thread_stages; 
-           stage = topband % max_thread_stages;
-         }
-         else /* big element */
-         { proc = 0; stage = max_thread_stages; }
-
-         th = thread_stages+proc;
-         if ( th->counts[FACET][stage] >= th->allocated[FACET][stage] )
-         { int newalloc = th->allocated[FACET][stage] + 10
-                     + 2*web.skel[FACET].count/(nprocs*max_thread_stages);
-           th->blocks[FACET][stage] = (element_id *)kb_realloc(
-                (char*)(th->blocks[FACET][stage]),newalloc*sizeof(element_id));
-           th->allocated[FACET][stage] = newalloc;
-         }
-         th->blocks[FACET][stage][th->counts[FACET][stage]++] = f_id;
-         *((int *)(get_extra(f_id,f_partition_proc_attr))) = proc;
-         *((int *)(get_extra(f_id,f_partition_stage_attr))) = stage;
-       }
-
-  partition_timestamp = global_timestamp;
+  make_thread_lists();
 
 } /* end thread_stage_setup */
+
+#else
+
+void make_thread_lists()
+{ return; 
+}
+
 #endif
 
 #ifdef WINTHREADS
@@ -1272,10 +1490,10 @@ void thread_stage_setup()
 
 void thread_launch(int task, int element_type)
 { int i,j,proc;
-  __int32 now[2];
+  long long int now=0;
   
   PROF_NOW(now);
-  thread_launch_start = *(__int64*)now;
+  thread_launch_start = now;
 
   global_id = web.skel[element_type].used;  /* in case no threads */
 
@@ -1303,7 +1521,7 @@ void thread_launch(int task, int element_type)
   }
 
   PROF_NOW(now);
-  thread_launch_end = *(__int64*)now;
+  thread_launch_end = now;
 
 if ( verbose_flag )
 {
@@ -1322,7 +1540,7 @@ for ( j = 1; j < nprocs ; j++ )
 printf("thread_launch_end     %12I64X\n",thread_launch_end-thread_launch_start);
 }
 
-}
+} // end thread_launch()
 #endif
 
 #ifdef PTHREADS
@@ -1383,7 +1601,7 @@ void thread_launch(int task, int element_type)
       }
       break;
   }
-}
+} // end thread_launch()
 #endif
 
 #ifndef THREADS
@@ -1418,7 +1636,7 @@ element_id thread_next_element()
   struct thread_stages_data *th;
   struct thread_data *data;
 
-  __int32 now[2];  /* for timing */
+  long long int now=0;  /* for timing */
 
 
   /* First, in case multithreading not being used */
@@ -1447,7 +1665,7 @@ element_id thread_next_element()
     { th->stage++;  /* signify done */
 #ifdef _MSC_VER
 PROF_NOW(now);
-data->stageend[th->stage-1] = *(__int64*)now;
+data->stageend[th->stage-1] = now;
 #endif
       th->spot = 0;
       if ( th->stage == ((proc==0) ? max_thread_stages+1 : max_thread_stages) )
@@ -1465,13 +1683,13 @@ data->stageend[th->stage-1] = *(__int64*)now;
         }  
 #ifdef _MSC_VER
 PROF_NOW(now);
-data->stagestart[th->stage] = *(__int64*)now;
+data->stagestart[th->stage] = now;
 #endif
       }
     }
   } 
   return id;
-}
+} // end thread_next_element()
 #endif
 
 /***************************************************************************
@@ -1545,27 +1763,27 @@ void find_cpu_speed()
 #if defined(_MSC_VER) && defined(PROFILING)
   { /* use high-performance counter to estimate frequency */
     LARGE_INTEGER freq,start,finish;
-    __int32 profstart[2],profnow[2];
+    long long int profstart,profnow;
     QueryPerformanceFrequency(&freq);
     PROF_NOW(profstart);
     PROF_NOW(profnow);
     QueryPerformanceCounter(&start);
     do {
-      if ( *(__int64*)profnow - *(__int64*)profstart <= 0 )
+      if ( profnow - profstart <= 0 )
       { /* something wrong; maybe hibernated in middle of loop! */
         return;
       }
       PROF_NOW(profnow);
     }
-    while ( *(__int64*)profnow - *(__int64*)profstart < 100000000 );
+    while ( profnow - profstart < 100000000 );
     QueryPerformanceCounter(&finish);
-    cpu_speed = (*(__int64*)profnow-*(__int64*)profstart)/
+    cpu_speed = (profnow-profstart)/
              ((finish.QuadPart-start.QuadPart)/(double)freq.QuadPart);
   }
 #else
    cpu_speed = 3e9;  /* rough guess */
 #endif
-}
+} // end find_cpu_speed()
 
 
 

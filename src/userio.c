@@ -25,8 +25,7 @@
 *              Does not add newline.
 */
 
-void outstring ARGS1((outmsg),
-CONST char *outmsg)
+void outstring(char *outmsg)
 {
   if ( quiet_flag || !outmsg ) return;
   if ( broken_pipe_flag )
@@ -35,7 +34,7 @@ CONST char *outmsg)
   if ( outfd == NULL ) outfd = stdout;    /* maybe after error */
 
   if ( logfile_flag && (outfd==stdout) )
-      fprintf(logfilefd,outmsg);
+      fprintf(logfilefd,"%s",outmsg);
 
 #if defined(MAC_APP) || defined(WIN32S) || defined(MAC_CW)
   if ( outfd == stdout )
@@ -46,7 +45,7 @@ CONST char *outmsg)
   fputs(outmsg,outfd);
   fflush(outfd);
 #endif
-} 
+}  // end outstring()
 
 /***********************************************************************
 *
@@ -56,10 +55,9 @@ CONST char *outmsg)
 *              Does not add newline.
 */
 
-void erroutstring ARGS1((outmsg),
-char *outmsg)
+void erroutstring(char *outmsg)
 {
-  if ( !outmsg ) 
+  if ( !outmsg || suppress_erroutstring ) 
 	  return;
 #if defined(MAC_APP) || defined(WIN32S) || defined(MAC_CW)
   write_to_console(outmsg);
@@ -67,13 +65,13 @@ char *outmsg)
 #ifdef MPI_EVOLVER
   fprintf(stderr,"Task %d: ",this_task);
 #endif
-  fputs(outmsg,stderr);
-  fflush(stderr);
+  fputs(outmsg,erroutfd);
+  fflush(erroutfd);
 #endif
   if ( logfile_flag )
-      fprintf(logfilefd,outmsg);
+      fprintf(logfilefd,"%s",outmsg);
 
-}
+} // end erroutstring()
 
 /***********************************************************************
 *
@@ -84,10 +82,11 @@ char *outmsg)
 * ends with null, included in max size.
 */
 
-char *my_fgets ARGS3((s,n,stream),
-char *s,
-int n,  /* max size of string */
-FILE *stream) 
+char *my_fgets(
+  char *s,
+  int n,  /* max size of string */
+  FILE *stream
+) 
 { char *p;
   int k;
   for ( k = 0, p = s ; k < n-1 ; k++,p++ )
@@ -106,7 +105,7 @@ FILE *stream)
   }
   *p = 0;  /* null terminator */
   return s;
-}
+} // end my_fgets()
 
 /***********************************************************************
 *
@@ -115,9 +114,10 @@ FILE *stream)
 *  Purpose: Gets string from user. 
 */
 
-void getstring ARGS2((inmsg,max),
-char *inmsg,
-int max)
+void getstring(
+  char *inmsg,
+  int max
+)
 { char *c;
   max -= 2; /* ensure room */
   while ( commandfd && (commandfd != stdin) )
@@ -149,7 +149,7 @@ int max)
 #endif
 
   if ( keylogfile_flag ) fprintf(keylogfilefd,"%s\n",inmsg);
-}
+} // end getstring()
 
 #ifdef OOGL
 /* Geomview picking stuff */
@@ -281,7 +281,7 @@ pick_fail_exit:
   outstring(pickbuf);
   if ( current_prompt ) outstring(current_prompt);
   return 0;
-}
+} // end read_pick()
 
 /***************************************************************************
 *
@@ -293,7 +293,7 @@ pick_fail_exit:
 * return: 0 for stdin, 1 for pick
 */
 #ifdef POLLIN
-extern int poll ARGS((struct pollfd *, unsigned long, int));
+extern int poll (struct pollfd *, unsigned long, int);
 #endif
 
 int check_pick()
@@ -325,7 +325,7 @@ int check_pick()
   else return 0;
 #endif
   return 0;
-}
+} // end check_pick()
 #endif
 
 /***********************************************************************
@@ -338,10 +338,11 @@ int check_pick()
 #include "readline.c"
 #endif
 
-int prompt ARGS3((promptmsg,inmsg,max),
-char *promptmsg, /* to user */
-char *inmsg,    /* from user, space already allocated */
-int max) /* max char, including terminal null */
+int prompt(
+  char *promptmsg, /* to user */
+  char *inmsg,    /* from user, space already allocated */
+  int max /* max char, including terminal null */
+)
 { char *c,*ptr;
   int oldquiet;
   
@@ -382,7 +383,7 @@ if ( threadflag )
   for ( i = 0 ; i < nprocs ; i++ ) thread_data_ptrs[i]->eventcount = 0;
   main_eventcount = 0;
 
-}
+} 
 #endif
 
   if ( commandfd && (commandfd != stdin) )
@@ -390,7 +391,8 @@ if ( threadflag )
     if (my_fgets(inmsg,max,commandfd) == NULL) 
     { return EOF; }
     else 
-    { oldquiet = quiet_flag; /* quiet_flag = 0; */
+    { 
+      oldquiet = quiet_flag; /* quiet_flag = 0; */
 #ifdef USE_READLINE //CSL
      if(promptmsg == MOREPROMPT || promptmsg == CONTPROMPT)
      { promptmsg="more> "; } 
@@ -466,7 +468,7 @@ if ( threadflag )
   if ( keylogfile_flag ) fprintf(keylogfilefd,"%s\n",inmsg);
 
   return 1; /* not EOF */
-}
+} // end prompt()
 
 /***********************************************************************
 *
@@ -475,8 +477,11 @@ if ( threadflag )
 *  purpose:  form a new file name
 */
  
-void add_path_to_name ARGS3((path,name,result),
-     const char *path,const char *name, char *result) /* the result */
+void add_path_to_name(
+     const char *path,
+     const char *name, 
+     char *result /* the result */
+)
 /* the result has length PATHSIZE */
 { char *slash;
   strncpy(result,path,PATHSIZE-1); result[PATHSIZE-1]=0;
@@ -485,7 +490,7 @@ void add_path_to_name ARGS3((path,name,result),
   if(slash) slash++;
   else slash=result;
   strncpy(slash,name,PATHSIZE-1-(slash-result));
-}
+} // end add_path_to_name()
  
 
 /***********************************************************************
@@ -495,9 +500,10 @@ void add_path_to_name ARGS3((path,name,result),
 *  purpose:  push new datafile include file on stack.
 */
 
-void push_datafd ARGS2((cfd,name),
-FILE *cfd, /* NULL if not opened yet */
-char *name)  /* name of file */
+void push_datafd(
+  FILE *cfd, /* NULL if not opened yet */
+  char *name  /* name of file */
+)
 {
   if ( include_depth >= NESTDEPTH-1 )
      kb_error(1352,"INCLUDEs nested too deeply.\n",DATAFILE_ERROR);
@@ -525,7 +531,7 @@ char *name)  /* name of file */
   datafile_stack[include_depth].line = 0;
   datafile_stack[include_depth++].fd = data_fd = cfd;
   yylex_init();  /* reset lex */
-}
+} // end push_datafd()
 
 /***********************************************************************
 *
@@ -544,7 +550,7 @@ void pop_datafd()
       line_no = datafile_stack[include_depth-1].line;
     } 
   else data_fd = NULL;
-}
+} // end pop_datafd()
 
 /***********************************************************************
 *
@@ -553,10 +559,12 @@ void pop_datafd()
 *  purpose:  push new command file on stack.
 */
   
-void push_commandfd ARGS2((cfd,name),
-FILE *cfd, /* NULL if not opened yet */
-char *name)  /* name of file */
-{
+void push_commandfd(
+  FILE *cfd, /* NULL if not opened yet */
+  char *name  /* name of file */
+)
+{ int n;
+
   if ( (cfd==NULL) && (name==NULL) ) return;
   if ( read_depth >= NESTDEPTH-1 )
      kb_error(1354,"READs nested too deeply.\n",RECOVERABLE);
@@ -584,21 +592,34 @@ char *name)  /* name of file */
      cmdfile_stack[read_depth-1].line = line_no; /* save previous line number */
   line_no = 1;
   cmdfile_stack[read_depth].fd = commandfd = cfd;
-  if ( file_no_used >= file_no_max ) 
-  { file_names = (char**)kb_realloc((char*)file_names,
+
+  // see if file name already in list, i.e. replace_load
+  for ( n = 0 ; n < file_no_used ; n++ )
+    if ( strcmp(name,file_names[n]) == 0 )
+      break;
+  if ( n < file_no_used )
+  { // already exists
+     file_no = n; // set global variable
+  }
+  else
+  { // append to list
+    if ( file_no_used >= file_no_max ) 
+    { file_names = (char**)kb_realloc((char*)file_names,
         (2*file_no_max+10)*sizeof(char*));
     file_no_max = 2*file_no_max+10;
-  } 
-  file_names[file_no_used] = mycalloc(strlen(name)+4,1);
-  strcpy(file_names[file_no_used],name);
-  if ( read_depth > 0 )
-  { file_no = file_no_used;
-    cmdfile_stack[read_depth].file_no = file_no;
+    } 
+    file_names[file_no_used] = mycalloc(strlen(name)+4,1);
+    strcpy(file_names[file_no_used],name);
+    if ( read_depth > 0 )
+    { file_no = file_no_used;
+      cmdfile_stack[read_depth].file_no = file_no;
+    }
+    file_no_used++;
   }
-  file_no_used++;
+
   read_depth++;
   yylex_init();  /* reset lex */ 
-}
+} // end push_commandfd()
 
 /***********************************************************************
 *
@@ -632,6 +653,7 @@ void pop_commandfd()
     datafile_flag = 0; /* safe since doing one-char read-ahead */
     return;  /* lex needs to keep reading EOF for datafile */
   }
+  
   if ( read_depth <= 1 )
   { read_depth = 0; commandfd = NULL; file_no = 0;}
   else fclose(commandfd);
@@ -640,13 +662,18 @@ void pop_commandfd()
     line_no = cmdfile_stack[read_depth-1].line;
     file_no = cmdfile_stack[read_depth-1].file_no;
   }
+  if ( (read_depth == 1) && cmdstring_flag )
+  { cmdstring_flag = 0; // so replace_load doesn't try to recur
+    command(cmdstring,ADD_TO_HISTORY);
+    cmdstring[0] = 0;
+  }
   if ( read_depth <= 1 )
   { cmdfilename = NULL;
     if ( warning_messages_new )
       outstring("\nNOTE: There were warning messages. To review, do \"print warning_messages\"\n");
     warning_messages_new = 0;
   }
-}
+} // end pop_commandfd()
 
 /**************************************************************************
 *
@@ -657,8 +684,7 @@ void pop_commandfd()
 
 #define WARNING_MESSAGES_MAX 100000
 
-void add_warning_message ARGS1((message),
-char *message)
+void add_warning_message(char *message)
 { size_t needed = (warning_messages ? strlen(warning_messages):0) + strlen(message) + 10;
   if ( warning_messages_max < needed )
   { if ( warning_messages_max < WARNING_MESSAGES_MAX )
@@ -674,9 +700,11 @@ char *message)
   }
   strcat(warning_messages,message);
   warning_messages_new++;
-}
+} // end add_warning_message()
 
 #ifdef __cplusplus
+
+// Some C++ exception throwers for use by kb_error()
 void do_throw ( int errnum )
 {
   throw errnum;
@@ -692,6 +720,29 @@ void do_graph_throw ( )
 
 #endif
 
+/*************************************************************************
+* 
+* Function: print_eval_stack_trace()
+*
+* Purpose: Print stack trace in case of eval() error.
+*
+*/
+void print_eval_stack_trace()
+{
+  int i;
+  if ( eval_stack_trace_spot > 0 )
+  { erroutstring("Called from: \n");
+    for ( i = eval_stack_trace_spot-1 ; i >= 0 ; i-- )
+    { struct treenode *node = eval_stack_trace[i];
+      sprintf(errmsg,"Source file %s, line %d\n",
+             file_names[node->file_no],node->line_no);
+      erroutstring(errmsg);
+    }
+    erroutstring("\n");
+  }
+
+} // end print_eval_stack_trace()
+
 /***********************************************************************
 *
 *  Purpose: Error handling.  Prints error message.  If error is
@@ -700,10 +751,11 @@ void do_graph_throw ( )
 *  May be system dependent for message display.
 */
 
-void kb_error ARGS3((errnum,emsg,mode),
-int errnum, /* error identifier */
-char *emsg, /* might be msg or errmsg */
-int mode)
+void kb_error(
+  int errnum, /* error identifier */
+  char *emsg, /* might be msg or errmsg */
+  int mode // WARNING, etc.
+)
 {
   extern int line_no;
   char *fullmsg;
@@ -717,41 +769,40 @@ int mode)
 
   last_error = errnum;
 
-  if ( read_depth > 1 ) 
+/*  if ( read_depth > 1 ) 
   { sprintf(fullmsg,"\n%s Line %d:\n",
       cmdfile_stack[read_depth-1].filename,line_no); 
   }
-  else fullmsg[0] = 0;
+  else
+  */
+    fullmsg[0] = 0;
 
   reading_comp_quant_flag = 0;  /* just in case */
 
   switch ( mode )
   {
      case UNRECOVERABLE:
-        sprintf(fullmsg+strlen(fullmsg),"FATAL ERROR %d: ",errnum);
+        sprintf(fullmsg+strlen(fullmsg),"\nFATAL ERROR %d: ",errnum);
         strncat(fullmsg,emsg,size);
         if ( datafile_flag )
           dump_buff(fullmsg+strlen(fullmsg),size-strlen(fullmsg));
         erroutstring(fullmsg);
+        print_eval_stack_trace();
         my_exit(errnum);  
 
      case RECOVERABLE_ABORT:
      case RECOVERABLE:
-        sprintf(fullmsg+strlen(fullmsg),"ERROR %d: ",errnum);
+        sprintf(fullmsg+strlen(fullmsg),"\nERROR %d: ",errnum);
         strncat(fullmsg,emsg,size);
         /* pop stack of command files */
         if ( read_depth > 0 ) cmdfile_stack[read_depth-1].line = line_no;
         while ( commandfd && (commandfd  != stdin) )
           {
-/*
-            sprintf(fullmsg+strlen(fullmsg),"file %s at line %d\n",
-                  cmdfile_stack[read_depth-1].filename,
-                  cmdfile_stack[read_depth-1].line);
-*/
              pop_commandfd();
           }
         strcat(fullmsg,"\n");
         erroutstring(fullmsg);
+        print_eval_stack_trace();
         goto bailout;
 
      case RECOVERABLE_QUIET:
@@ -761,6 +812,10 @@ int mode)
         goto bailout;
 
      case Q_ERROR:
+        if ( read_depth > 1 ) 
+        { sprintf(fullmsg,"\n%s Line %d:\n",
+          cmdfile_stack[read_depth-1].filename,line_no); 
+        }
         sprintf(fullmsg+strlen(fullmsg),"ERROR %d: ",errnum);
         strcat(fullmsg,emsg); 
         dump_buff(fullmsg+strlen(fullmsg),size-strlen(fullmsg));
@@ -785,26 +840,40 @@ int mode)
           }
         erroutstring(fullmsg);
         erroutstring("\n");
+        print_eval_stack_trace();
         goto bailout;
 
      case WARNING:
         for ( i = 0 ; i < warnings_suppressed_count ; i++ )
           if ( errnum == warnings_suppressed[i] )
             return;
+        if ( read_depth > 1 ) 
+        { sprintf(fullmsg,"\n%s Line %d:\n",
+          cmdfile_stack[read_depth-1].filename,line_no); 
+        }
         sprintf(fullmsg+strlen(fullmsg),"WARNING %d: ",errnum);
         strncat(fullmsg,emsg,size);
         strcat(fullmsg,"\n");
         erroutstring(fullmsg);
+        print_eval_stack_trace();
         add_warning_message(fullmsg);
         if ( exit_after_warning ) my_exit(errnum);
         if ( break_after_warning ) breakflag = BREAKAFTERWARNING;
+        if ( break_on_warning )  
+          goto bailout;
+        
         return;
 
     case EXPRESSION_ERROR:
+       if ( read_depth > 1 ) 
+       { sprintf(fullmsg,"\n%s Line %d:\n",
+         cmdfile_stack[read_depth-1].filename,line_no); 
+       }
         sprintf(fullmsg+strlen(fullmsg),"SYNTAX ERROR %d: ",errnum);
         strncat(fullmsg,emsg,size);
         dump_buff(fullmsg+strlen(fullmsg),size-strlen(fullmsg));
         erroutstring(fullmsg);
+        print_eval_stack_trace();
         add_warning_message(fullmsg);
         if ( ++parse_errors >= 5 ) 
           {
@@ -819,6 +888,10 @@ int mode)
         break;
 
      case SYNTAX_ERROR:
+        if ( read_depth > 1 ) 
+        { sprintf(fullmsg,"\n%s Line %d:\n",
+          cmdfile_stack[read_depth-1].filename,line_no); 
+        }
         strncat(fullmsg,emsg,size); 
         /*
         dump_buff(fullmsg+strlen(fullmsg),size-strlen(fullmsg));
@@ -849,11 +922,15 @@ int mode)
         break; /* return to parser for its message */
 
      case COMMAND_ERROR:
-  if ( datafile_flag )
-   { /* kludge since cmdjmpbuf empty in datafile */
-    kb_error(errnum,emsg,DATAFILE_ERROR);
-    return;
-    }
+        if ( datafile_flag )
+        { /* kludge since cmdjmpbuf empty in datafile */
+          kb_error(errnum,emsg,DATAFILE_ERROR);
+          return;
+        }
+        if ( read_depth > 1 ) 
+        { sprintf(fullmsg,"\n%s Line %d:\n",
+          cmdfile_stack[read_depth-1].filename,line_no); 
+        }
         sprintf(fullmsg+strlen(fullmsg),"ERROR %d: ",errnum);
         strncat(fullmsg,emsg,size);
         dump_buff(fullmsg+strlen(fullmsg),size-strlen(fullmsg));
@@ -898,6 +975,10 @@ int mode)
         break;
 
      case PARSE_ERROR:
+        if ( read_depth > 1 ) 
+        { sprintf(fullmsg,"\n%s Line %d:\n",
+          cmdfile_stack[read_depth-1].filename,line_no); 
+        }
         sprintf(fullmsg+strlen(fullmsg),"SYNTAX ERROR %d: ",errnum);
         strncat(fullmsg,emsg,size);
         dump_buff(fullmsg+strlen(fullmsg),size-strlen(fullmsg));
@@ -918,6 +999,10 @@ int mode)
         break;
         
      case DATAFILE_ERROR:
+        if ( read_depth > 1 ) 
+        { sprintf(fullmsg,"\n%s Line %d:\n",
+          cmdfile_stack[read_depth-1].filename,line_no); 
+        }
         sprintf(fullmsg+strlen(fullmsg),"DATAFILE ERROR %d: ",errnum);
         strncat(fullmsg,emsg,size); 
         dump_buff(fullmsg+strlen(fullmsg),size-strlen(fullmsg));
@@ -957,6 +1042,13 @@ bailout:
        fclose(outfd);
     }
     outfd = stdout;    /* in case of previous piping */
+  }
+  if ( erroutfd != stderr )
+  { if ( erroutfd != NULL )
+    {
+       fclose(erroutfd);
+    }
+    erroutfd = stderr;    /* in case of previous piping */
   }
   breakflag = 0; iterate_flag = 0;
   
@@ -1009,6 +1101,7 @@ bailout:
         longjmp(graphjumpbuf,1);
 #endif
 #endif
+ if ( subshell_depth == 0 )
  { struct thread_data *td = GET_THREAD_DATA;
    td->stack_top = td->eval_stack;
    td->frame_spot = 0;
@@ -1020,7 +1113,7 @@ bailout:
   longjmp(jumpbuf[subshell_depth],1);
 #endif
   
-}
+} // end kb_error()
  
 /**************************************************************************
 *
@@ -1033,8 +1126,7 @@ bailout:
 *
 */
 
-void start_logfile ARGS1((filename),
-char *filename)
+void start_logfile(char *filename)
 {
   char *name = filename ? filename : logfilename;
 
@@ -1049,7 +1141,7 @@ char *filename)
   logfile_flag = 1;
   if ( filename ) strncpy(logfilename,filename,sizeof(logfilename)-1);
 
-}
+} // end start_logfile()
 
 /***************************************************************************
 *
@@ -1063,7 +1155,7 @@ void stop_logfile()
   if ( logfilefd ) fclose(logfilefd);
   logfilefd = NULL;
   logfile_flag = 0;
-}
+} // end stop_logfile()
 
 /**************************************************************************
 *
@@ -1073,11 +1165,9 @@ void stop_logfile()
 *
 * arguments: char * filename : Name of file to open, append mode.
 *                                        If null, use keylogfilename[].
-*
 */
 
-void start_keylogfile ARGS1((filename),
-char *filename)
+void start_keylogfile(char *filename)
 {
   char *name = filename ? filename : keylogfilename;
 
@@ -1092,7 +1182,7 @@ char *filename)
   keylogfile_flag = 1;
   if ( filename ) strncpy(keylogfilename,filename,sizeof(keylogfilename)-1);
 
-}
+} // endstart_keylogfile()
 
 /***************************************************************************
 *
@@ -1106,7 +1196,7 @@ void stop_keylogfile()
   if ( keylogfilefd ) fclose(keylogfilefd);
   keylogfilefd = NULL;
   keylogfile_flag = 0;
-}
+} // end stop_keylogfile()
 
 
 /****************************************************************************
@@ -1116,8 +1206,7 @@ void stop_keylogfile()
 * purpose: set output console scroll buffer size in Windows
 */
 
-void set_scroll_size ARGS1((rows),
-int rows)
+void set_scroll_size(int rows)
 {
 #ifdef MSC
   COORD size;
@@ -1131,5 +1220,5 @@ int rows)
   kb_error(2429,"ScrollBufferSize not implemented on this system.\n",
      WARNING);
 #endif
-}
+} // end set_scroll_size()
 

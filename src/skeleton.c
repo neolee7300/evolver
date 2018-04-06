@@ -25,8 +25,8 @@ int datatype_size[NUMDATATYPES] =
    sizeof(unsigned short), sizeof(unsigned int),
    sizeof(long int),sizeof(char),sizeof(short),0,sizeof(char*),sizeof(char*),
    sizeof(vertex_id),sizeof(edge_id),sizeof(facet_id),sizeof(body_id),
-   sizeof(facetedge_id),sizeof(element_id),sizeof(int),sizeof(int),sizeof(int),sizeof(int),
-   sizeof(int)
+   sizeof(facetedge_id),sizeof(element_id),sizeof(int),sizeof(int),sizeof(int),
+   sizeof(int), sizeof(int), sizeof(int)
   };
 
 char *datatype_name[NUMDATATYPES] =
@@ -34,7 +34,7 @@ char *datatype_name[NUMDATATYPES] =
     "long_int","char","short_int"," ","string","pointer", "vertex_type",
     "edge_type","facet_type","body_type","facetedge_type", "element_id",
     "boundary_type","constraint_type","quantity_type","method_instance_type",
-    "procedure"
+    "procedure_type" , "array"
   };
 
 /* quadratic interpolation coefficients */
@@ -52,14 +52,18 @@ REAL dip[FACET_EDGES][FACET_CTRL][2] = {
       { 0.0, 0.5 }, { -1.0, 0.0 } }
   };
 
-int Ord(id)    /* useful in debugger */
-element_id id;
+/****************************************************************
+* function: Ord()
+* purpose: return ordinal of element; useful in debugging.
+*/
+int Ord(element_id id)
 { return loc_ordinal(id); }
 
-void vloop ARGS((vertex_id));
-
-void vloop(v_id) /* prints vertex edge loop; useful in debugger */
-element_id v_id;
+/******************************************************************
+* function: vloop()
+* purpose:  prints vertex edge loop; useful in debugger 
+*/
+void vloop(element_id v_id)
 { edge_id e_id,ee_id;
   int n = 0;
   e_id = get_vertex_edge(v_id);
@@ -72,13 +76,19 @@ element_id v_id;
        { puts("Unclosed loop."); break;}
      } while ( ee_id != e_id );
   printf("\n");
-}
+} // end vloop()
 
-
-void set_facet_body(f_id,b_id)
-facet_id f_id;
-body_id  b_id;  /* may be invalid for unsetting */
-{ body_id bb_id;
+/******************************************************************
+* function: set_facet_body()
+* purpose: Set the front body of a facet; null body also possible.
+*          Takes care of body facet list, and body quantity if 
+*          everything_quantities.
+*/
+void set_facet_body(
+  facet_id f_id,
+  body_id  b_id  /* may be invalid for unsetting */
+)
+{ body_id bb_id;  // the old body
   
   if ( web.skel[BODY].count == 0 ) return;
   if ( !valid_id(f_id) ) return;
@@ -117,7 +127,6 @@ body_id  b_id;  /* may be invalid for unsetting */
     }
   }
  
-
   /* insert in new body list */
   if ( valid_id(b_id) )
   { 
@@ -137,29 +146,13 @@ body_id  b_id;  /* may be invalid for unsetting */
     }
   }
 
+  if ( inverted(f_id) )  
+       F_ELID(f_id,F_BODY_LIST_ATTR)[1] = b_id;
+  else  
+       F_ELID(f_id,F_BODY_LIST_ATTR)[0] = b_id;
+ 
   if ( everything_quantities_flag )
   {
-     if ( inverted(f_id) )  /* back facet */
-     { 
-        body_id bb_id = F_ELID(f_id,F_BODY_LIST_ATTR)[1];
-        if ( equal_id(bb_id,b_id) ) return;
-        if ( valid_id(bb_id) ) /* cancel out if already there */
-          apply_method_num(inverse_id(f_id),get_body_volmeth(bb_id)); 
-        F_ELID(f_id,F_BODY_LIST_ATTR)[1] = b_id;
-        if ( valid_id(b_id) )
-          apply_method_num(f_id,get_body_volmeth(b_id)); 
-     }
-     else /* front facet */
-     { 
-        body_id bb_id = F_ELID(f_id,F_BODY_LIST_ATTR)[0];
-        if ( equal_id(bb_id,b_id) ) return;
-        if ( valid_id(bb_id) )
-          apply_method_num(inverse_id(f_id),get_body_volmeth(bb_id)); 
-        F_ELID(f_id,F_BODY_LIST_ATTR)[0] = b_id;
-        if ( valid_id(b_id) )
-          apply_method_num(f_id,get_body_volmeth(b_id)); 
-     }
-     /* and content integrands on edges */
      if ( web.representation == SOAPFILM )
      { facetedge_id fe = get_facet_fe(f_id);
        edge_id e_id;
@@ -168,6 +161,22 @@ body_id  b_id;  /* may be invalid for unsetting */
        conmap_t *map;
        char name[100];
 
+       if ( inverted(f_id) )  /* back facet */
+       { 
+          if ( valid_id(bb_id) ) /* cancel out if already there */
+            apply_method_num(inverse_id(f_id),get_body_volmeth(bb_id)); 
+          if ( valid_id(b_id) )
+            apply_method_num(f_id,get_body_volmeth(b_id)); 
+       }
+       else /* front facet */
+       { 
+          if ( valid_id(bb_id) )
+            apply_method_num(inverse_id(f_id),get_body_volmeth(bb_id)); 
+          if ( valid_id(b_id) )
+            apply_method_num(f_id,get_body_volmeth(b_id)); 
+       }
+
+       /* and content integrands on edges */
        for ( i = 0 ; i < FACET_EDGES ; i++, fe = get_next_edge(fe))
        { e_id = get_fe_edge(fe);
          if ( !get_eattr(e_id) & BDRY_CONTENT ) continue;
@@ -180,47 +189,90 @@ body_id  b_id;  /* may be invalid for unsetting */
              { if ( con->attr & NAMED_THING )
                  sprintf(name,"body_%d_%s_meth",ordinal(bb_id)+1,con->name);
                else
-                 sprintf(name,"body_%d_con_%d_meth",ordinal(bb_id)+1,map[k]);
+                 sprintf(name,"body_%d_con_%d_meth",ordinal(bb_id)+1,map[k]&CONMASK);
                inst_num = find_method_instance(name);
                if ( inst_num < 0 )
                   inst_num = create_body_constraint_content_method(bb_id,map[k]);
+ attach_method(get_body_volquant(bb_id),name);
                apply_method_num(inverse_id(e_id),inst_num); /* cancel */
              }
              if ( valid_id(b_id) )
              { if ( con->attr & NAMED_THING ) 
                  sprintf(name,"body_%d_%s_meth",ordinal(b_id)+1,con->name);
                else 
-                 sprintf(name,"body_%d_con_%d_meth",ordinal(b_id)+1,map[k]);
+                 sprintf(name,"body_%d_con_%d_meth",ordinal(b_id)+1,map[k]&CONMASK);
                inst_num = find_method_instance(name);
                if ( inst_num < 0 )
                   inst_num = create_body_constraint_content_method(b_id,map[k]);
+ attach_method(get_body_volquant(b_id),name);
                apply_method_num(e_id,inst_num);
              }
            }
          }
        }
      }
+     else if ( web.representation == STRING )
+     {
+       vertex_id first_v = NULLID, last_v = NULLID;
+       
+       // Apply body method to edges of face
+       facetedge_id first_fe = get_facet_fe(f_id);
+       if ( valid_id(first_fe) )
+       { edge_id e_id;
+         if ( inverted(f_id) )
+         { facetedge_id nextfe=first_fe;
+           /* go backwards */
+           first_v = get_fe_headv(first_fe);
+           do
+           { e_id = get_fe_edge(nextfe);
+             check_edge_vol_methods(e_id);
+             last_v = get_fe_tailv(nextfe);
+             nextfe = get_prev_edge(nextfe);
+           } while ( valid_id(nextfe) && !equal_id(nextfe,first_fe) );
+           if ( valid_id(nextfe) )
+           { first_v = last_v = NULLID;
+           }
+         }
+         else /* forward */
+         { facetedge_id nextfe=first_fe;
+           /* go forwards */
+           first_v = get_fe_tailv(first_fe);
+           do
+           { e_id = get_fe_edge(nextfe);
+             check_edge_vol_methods(e_id);
+             last_v = get_fe_headv(nextfe);
+             nextfe = get_next_edge(nextfe);
+           } while ( valid_id(nextfe) && !equal_id(nextfe,first_fe) );
+           if ( valid_id(nextfe) )
+           { first_v = last_v = NULLID;
+           }
+         }
+
+         // Content integrands on endpoints
+         if ( valid_id(first_v) )
+           assure_v_constraints(first_v);
+         if ( valid_id(last_v) )
+           assure_v_constraints(last_v);
+        
+       }      
+     }
   }
-  else
-  {
-     if ( inverted(f_id) )  
-       F_ELID(f_id,F_BODY_LIST_ATTR)[1] = b_id;
-     else  
-       F_ELID(f_id,F_BODY_LIST_ATTR)[0] = b_id;
-  }
+   
   top_timestamp = ++global_timestamp;
 
-}
+}  // end set_facet_body()
+
 /**************************************************************************
 *
 * Function: set_facet_fe()
 *
-* Purpose: Link facet to facetedge.
+* Purpose: Set facet link to a facetedge.
 *
 */
-void set_facet_fe(f_id,fe)
-facet_id f_id;
-facetedge_id fe;
+void set_facet_fe(
+  facet_id f_id,
+  facetedge_id fe
+)
 {
   if ( inverted(f_id) ) { invert(fe); invert(f_id); }
   fptr(f_id)->fe_id = fe;
@@ -233,10 +285,16 @@ facetedge_id fe;
        set_body_facet(b_id,inverse_id(f_id));
   }
   top_timestamp = ++global_timestamp;
-}
+} // end set_facet_fe()
 
-
-REAL get_vertex_length_star(v_id) vertex_id v_id;
+/**************************************************************************
+*
+* Function: get_vertex_length_star()
+*
+* Purpose: Get total lengths of edges around vertex.  For string model
+*          in area normalization mode.
+*/
+REAL get_vertex_length_star(vertex_id v_id)
 { edge_id e_id = get_vertex_edge(v_id);
   edge_id firste = e_id;
   REAL star = 0.0;
@@ -245,9 +303,15 @@ REAL get_vertex_length_star(v_id) vertex_id v_id;
   do { star += get_edge_length(e_id); e_id = get_next_tail_edge(e_id);}
   while ( !equal_element(e_id,firste) );
   return star;
-}
+} // end get_vertex_length_star()
 
-REAL get_vertex_area_star(v_id) vertex_id v_id;
+/**************************************************************************
+*
+* Function: get_vertex_area_star()
+*
+* Purpose: get total facet area around vertex, for area normalization mode.
+*/
+REAL get_vertex_area_star(vertex_id v_id)
 { 
   REAL star = 0.0;
 
@@ -278,37 +342,86 @@ REAL get_vertex_area_star(v_id) vertex_id v_id;
      while ( !equal_element(f_id,firstf) );
   } 
   return star;
-}
+} // end get_vertex_area_star()
 
-int get_vertex_fvalence(v_id) vertex_id v_id;
+/**************************************************************************
+*
+* Function: get_vertex_fvalence()
+*
+* Purpose: get number of facets around a vertex
+*/
+int get_vertex_fvalence(vertex_id v_id)
 { 
- int valence = 0;
- facet_id f_id = get_vertex_first_facet(v_id);
- facet_id firstf = f_id;
+  int valence = 0;
+  facet_id f_id = get_vertex_first_facet(v_id);
+  facet_id firstf = f_id;
 
- if ( !valid_id(f_id) ) return 0;
- do 
- { valence++; f_id = get_next_vertex_facet(v_id,f_id);}
- while ( !equal_element(f_id,firstf) );
- return valence; 
+  if ( get_vattr(v_id) & Q_MIDFACET ) return 1;
+
+  if ( !valid_id(f_id) ) return 0;
+  do 
+  { valence++; f_id = get_next_vertex_facet(v_id,f_id);}
+  while ( !equal_element(f_id,firstf) );
+  return valence; 
+} // end get_vertex_fvalence()
+
+/**************************************************************************
+*
+* Function: set_next_body_facet()
+*
+* Purpose: Set next link in body facet doubly linked list.
+*/
+void set_next_body_facet(
+  facet_id f_id, // current facet
+  facet_id ff_id // next facet
+)
+{ F_ELID(f_id,F_NEXT_BFACET_ATTR)[inverted(f_id)?1:0] = (ff_id) ; 
 }
 
-void set_next_body_facet(f_id,ff_id)  facet_id f_id,ff_id;
-  { F_ELID(f_id,F_NEXT_BFACET_ATTR)[inverted(f_id)?1:0] = (ff_id) ; }
+/**************************************************************************
+*
+* Function: set_prev_body_facet()
+*
+* Purpose: Set previous link in body facet doubly linked list
+*/
+void set_prev_body_facet(
+   facet_id f_id, // current facet
+   facet_id ff_id // previous facet
+)
+{ F_ELID(f_id,F_NEXT_BFACET_ATTR)[inverted(f_id)?3:2] = (ff_id) ; 
+}
 
-void set_prev_body_facet(f_id,ff_id)  facet_id f_id,ff_id;
-  { F_ELID(f_id,F_NEXT_BFACET_ATTR)[inverted(f_id)?3:2] = (ff_id) ; }
+/**************************************************************************
+*
+* Function: get_next_body_facet()
+*
+* Purpose: Get next facet in body facet linked list.
+*/
+facet_id get_next_body_facet(facet_id f_id)
+{ return  F_ELID(f_id,F_NEXT_BFACET_ATTR)[inverted(f_id)?1:0]; 
+}
 
-facet_id get_next_body_facet(f_id) facet_id f_id;
-{ return    F_ELID(f_id,F_NEXT_BFACET_ATTR)[inverted(f_id)?1:0]; }
+/**************************************************************************
+*
+* Function: get_prev_body_facet()
+*
+* Purpose: Get previous facet in body facet doubly linked list.
+*/
+facet_id get_prev_body_facet(facet_id f_id)
+{ return  F_ELID(f_id,F_NEXT_BFACET_ATTR)[inverted(f_id)?3:2]; 
+}
 
-facet_id get_prev_body_facet(f_id) facet_id f_id;
-{ return    F_ELID(f_id,F_NEXT_BFACET_ATTR)[inverted(f_id)?3:2]; }
-
-void set_body_volume(b_id,v,mode)  
-body_id b_id; 
-REAL v;
-int mode; /* NOSETSTAMP or SETSTAMP */
+/**************************************************************************
+*
+* Function: set_body_volume()
+*
+* Purpose: Set value of body volume.
+*/
+void set_body_volume( 
+  body_id b_id,
+  REAL v,
+  int mode /* NOSETSTAMP or SETSTAMP */
+)
 { struct body *b = bptr(b_id);
   if ( !valid_id(b_id) ) return;
   b->volume = v; 
@@ -325,24 +438,45 @@ int mode; /* NOSETSTAMP or SETSTAMP */
   { struct gen_quant *q = GEN_QUANT(b->volquant);
     q->value = v;
   }
-} 
+} // end set_body_volume()
 
-void add_body_volume(b_id,v)  /* uses binary tree add */ 
-body_id b_id; REAL v;
-{ struct body *b;
+/**************************************************************************
+*
+* Function: add_body_volume()
+*
+* Purpose:  Add to running total of body volume, using tree addition
+*           for high accuracy.
+*/
+void add_body_volume(body_id b_id, REAL v)
+{ /* uses binary tree add */ 
+  
+  struct body *b;
   if ( !valid_id(b_id) ) return;
+  LOCK_ELEMENT(b_id);
   b = bptr(b_id);
   binary_tree_add(b->volume_addends,v);
   b->abstotal += fabs(v); 
-}
+  UNLOCK_ELEMENT(b_id);
+} // end add_body_volume()
 
-void add_body_volume_plain(b_id,v)  /* with updates of related quantities */
-body_id b_id; REAL v;
+/**************************************************************************
+*
+* Function: add_body_volume_plain()
+*
+* Purpose: Add directly to body volume, e.g. volconst, not going through
+*          tree addition, with updates of related quantities.
+*/
+void add_body_volume_plain(  /* with updates of related quantities */
+  body_id b_id,
+  REAL v
+)
 { struct body *b;
   if ( !valid_id(b_id) ) return;
   b = bptr(b_id);
+  LOCK_ELEMENT(b_id);
   b->volume += v;
   b->abstotal += fabs(v); 
+  UNLOCK_ELEMENT(b_id);
   b->voltimestamp = global_timestamp;
 /*
   if ( web.representation == STRING)
@@ -353,20 +487,33 @@ body_id b_id; REAL v;
   if ( everything_quantities_flag )
   { struct gen_quant *q = GEN_QUANT(b->volquant);
     q->value = b->volume;
-  }
-} 
+  } 
+} // end add_body_volume_plain()
 
-void add_body_abstotal(b_id,v)
-body_id b_id; REAL v;
+/**************************************************************************
+*
+* Function: add_body_abstotal() 
+*
+* Purpose: Add to total absolute sum of volume terms of body.
+*/
+void add_body_abstotal(body_id b_id, REAL v)
 { struct body *b;
   if ( !valid_id(b_id) ) return;
   b = bptr(b_id);
   b->abstotal += fabs(v); 
-}
+} // end add_body_abstotal()
 
-void set_body_fixvol(b_id,v) 
-body_id b_id; 
-REAL v;
+/**************************************************************************
+*
+* Function: set_body_fixvol()
+*
+* Purpose: Set body target volume, and associated quantity target
+*          if everything_quantities.
+*/
+void set_body_fixvol( 
+  body_id b_id,
+  REAL v
+)
 { if ( valid_id(b_id) )
   { bptr(b_id)->fixvol = (v); 
     if ( everything_quantities_flag )
@@ -387,11 +534,18 @@ REAL v;
   { sprintf(errmsg,"fix body volume: illegal body %s.\n",ELNAME(b_id));
     kb_error(1307,errmsg,RECOVERABLE);
   }
-}
+} // end set_body_fixvol()
 
-vertex_id new_vertex(x,parent)
-REAL *x;
-element_id parent; /* for inherited stuff */
+/**************************************************************************
+*
+* Function: new_vertex()
+*
+* Purpose: Create new vertex with given coordinates.
+*/
+vertex_id new_vertex(
+  REAL *x,
+  element_id parent /* for inherited stuff */
+)
 { 
   int i;
   vertex_id v_id;
@@ -411,8 +565,14 @@ element_id parent; /* for inherited stuff */
   if ( cg_hvector ) { myfree((char *)cg_hvector); cg_hvector = NULL; }
 
   return v_id;
-}
+} // end new_vertex()
 
+/**************************************************************************
+*
+* Function: dup_vertex()
+*
+* Purpose: Create new vertex with duplicate properties of a given vertex.
+*/
 vertex_id dup_vertex(old_v)
 vertex_id old_v;
 { 
@@ -426,11 +586,19 @@ vertex_id old_v;
   v_id_p->self_id = v_id;  /* restore new id */
   v_id_p->e_id = NULLID;
   return v_id;
-}
+} // end dup_vertex()
 
-edge_id    new_edge(tail_id,head_id,parent)
-vertex_id tail_id,head_id;
-element_id parent; /* for inherited stuff */
+/**************************************************************************
+*
+* Function: new_edge()
+*
+* Purpose: Create new edge between two given vertices.
+*/
+edge_id new_edge(
+  vertex_id tail_id,
+  vertex_id head_id,
+  element_id parent /* for inherited stuff */
+)
 { 
   edge_id e_id;
   vertex_id v_id;
@@ -469,10 +637,15 @@ element_id parent; /* for inherited stuff */
      }
   }
   return e_id;
-}
+} // end new_edge()
 
-edge_id dup_edge(old_e)
-edge_id old_e;
+/**************************************************************************
+*
+* Function: dup_edge()
+*
+* Purpose: Create new edge as duplicate of given edge.
+*/
+edge_id dup_edge(edge_id old_e)
 { 
   edge_id e_id;
   struct edge *e_id_p,*old_e_p;
@@ -489,8 +662,8 @@ edge_id old_e;
   if ( web.modeltype == QUADRATIC )
   { newmid = new_vertex(NULL,old_e);
     set_edge_midv(e_id,newmid);
-	set_attr(newmid,Q_MIDPOINT);
-	set_vertex_edge(newmid,e_id);
+    set_attr(newmid,Q_MIDPOINT);
+    set_vertex_edge(newmid,e_id);
   } 
   else if ( web.modeltype == LAGRANGE )
   { int i;
@@ -500,29 +673,47 @@ edge_id old_e;
   } 
   if ( inverted(old_e) ) return inverse_id(e_id);
   return e_id;
-}
+} // end dup_edge()
 
-void recalc_facet_area(f_id)
-facet_id f_id;
+/**************************************************************************
+*
+* Function: recalc_facet_area()
+*
+* Purpose: Recalculate area of a facet.
+*/
+void recalc_facet_area(facet_id f_id)
 {
   if ( everything_quantities_flag )
     quantity_attribute(f_id,default_area_quant_num);
-  else
+  else if ( web.representation == SOAPFILM )
     (*calc_facet_energy)(f_id,AREA_ONLY);
-}
+} // end recalc_facet_area()
 
-facet_id  new_facet ()
+/**************************************************************************
+*
+* Function: new_facet()
+*
+* Purpose: Create new facet.
+*/
+facet_id new_facet()
 { 
   facet_id f_id;
 
   f_id = new_element(FACET,NULLID,NULLID);
   set_facet_color(f_id,DEFAULT_FACET_COLOR);
   set_facet_density(f_id,1.0);
+  if ( opacity_attr ) 
+    *(REAL*)(get_extra(f_id,opacity_attr)) = 1.0;
   return f_id;
 }
 
-facet_id dup_facet(old_f)
-facet_id old_f;
+/**************************************************************************
+*
+* Function: dup_facet()
+*
+* Purpose: Create new facet as duplicate of given facet.
+*/
+facet_id dup_facet(facet_id old_f)
 { 
   facet_id f_id;
   struct facet *f_id_p;
@@ -553,8 +744,14 @@ facet_id old_f;
   }
 
   return sign ? inverse_id(f_id) : f_id;
-}
+} // end dup_facet()
 
+/**************************************************************************
+*
+* Function: new_body()
+*
+* Purpose: Create a new body.
+*/
 body_id new_body()
 { int two = 2;
   int four = 4;
@@ -564,14 +761,20 @@ body_id new_body()
   expand_attribute(FACET,F_NEXT_BFACET_ATTR,&four);
   b_id = new_element(BODY,NULLID,NULLID);
   set_body_facet(b_id,NULLID);
+  set_attr(b_id,WANT_CENTEROFMASS);
   if ( everything_quantities_flag ) 
       convert_new_body_to_quantity(b_id);
   web.bodycount++;
   return b_id;
-}
+} // end new_body()
 
-body_id dup_body(old_b)
-body_id old_b;
+/**************************************************************************
+*
+* Function: dup_body()
+*
+* Purpose:  Create new body as duplicate of given body.
+*/
+body_id dup_body(body_id old_b)
 { 
   body_id b_id;
   struct body *b_id_p;
@@ -586,11 +789,18 @@ body_id old_b;
       convert_new_body_to_quantity(b_id);
   web.bodycount++;
   return b_id;
-}
+} // end dup_body()
 
-facetedge_id new_facetedge(f_id,e_id)
-facet_id f_id;
-edge_id e_id;
+/**************************************************************************
+*
+* Function: new_facetedge()
+*
+* Purpose: Create new facetedge linking given facet and edge.
+*/
+facetedge_id new_facetedge(
+  facet_id f_id,
+  edge_id e_id
+)
 { 
   facetedge_id fe_id;
  
@@ -631,60 +841,157 @@ edge_id e_id;
      }
   }
   return fe_id;
-}
+} // end new_facetedge()
 
-
-void set_fe_facet(fe_id,f_id)
-facetedge_id fe_id;
-facet_id f_id;
+/**************************************************************************
+*
+* Function: set_fe_facet()
+*
+* Purpose: Set the facet link of a facetedge.
+*/
+void set_fe_facet(
+  facetedge_id fe_id,
+  facet_id f_id
+)
 { facet_id oldf = get_fe_facet(fe_id);
 
   feptr(fe_id)->fe_facet_id = inverted(fe_id) ? inverse_id(f_id) : f_id;
 
   if ( web.representation==STRING && everything_quantities_flag &&
         !equal_id(oldf,f_id) )
-  { /* detach old volume quantity and attach new volume quantity */
-     body_id b_id, old_b_id;
-     edge_id e_id = get_fe_edge(fe_id);
-     b_id = get_facet_body(f_id);
-
-     old_b_id = valid_id(oldf) ? get_facet_body(oldf) : NULLID;
-     if ( valid_id(old_b_id) )
-        unapply_method(e_id,get_body_volmeth(old_b_id));
-     old_b_id = valid_id(oldf) ? get_facet_body(inverse_id(oldf)) : NULLID;
-     if ( valid_id(old_b_id) )
-        unapply_method(e_id,get_body_volmeth(old_b_id));
-              
-              
-     if ( valid_id(b_id) )
-     { if ( same_sign(f_id,e_id) )
-          apply_method_num(e_id,get_body_volmeth(b_id));
-        else
-          apply_method_num(inverse_id(e_id),get_body_volmeth(b_id));
-     }
-     b_id = get_facet_body(inverse_id(f_id));
-     if ( valid_id(b_id) )
-     { if ( same_sign(f_id,e_id) )
-          apply_method_num(inverse_id(e_id),get_body_volmeth(b_id));
-        else
-          apply_method_num(e_id,get_body_volmeth(b_id));
-     }
+  { /* detach old volume quantity and attach new volume quantity */    
+    edge_id e_id = get_fe_edge(fe_id);
+    check_edge_vol_methods(e_id);
   }
-}
+} // end set_fe_facet()
 
+/*************************************************************************
+*
+* Function: check_edge_vol_methods()
+*
+* Purpose: When everything_quantities, check that edge has proper
+*          body volume quantities.  To be called after topology
+*          changes regarding an edge.  Will fix up edge if wrong.
+*          Assumes edge valence at most 2.
+*/
+void check_edge_vol_methods(edge_id e_id)
+{
+  int *instlist;
+  int meth_offset; 
+  struct edge *e_ptr;
+  facetedge_id start_fe,fe;
+  int should_be[2];
+  int should_count = 0;
+  facet_id f_id,ff_id;
+  body_id b_id,bb_id;
+  int i,j;
+
+  start_fe = get_edge_fe(e_id);
+  if ( !valid_id(start_fe) )
+    should_count = 0;
+  else
+  { fe = get_next_facet(start_fe);
+    if ( equal_id(fe,start_fe) )
+    { // valence 1
+      f_id = get_fe_facet(start_fe);
+      b_id = get_facet_body(f_id);
+      if ( valid_id(b_id) )
+      { should_be[0] = get_body_volmeth(b_id);
+        should_count = 1;
+      }
+      b_id = get_facet_body(inverse_id(f_id));
+      if ( valid_id(b_id) )
+      { should_be[0] = -get_body_volmeth(b_id);
+        should_count = 1;
+      }
+    }
+    else // valence 2
+    { int sign1 = 1, sign2 = 1;
+      f_id = get_fe_facet(start_fe);
+      b_id = get_facet_body(f_id);
+      if ( !valid_id(b_id) )
+      { b_id = get_facet_body(inverse_id(f_id));
+        sign1 = -1;
+      }
+      ff_id = get_fe_facet(fe);
+      bb_id = get_facet_body(ff_id);
+      if ( !valid_id(bb_id) )
+      { bb_id = get_facet_body(inverse_id(ff_id));
+        sign2 = -1;
+      }
+      if ( valid_id(b_id) && valid_id(bb_id) )
+      { if ( !equal_id(b_id,bb_id) )
+        { should_be[0] = sign1*get_body_volmeth(b_id);
+          should_be[1] = sign2*get_body_volmeth(bb_id);
+          should_count = 2;
+        }
+      }
+      else if ( valid_id(b_id) )
+      {  should_be[0] = sign1*get_body_volmeth(b_id);
+         should_count = 1;
+      }
+      else if ( valid_id(bb_id) )
+      { should_be[0] = sign2*get_body_volmeth(bb_id);
+        should_count = 1;
+      }
+      else
+        should_count = 0;
+    }
+  }
+
+  meth_offset = get_meth_offset(EDGE); 
+  e_ptr = (struct edge *)elptr(e_id);
+  instlist = (int*)((char*)e_ptr + meth_offset); 
+ 
+  // see if any unwanted
+  for ( i = 0 ; i < (int)e_ptr->method_count ; i++ )
+  { struct method_instance *mi = METH_INSTANCE(instlist[i]);
+    if ( mi->flags & BODY_INSTANCE )
+    { int found = 0;
+      for ( j = 0 ; j < should_count ; j++ )
+        if ( should_be[j] == instlist[i] )
+        { found = 1;
+          should_be[j] = should_be[--should_count]; // remove from list
+          j--;
+        }
+      if ( !found ) // remove
+      { instlist[i] = instlist[--e_ptr->method_count]; 
+        i--;
+      }
+    }
+  }
+
+  // remaining ones in list need to be added
+  for ( j = 0 ; j < should_count ; j++ )
+    apply_method_num(e_id,should_be[j]);
+
+} // end check_edge_vol_methods()
+
+/**************************************************************************
+*
+* Function: get_edge_length()
+*
+* Purpose: Calculate and return the length of an edge.
+*/
 REAL get_edge_length(e_id)
 edge_id e_id;
 {
-  return    (eptr(e_id)->length);
-}
+  calc_edge(e_id);
+  return (eptr(e_id)->length);
+} // end get_edge_length()
 
-
+/**************************************************************************
+*
+* Function: get_facet_pressure()
+*
+* Purpose: Return difference of pressure across a facet.
+*/
 REAL get_facet_pressure(f_id)
 facet_id f_id;
 { 
   return  (get_body_pressure(get_facet_body(f_id)) - 
         get_body_pressure(get_facet_body(facet_inverse(f_id))));
-}
+} // end get_facet_pressure()
 
 
 /********************************************************************
@@ -699,16 +1006,38 @@ facet_id f_id;
 *               3 A_SUPER_B Vertex superset of vertex
 */
 
-int compare_vertex_attr(va,vb)
-vertex_id va,vb;
+int compare_vertex_attr(vertex_id va, vertex_id vb)
 { int i,j;
   conmap_t * con1,*con2;
+  int bdry1,bdry2;
   int same = 0;
 
-  /* check constraints */
   con1 = get_v_constraint_map(va);
   con2 = get_v_constraint_map(vb);
 
+  bdry1 = get_vertex_boundary_num(va);
+  bdry2 = get_vertex_boundary_num(vb);
+
+  /* check boundaries */
+  if ( bdry1 )
+  { if ( bdry2 )
+    { if ( bdry1 == bdry2 ) 
+         return A_EQ_B;
+      else return INCOMPARABLE;
+    }
+    else if ( con2[0] )
+      return INCOMPARABLE;
+    else 
+      return A_SUPER_B;
+  }
+  else if ( bdry2 )
+  { if ( con1[0] )
+      return INCOMPARABLE;
+    else
+    return A_SUB_B;
+  }
+ 
+  /* check constraints */
   for ( i = 1 ; i <= (int)con2[0] ; i++ )
   { for ( j = 1 ; j <= (int)con1[0] ; j++ )
       if ( (con1[j]&CONMASK) == (con2[i]&CONMASK) )
@@ -724,7 +1053,7 @@ vertex_id va,vb;
   if ( (same < (int)con1[0]) && (same==(int)con2[0]) )
     return A_SUPER_B;
   return INCOMPARABLE;
-}
+} // end compare_vertex_attr()
 
 /********************************************************************
 *
@@ -738,16 +1067,38 @@ vertex_id va,vb;
 *               3 A_SUPER_B Vertex superset of edge
 */
 
-int compare_vertex_edge_attr(va,eb)
-vertex_id va;
-edge_id eb;
+int compare_vertex_edge_attr(vertex_id va,edge_id eb)
 { int i,j;
   conmap_t * con1,*con2;
+  int bdry1,bdry2;
   int same = 0;
 
-  /* check constraints */
   con1 = get_v_constraint_map(va);
   con2 = get_e_constraint_map(eb);
+
+  bdry1 = get_vertex_boundary_num(va);
+  bdry2 = get_edge_boundary_num(eb);
+
+  /* check boundaries */
+  if ( bdry1 )
+  { if ( bdry2 )
+    { if ( bdry1 == bdry2 ) 
+         return A_EQ_B;
+      else return INCOMPARABLE;
+    }
+    else if ( con2[0] )
+      return INCOMPARABLE;
+    else 
+      return A_SUPER_B;
+  }
+  else if ( bdry2 )
+  { if ( con1[0] )
+      return INCOMPARABLE;
+    else
+    return A_SUB_B;
+  }
+ 
+  /* check constraints */
 
   for ( i = 1 ; i <= (int)con2[0] ; i++ )
   { for ( j = 1 ; j <= (int)con1[0] ; j++ )
@@ -765,7 +1116,7 @@ edge_id eb;
     return A_SUPER_B;
   return INCOMPARABLE;
 
-}
+} // end compare_vertex_edge_attr()
 
 /********************************************************************
 *
@@ -779,17 +1130,40 @@ edge_id eb;
 *               3 A_SUPER_B edge superset of edge
 */
 
-int compare_edge_attr(ea,eb)
-edge_id ea,eb;
+int compare_edge_attr(edge_id ea, edge_id eb)
 { int i,j;
   int fixa = get_eattr(ea) & FIXED;
   int fixb = get_eattr(eb) & FIXED;
   conmap_t * con1,*con2;
+  int bdry1,bdry2;
   int same = 0;
-  
-  /* check constraints */
+
   con1 = get_e_constraint_map(ea);
   con2 = get_e_constraint_map(eb);
+
+  bdry1 = get_edge_boundary_num(ea);
+  bdry2 = get_edge_boundary_num(eb);
+
+  /* check boundaries */
+  if ( bdry1 )
+  { if ( bdry2 )
+    { if ( bdry1 == bdry2 ) 
+         return A_EQ_B;
+      else return INCOMPARABLE;
+    }
+    else if ( con2[0] )
+      return INCOMPARABLE;
+    else 
+      return A_SUPER_B;
+  }
+  else if ( bdry2 )
+  { if ( con1[0] )
+      return INCOMPARABLE;
+    else
+      return A_SUB_B;
+  }
+ 
+  /* check constraints */
 
   for ( i = 1 ; i <= (int)con2[0] ; i++ )
   { for ( j = 1 ; j <= (int)con1[0] ; j++ ) 
@@ -806,7 +1180,7 @@ edge_id ea,eb;
   if ( (same < (int)con1[0]) && (same==(int)con2[0]) && !fixb )
     return A_SUPER_B;
   return INCOMPARABLE;
-}
+} // end compare_edge_attr()
 
 
 /********************************************************************
@@ -821,19 +1195,40 @@ edge_id ea,eb;
 *               3 A_SUPER_B Edge superset of facet
 */
 
-int compare_edge_facet_attr(ea,fb)
-edge_id ea;
-facet_id fb;
+int compare_edge_facet_attr(edge_id ea,facet_id fb)
 { int i,j;
   conmap_t * con1,*con2;
   int fixa = get_eattr(ea) & FIXED;
   int fixb = get_fattr(fb) & FIXED;
   int same = 0;
+  int bdry1,bdry2;
 
-  /* check constraints */
   con1 = get_e_constraint_map(ea);
   con2 = get_f_constraint_map(fb);
 
+  bdry1 = get_edge_boundary_num(ea);
+  bdry2 = get_facet_boundary_num(fb);
+
+  /* check boundaries */
+  if ( bdry1 )
+  { if ( bdry2 )
+    { if ( bdry1 == bdry2 ) 
+         return A_EQ_B;
+      else return INCOMPARABLE;
+    }
+    else if ( con2[0] )
+      return INCOMPARABLE;
+    else 
+      return A_SUPER_B;
+  }
+  else if ( bdry2 )
+  { if ( con1[0] )
+      return INCOMPARABLE;
+    else
+    return A_SUB_B;
+  }
+ 
+  /* check constraints */
   for ( i = 1 ; i <= (int)con2[0] ; i++ )
   { for ( j = 1 ; j <= (int)con1[0] ; j++ )
       if ( (con1[j]&CONMASK) == (con2[i]&CONMASK) )
@@ -850,18 +1245,20 @@ facet_id fb;
     return A_SUPER_B;
   return INCOMPARABLE;
 
-}
+} // end compare_edge_facet_attr()
 
 /**************************************************************
 *
 *  Function:  equal_constr()
 *
-*  Purpose:    See if two elements have the same set of constraints.
+*  Purpose: See if two elements have the same set of constraints.
 *
 */
 
-int equal_constr(id1,id2)
-element_id id1,id2;
+int equal_constr(
+  element_id id1,
+  element_id id2
+)
 { int i,j;
   conmap_t * con1=NULL,*con2=NULL;
 
@@ -902,7 +1299,7 @@ element_id id1,id2;
      if ( j > (int)con2[0] ) return 0;
   }
   return 1;
-}
+} // end equal_constr()
 
 /*************************************************************************
 *
@@ -913,15 +1310,17 @@ element_id id1,id2;
 *  return:  index of attribute
 */
 
-int add_attribute(e_type,name,attr_type,dim,dims,dumpflag,code)
-int e_type; /* VERTEX ,... */
-char *name;
-int attr_type; /* REAL_TYPE or INTEGER_TYPE or ULONG_TYPE etc */
-int dim; /* number of dimensions, 0 for scalar */
-int *dims; /* sizes of dimensions, NULL for all sizes 0 */
+int add_attribute(
+  int e_type, /* VERTEX ,... */
+  char *name,
+  int attr_type, /* REAL_TYPE or INTEGER_TYPE or ULONG_TYPE etc */
+  int dim, /* number of dimensions, 0 for scalar */
+  int *dims, /* sizes of dimensions, NULL for all sizes 0 */
             /* Note: scalar still needs size of 0 or 1 */ 
-int dumpflag; /* whether appears in dump file */
-struct expnode *code; /* nonnull for function attribute */
+  int dumpflag, /* whether appears in dump file */
+  struct expnode *code, /* nonnull for function attribute */
+  int mpi_propagate /* MPI_PROPAGATE to broadcast */
+)
 { int newsize,newcount=0;
   struct extra *ex;
   int oldsize;
@@ -932,7 +1331,7 @@ struct expnode *code; /* nonnull for function attribute */
     return att_inx;
 
 #ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
+  if ( (this_task == MASTER_TASK) && (mpi_propagate==MPI_PROPAGATE) && !mpi_initialization_flag )
   { struct mpi_command message;
     int i;
 
@@ -1026,7 +1425,7 @@ struct expnode *code; /* nonnull for function attribute */
   }
   web.skel[e_type].extra_count++;
   return web.skel[e_type].extra_count - 1; /* index */
-}
+} // end add_attribute()
 
 
 /*************************************************************************
@@ -1037,10 +1436,11 @@ struct expnode *code; /* nonnull for function attribute */
 *              or shrink it.
 */
 
-void expand_attribute(e_type,attr_num,newsizes)
-int e_type; /* VERTEX ,... */
-int attr_num; /* number of attribute */
-int *newsizes; /* new numbers of components, even for scalar */
+void expand_attribute(
+  int e_type, /* VERTEX ,... */
+  int attr_num, /* number of attribute */
+  int *newsizes /* new numbers of components, necessary also for scalar */
+)
 { int newsize;  
   int diff;  /* difference between old and new total sizes */
   struct extra *ex;
@@ -1054,15 +1454,15 @@ int *newsizes; /* new numbers of components, even for scalar */
   ex = EXTRAS(e_type) + attr_num;
 
 #ifdef MPI_EVOLVER
-  if ( this_task == MASTER_TASK )
+  if ( (this_task == MASTER_TASK) && !mpi_initialization_flag )
   { struct mpi_command message;
     int i;
     message.cmd = mpi_EXPAND_ATTRIBUTE;
     message.i = attr_num;
     message.type = e_type;
-    message.count = ex->adim;
-	if ( ex->adim )
-      for (i = 0 ; i < ex->adim ; i++ )
+    message.count = ex->array_spec.dim;
+	if ( ex->array_spec.dim )
+      for (i = 0 ; i < ex->array_spec.dim ; i++ )
         message.data[i] = newsizes[i];
 	else message.data[0] = newsizes[0];
     MPI_Bcast(&message,sizeof(struct mpi_command),MPI_BYTE,MASTER_TASK,
@@ -1198,7 +1598,7 @@ skipentry2:    ;
   mpi_export_feoffset =
           EXTRAS(FACETEDGE)[web.mpi_export_attr[FACETEDGE]].offset; 
 #endif
-}
+} // end expand_attribute()
 
 /*************************************************************************
 *
@@ -1208,9 +1608,10 @@ skipentry2:    ;
 *  return: index number if found, -1 if not.
 */
 
-int find_attribute(etype,name)
-int etype;
-char *name;
+int find_attribute(
+  int etype,
+  char *name
+)
 { struct extra *ex;
   int n;
   ex = EXTRAS(etype);
@@ -1219,7 +1620,8 @@ char *name;
   if ( n == web.skel[etype].extra_count )
      return -1;
   return n;
-}
+} // end find_attribute()
+
 /**************************************************************************
 *
 * function: find_extra()
@@ -1227,9 +1629,10 @@ char *name;
 * purpose: return index of named attribute, searching all element types.
 *             return -1 if not found.
 */
-int find_extra(name,etype)
-char *name;
-int *etype; /* for returning element type */
+int find_extra(
+  char *name,
+  int *etype /* for returning element type */
+)
 { int el_type,qnum,n;
   struct extra *ex;
 
@@ -1240,7 +1643,7 @@ int *etype; /* for returning element type */
       {*etype = el_type;qnum = n;break;}
   }
   return qnum;
-}
+} // end find_extra()
 
 /***************************************************************************
   Constraint handling routines
@@ -1256,23 +1659,41 @@ int *etype; /* for returning element type */
 
 conmap_t nullcon[2]; /* default empty list */
 
-void set_v_global(v_id)
-vertex_id v_id;
+/**************************************************************************
+*
+* Function: set_v_global()
+*
+* Purpose: Set vertex to be on all global level-set constraints.
+*/
+void set_v_global(vertex_id v_id)
 { int k;
   for ( k = 0 ; k < web.con_global_count ; k++ )
      set_v_constraint_map(v_id,web.con_global_map[k]);
-}
+} // end set_v_global()
 
-void set_v_conmap(v_id,map) 
-vertex_id v_id;
-conmap_t *map;
+/**************************************************************************
+*
+* Function: set_v_conmap()
+*
+* Purpose: Add vertex level-set constraints from those given in "map"
+*/
+void set_v_conmap(
+  vertex_id v_id,
+  conmap_t *map
+)
 { int k, m=(int)map[0];
   for ( k = 1 ; k <= m ; k++ )
     set_v_constraint_map(v_id,map[k]);
   map = get_v_constraint_map(v_id);
   if ( map[0] == 0 ) unset_attr(v_id,CONSTRAINT);
-}
+} // end set_v_conmap()
 
+/**************************************************************************
+*
+* Function: set_e_conmap()
+*
+* Purpose: Add edge level-set constraints from those given in "map"
+*/
 void set_e_conmap(e_id,map)  
 edge_id e_id;
 conmap_t *map;
@@ -1281,21 +1702,35 @@ conmap_t *map;
     set_e_constraint_map(e_id,map[k]);
   map = get_e_constraint_map(e_id);
   if ( map[0] == 0 ) unset_attr(e_id,CONSTRAINT);
-}
+} // end set_e_conmap()
 
-void set_f_conmap(f_id,map)  
-facet_id f_id;
-conmap_t *map;
+/**************************************************************************
+*
+* Function: set_f_conmap()
+*
+* Purpose: Add facet level-set constraints from those given in "map"
+*/
+void set_f_conmap(  
+  facet_id f_id,
+  conmap_t *map
+)
 { int k, m=(int)map[0];
   for ( k = 1 ; k <= m ; k++ )
     set_f_constraint_map(f_id,map[k]);
   map = get_f_constraint_map(f_id);
   if ( map[0] == 0 ) unset_attr(f_id,CONSTRAINT);
-}
+} // end set_f_conmap()
 
-void set_v_constraint_map(v_id,n)  
-vertex_id v_id;
-int n;  /* constraint number */
+/**************************************************************************
+*
+* Function: set_v_constraint_map()
+*
+* Purpose: Set an individual level-set constraint on a vertex.
+*/
+void set_v_constraint_map( 
+  vertex_id v_id,
+  int n   /* constraint number */
+)
 { conmap_t *map;
   int maxcon = EXTRAS(VERTEX)[V_CONSTR_LIST_ATTR].array_spec.datacount;
   struct constraint *constr;
@@ -1309,7 +1744,8 @@ int n;  /* constraint number */
   for ( k = 1; k <= (int)*map ; k++ )
      if ( (map[k] & CONMASK) == ((conmap_t)n & CONMASK) ) return;
   if ( k >= maxcon )
-  { int newmax = maxcon+4;
+  { int newmax;
+    newmax = maxcon+4;
     expand_attribute(VERTEX,V_CONSTR_LIST_ATTR,&newmax);
     map = get_v_constraint_map(v_id);
   }  
@@ -1344,8 +1780,8 @@ int n;  /* constraint number */
 
       first_e = e_id = get_vertex_edge(v_id);
       if ( valid_id(e_id) && !(get_eattr(e_id) & NONCONTENT) )
-     do
-     { char name[100];
+      do
+      { 
        body_id b_id;
        facetedge_id first_fe,fe;
        first_fe = fe = get_edge_fe(e_id);
@@ -1358,35 +1794,38 @@ int n;  /* constraint number */
          if ( valid_id(b_id)  && 
            ( (!inverted(f_id) && constr->content_rank >= max_rank) 
                || (inverted(f_id) && constr->content_rank <= min_rank)))
-         { if ( constr->attr & NAMED_THING )
-             sprintf(name,"body_%d_%s_meth",ordinal(b_id)+1,constr->name);
-           else
-             sprintf(name,"body_%d_con_%d_meth",ordinal(b_id)+1,n);
-           attach_method(get_body_volquant(b_id),name);
-           apply_method(inverse_id(v_id),name);
+         { int methnum;
+           methnum = create_body_constraint_content_method(b_id,n);
+           attach_method_num(get_body_volquant(b_id),methnum);
+           apply_method_num(inverse_id(v_id),methnum);
          }
 
          b_id = get_facet_body(inverse_id(f_id));         
          if ( valid_id(b_id) && 
               ( (!inverted(f_id) && constr->content_rank >= max_rank) 
                || (inverted(f_id) && constr->content_rank <= min_rank)) )
-         { if ( constr->attr & NAMED_THING )
-             sprintf(name,"body_%d_%s_meth",ordinal(b_id)+1,constr->name);
-           else
-             sprintf(name,"body_%d_con_%d_meth",ordinal(b_id)+1,n);
-           attach_method(get_body_volquant(b_id),name);
-           apply_method(v_id,name);
+         { int methnum;
+           methnum = create_body_constraint_content_method(b_id,n);
+           attach_method_num(get_body_volquant(b_id),methnum);
+           apply_method_num(v_id,methnum);
          }
        } while ( !equal_id(fe,first_fe) );
        e_id = get_next_tail_edge(e_id);
      } while ( !equal_id(first_e,e_id));
    }
   }
-}
+} // end set_v_constraint_map()
 
-void unset_v_constraint_map(v_id,n)    
-vertex_id v_id;
-int n;
+/**************************************************************************
+*
+* Function: unset_v_constraint_map(
+*
+* Purpose: Remove an individual level-set constraint from a vertex.
+*/
+void unset_v_constraint_map(    
+  vertex_id v_id,
+  int n
+)
 { conmap_t *map;
   int maxcon = EXTRAS(VERTEX)[V_CONSTR_LIST_ATTR].array_spec.datacount;
   int k,j;
@@ -1402,24 +1841,52 @@ int n;
   map[j] = 0;
   if ( map[0] == 0 ) unset_attr(v_id,CONSTRAINT);
   if ( everything_quantities_flag )
-  { struct constraint *con = get_constraint(n);
+  { // delete energy and content methods
     int i;
-    if ( con->attr & CON_ENERGY )
-            unapply_method(v_id,con->energy_method);
-    if ( con->attr & CON_CONTENT )
-    { int meth_offset = get_meth_offset(VERTEX);
-      int *instlist = (int*)((char*)elptr(v_id) + meth_offset);
-      int mcount = elptr(v_id)->method_count;
-      for ( i = 0 ; i < mcount ; i++ )
-        if ( METH_INSTANCE(abs(instlist[i]))->connum == n )
-           unapply_method(v_id,instlist[i]);
+    int meth_offset = get_meth_offset(VERTEX);
+    struct vertex *vptr = (struct vertex *)elptr(v_id);
+    int *instlist = (int*)((char*)vptr + meth_offset);
+    for ( i = 0 ; i < vptr->method_count ; i++ )
+    { struct method_instance *mi = METH_INSTANCE(abs(instlist[i]));
+      if ( mi->connum == n )
+      { instlist[i] = instlist[--vptr->method_count];
+        i--;
+      }
     }
   }
-}
+} // end unset_v_constraint_map()
 
-int v_on_constraint(v_id,n)  
-vertex_id v_id;
-int n;
+/**************************************************************************
+*
+* Function: unset_v_all_constraints()
+*
+* Purpose: Remove all level-set constraints from a vertex.
+*/
+void unset_v_all_constraints(vertex_id v_id)
+{ conmap_t *map;
+  int maxcon = EXTRAS(VERTEX)[V_CONSTR_LIST_ATTR].array_spec.datacount;
+  int i;
+
+  if ( maxcon == 0 ) return;
+  map = get_v_constraint_map(v_id);
+
+  for ( i = map[0] ; i >= 1 ; i-- )
+    unset_v_constraint_map(v_id,map[i]);
+
+  unset_attr(v_id,CONSTRAINT);
+
+} // end unset_v_all_constraints()
+
+/**************************************************************************
+*
+* Function: v_on_constraint()
+*
+* Purpose: Determine whether a vertex is on a given level-set constraint.
+*/
+int v_on_constraint( 
+  vertex_id v_id,
+  int n
+)
 { conmap_t *map;
   int maxcon = EXTRAS(VERTEX)[V_CONSTR_LIST_ATTR].array_spec.datacount;
   int k;
@@ -1432,10 +1899,15 @@ int n;
         return 1;
   }
   return 0;
-}
+} // end v_on_constraint()
 
-int v_hit_constraint_count(v_id)  
-vertex_id v_id;
+/**************************************************************************
+*
+* Function: v_hit_constraint_count()
+*
+* Purpose: Determine how many level-set constraints a vertex has hit.
+*/
+int v_hit_constraint_count(vertex_id v_id)
 { conmap_t *map;
   int maxcon = EXTRAS(VERTEX)[V_CONSTR_LIST_ATTR].array_spec.datacount;
   int count = 0;
@@ -1448,20 +1920,41 @@ vertex_id v_id;
       count++;
   }
   return count;
-}
+} // end v_hit_constraint_count()
 
-void get_v_common_conmap(v1,v2,conmap)
-vertex_id v1,v2;
-conmap_t *conmap;
+/**************************************************************************
+*
+* Function: get_v_common_conmap()
+*
+* Purpose: Determine the common level-set constraints of two vertices.
+*/
+void get_v_common_conmap(
+  vertex_id v1,
+  vertex_id v2,
+  conmap_t *conmap, // for return list
+  int max   // size of conmap
+)
 { conmap_t *map1 = get_v_constraint_map(v1);
   unsigned int k;
 
   conmap[0] = 0;
   for ( k = 1; k <= map1[0] ; k++ )
-     if ( v_on_constraint(v2,map1[k]) )
-        conmap[++conmap[0]] = map1[k] & (conmap_t)CONMASK;
-}
+    if ( v_on_constraint(v2,map1[k]) )
+    { if ( conmap[0] >= (unsigned)(max-1) )
+      { sprintf(errmsg,"Too many common constraints for vertices %s and %s.\n",
+          ELNAME(v1),ELNAME2(v2));
+        kb_error(5891,errmsg,RECOVERABLE);
+      }
+      conmap[++conmap[0]] = map1[k] & (conmap_t)CONMASK;
+    }
+} // end get_v_common_conmap()
 
+/**************************************************************************
+*
+* Function: get_v_constraint_status()
+*
+* Purpose: See if a vertex has hit a given level-set constraint.
+*/
 int get_v_constraint_status(v_id,n)  
 vertex_id v_id;
 int n;
@@ -1477,21 +1970,33 @@ int n;
         return (map[k] & CON_HIT_BIT) ? 1 : 0;
   }
   return 0;
-}
+} // end get_v_constraint_status()
 
-void clear_v_conmap(v_id)
-vertex_id v_id;
+/**************************************************************************
+*
+* Function: clear_v_conmap()
+*
+* Purpose: Empty a vertex's level-set constraint list.
+*/
+void clear_v_conmap(vertex_id v_id)
 { conmap_t *map = get_v_constraint_map(v_id);
   unsigned int k;
 
   for ( k = 1 ; k <= map[0] ; k++ )
     map[k] = 0;
   map[0] = 0;
-}
+} // end clear_v_conmap()
 
-void set_v_constraint_status(v_id,n)  
-vertex_id v_id;
-int n;
+/**************************************************************************
+*
+* Function: set_v_constraint_status()
+*
+* Purpose: Mark a vertex as hitting a given level-set constraint.
+*/
+void set_v_constraint_status(  
+  vertex_id v_id,
+  int n
+)
 { conmap_t *map;
   int maxcon = EXTRAS(VERTEX)[V_CONSTR_LIST_ATTR].array_spec.datacount;
 
@@ -1506,11 +2011,18 @@ int n;
       return;
     }
   }
-}
+} // end set_v_constraint_status()
 
-void unset_v_constraint_status(v_id,n) 
-vertex_id v_id;
-int n;
+/**************************************************************************
+*
+* Function: unset_v_constraint_status()
+*
+* Purpose: Mark a vertex as not hitting a given level-set constraint.
+*/
+void unset_v_constraint_status(
+  vertex_id v_id,
+  int n
+)
 { conmap_t *map;
   int maxcon = EXTRAS(VERTEX)[V_CONSTR_LIST_ATTR].array_spec.datacount;
 
@@ -1524,25 +2036,65 @@ int n;
        return;
      }
   }
-}
+} // end unset_v_constraint_status()
 
-void clear_v_constraint_status(v_id) 
-vertex_id v_id;
+/**************************************************************************
+*
+* Function: clear_v_constraint_status()
+*
+* Purpose: Mark vertex as hitting no one-sided level-set constraints at all.
+*/
+void clear_v_constraint_status(vertex_id v_id)
 { conmap_t *map;
   int maxcon = EXTRAS(VERTEX)[V_CONSTR_LIST_ATTR].array_spec.datacount;
-
   int k;
+
   if ( maxcon == 0 ) return;
   map = get_v_constraint_map(v_id);
   for ( k = 1; k <= (int)*map ; k++ )
-  { map[k] &= ~CON_HIT_BIT;
+  { struct constraint *con = get_constraint(map[k]);
+    if ( con->attr & (NONPOSITIVE|NONNEGATIVE) )
+      map[k] &= ~CON_HIT_BIT;
   }
 
-}
+} // end clear_v_constraint_status()
+ 
+/**************************************************************************
+*
+* Function: assure_v_constraints()
+*
+* Purpose: Guarantee proper vertex constraint-associated quantities
+*          by removing and resetting all level-set constraints.
+*/
+void assure_v_constraints(vertex_id v_id)
+{ conmap_t *map;
+  conmap_t tempmap[MAXCONPER],*tmp=NULL;
+  int k;
+  unsigned int kk;
 
-void set_e_constraint_map(e_id,n)  
-edge_id e_id;
-int n;
+  map = get_v_constraint_map(v_id);
+  if ( map[0] > MAXCONPER )
+    tmp = (conmap_t *)temp_calloc(map[0]+5,sizeof(conmap_t));
+  for ( k = 0; k <= (int)*map ; k++ )
+    tempmap[k] = map[k];
+  unset_v_all_constraints(v_id);
+  for ( kk = 1; kk <= tempmap[0] ; kk++ )
+    set_v_constraint_map(v_id,tempmap[kk]);
+  if ( tmp )
+    temp_free((char*)tmp);
+
+} // end assure_v_constraints()
+
+/**************************************************************************
+*
+* Function: set_e_constraint_map()
+*
+* Purpose: Put an edge on a given level-set constraint.
+*/
+void set_e_constraint_map(  
+  edge_id e_id,
+  int n
+)
 { conmap_t *map;
   int maxcon = EXTRAS(EDGE)[E_CONSTR_LIST_ATTR].array_spec.datacount;
   int k;
@@ -1556,7 +2108,8 @@ int n;
   for ( k = 1; k <= (int)*map ; k++ )
      if ( (map[k] & CONMASK) == (conmap_t)n ) return;
   if ( k >= maxcon )
-  { int newmax = maxcon+4;
+  { int newmax;
+    newmax = maxcon+4;
     expand_attribute(EDGE,E_CONSTR_LIST_ATTR,&newmax);
     map = get_e_constraint_map(e_id);
   } 
@@ -1587,7 +2140,7 @@ int n;
       fe = first_fe;
       if ( valid_id(first_fe) )
       do
-      { char name[100];
+      { 
         body_id b_id;
         facet_id f_id;
         f_id = get_fe_facet(fe);
@@ -1596,28 +2149,30 @@ int n;
         if ( get_fattr(f_id) & NONCONTENT ) continue;
         b_id = get_facet_body(f_id);
         if ( valid_id(b_id) && (constr->content_rank >= max_rank))
-        { if ( constr->attr & NAMED_THING )
-            sprintf(name,"body_%d_%s_meth",ordinal(b_id)+1,constr->name);
-          else
-            sprintf(name,"body_%d_con_%d_meth",ordinal(b_id)+1,n);
-          attach_method(get_body_volquant(b_id),name);
-          apply_method(e_id,name);
+        { int methnum;
+          methnum = create_body_constraint_content_method(b_id,n);
+          attach_method_num(get_body_volquant(b_id),methnum);
+          apply_method_num(e_id,methnum);
         }
         b_id = get_facet_body(inverse_id(f_id));
         if ( valid_id(b_id) && (constr->content_rank <= min_rank))
-        { if ( constr->attr & NAMED_THING )
-            sprintf(name,"body_%d_%s_meth",ordinal(b_id)+1,constr->name);
-          else
-           sprintf(name,"body_%d_con_%d_meth",ordinal(b_id)+1,n);
-          attach_method(get_body_volquant(b_id),name);
-          apply_method(inverse_id(e_id),name);
+        { int methnum;
+          methnum = create_body_constraint_content_method(b_id,n);
+          attach_method_num(get_body_volquant(b_id),methnum);
+          apply_method_num(inverse_id(e_id),methnum);
         }
       } while ( !equal_id(fe,first_fe) );
 
     }
   }
-}
+} // end set_e_constraint_map()
 
+/**************************************************************************
+*
+* Function: e_on_constraint()
+*
+* Purpose: Determine if a vertex is on a given level-set constraint.
+*/
 int e_on_constraint(e_id,n)  
 edge_id e_id;
 int n;
@@ -1633,11 +2188,18 @@ int n;
         return 1;
   }
   return 0;
-}
+} // end e_on_constraint()
 
-void unset_e_constraint_map(e_id,n) 
-edge_id e_id;
-int n;
+/**************************************************************************
+*
+* Function: unset_e_constraint_map()
+*
+* Purpose: Remove an edge from a level-set constraint.
+*/
+void unset_e_constraint_map(
+  edge_id e_id,
+  int n
+)
 { conmap_t *map;
   int maxcon = EXTRAS(EDGE)[E_CONSTR_LIST_ATTR].array_spec.datacount;
   int j,k;
@@ -1655,25 +2217,53 @@ int n;
   if ( map[0] == 0 ) unset_attr(e_id,CONSTRAINT);
 
   if ( everything_quantities_flag )
-  { struct constraint *con = get_constraint(n);
-    if ( con->attr & CON_ENERGY )
-            unapply_method(e_id,con->energy_method);
-    if ( con->attr & CON_CONTENT )
-    { int meth_offset = get_meth_offset(EDGE);
-      int i;
-      int *instlist = (int*)((char*)elptr(e_id) + meth_offset);
-      int mcount = elptr(e_id)->method_count;
-      for ( i = 0 ; i < mcount ; i++ )
-        if ( METH_INSTANCE(abs(instlist[i]))->flags & BODY_INSTANCE )
-           unapply_method(e_id,instlist[i]);
+  { 
+    // doing low-level deletion here since may be many volume methods
+    // associated with constraint, too many to list in constraint structure.
+    int meth_offset = get_meth_offset(EDGE);
+    int i;
+    struct element *eptr = elptr(e_id);
+    int *instlist = (int*)((char*)eptr + meth_offset);
+    for ( i = 0 ; i < eptr->method_count ; i++ )
+    { struct method_instance *mi;
+      mi = METH_INSTANCE(abs(instlist[i]));
+      if ( mi->connum == n)
+      { instlist[i] = instlist[--eptr->method_count];
+        i--;
+      }
     }
   }
 
-}
+} // end unset_e_constraint_map()
 
-void set_f_constraint_map(f_id,n)  
-facet_id f_id;
-int n;
+/**************************************************************************
+*
+* Function: unset_e_all_constraints()
+*
+* Purpose: Remove an edge from all level-set constraints.
+*/
+void unset_e_all_constraints(edge_id e_id)
+{ conmap_t *map;
+  int maxcon = EXTRAS(EDGE)[E_CONSTR_LIST_ATTR].array_spec.datacount;
+  int i;
+
+  if ( maxcon == 0 ) return;
+  map = get_e_constraint_map(e_id);
+
+  for ( i = map[0] ; i >= 1 ; i-- )
+    unset_e_constraint_map(e_id,map[i]);
+} // end unset_e_all_constraints()
+
+/**************************************************************************
+*
+* Function: set_f_constraint_map()
+*
+* Purpose: Set a facet on a level-set constraint.
+*/
+void set_f_constraint_map(  
+  facet_id f_id,
+  int n
+)
 { conmap_t *map;
   int maxcon = EXTRAS(FACET)[F_CONSTR_LIST_ATTR].array_spec.datacount;
   int k;
@@ -1686,17 +2276,25 @@ int n;
   for ( k = 1; k <= (int)*map ; k++ )
      if ( (map[k] & CONMASK) == (conmap_t)n ) return;
   if ( k >= maxcon )
-  { int newmax = maxcon+4;
+  { int newmax;
+    newmax = maxcon+4;
     expand_attribute(FACET,F_CONSTR_LIST_ATTR,&newmax);
     map = get_f_constraint_map(f_id);
   } 
   map[k] = (conmap_t)n; 
   map[0]++; /* counter */
-}
+} // end set_f_constraint_map()
 
-int f_on_constraint(f_id,n)  
-facet_id f_id;
-int n;
+/**************************************************************************
+*
+* Function: f_on_constraint()
+*
+* Purpose: Determine if a facet is on a given level-set constraint.
+*/
+int f_on_constraint(  
+  facet_id f_id,
+  int n
+)
 { conmap_t *map;
   int maxcon = EXTRAS(FACET)[F_CONSTR_LIST_ATTR].array_spec.datacount;
   int k;
@@ -1709,11 +2307,18 @@ int n;
         return 1;
   }
   return 0;
-}
+} // end  f_on_constraint()
 
-void unset_f_constraint_map(f_id,n)    
-facet_id f_id;
-int n;
+/**************************************************************************
+*
+* Function: unset_f_constraint_map()
+*
+* Purpose: Remove a facet from a level-set constraint.
+*/
+void unset_f_constraint_map(    
+  facet_id f_id,
+  int n
+)
 { conmap_t *map;
   int maxcon = EXTRAS(FACET)[F_CONSTR_LIST_ATTR].array_spec.datacount;
   int k,j;
@@ -1733,21 +2338,23 @@ int n;
     if ( con->attr & CON_ENERGY )
        unapply_method(f_id,con->energy_method);
   }
-}
+} // end unset_f_constraint_map()
 
-int get_tag(f_id)
-facet_id f_id;
-{ if ( F_TAG_ATTR == 0 ) return 0;
-  if ( EXTRAS(FACET)[F_TAG_ATTR].array_spec.datacount > 0 )
-     return (*FINT(f_id,F_TAG_ATTR));
-  else return 0;
-}
+/**************************************************************************
+*
+* Function: unset_f_all_constraints()
+*
+* Purpose: Remove a facet from all level-set constraints.
+*/
+void unset_f_all_constraints(facet_id f_id)
+{ conmap_t *map;
+  int maxcon = EXTRAS(FACET)[F_CONSTR_LIST_ATTR].array_spec.datacount;
+  int i;
 
-void set_tag(f_id,t)
-facet_id f_id;
-int t;
-{ int one=1;
-  if ( EXTRAS(FACET)[F_TAG_ATTR].array_spec.datacount == 0 )
-     expand_attribute(FACET,F_TAG_ATTR,&one);
-  *FINT(f_id,F_TAG_ATTR) = t;
-}
+  if ( maxcon == 0 ) return;
+  map = get_f_constraint_map(f_id);
+
+  for ( i = map[0] ; i >= 1 ; i-- )
+    unset_f_constraint_map(f_id,map[i]);
+} // end unset_f_all_constraints()
+

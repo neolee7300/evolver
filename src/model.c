@@ -22,9 +22,7 @@
 *
 */
 
-void adjust_integration_orders ARGS((int));
-void adjust_integration_orders(l_order)
-int l_order;  /* new element order */
+void adjust_integration_orders(int l_order  /* new element order */)
 { int ord1,ord2;
   
   /* 2D orders actually implemented are 1,2,5,6,8,11,13,14,... */
@@ -37,7 +35,8 @@ int l_order;  /* new element order */
         web.gauss1D_order = ord1;
   if ( (web.gauss2D_order < ord2) || (set_by_user_gauss_2D < ord2) ) 
         web.gauss2D_order = ord2;
-}
+} // end adjust_integration_orders()
+
 /*************************************************************************
 *
 * Function: lagrange_to_linear()
@@ -55,8 +54,10 @@ void lagrange_to_linear()
   web.headvnum = 1;
   web.modeltype = LINEAR;
   gauss_setup();    /* set up gaussian integration arrays */
+  setup_q_info();
   recalc();
-}
+} // end lagrange_to_linear()
+
 /*************************************************************************
 *
 * Function: lagrange_to_quad()
@@ -66,7 +67,6 @@ void lagrange_to_linear()
 void lagrange_to_quad() 
 { edge_id e_id;
   vertex_id *v,vv;
-
 
 #ifdef MPI_EVOLVER
   if ( this_task == MASTER_TASK )
@@ -86,19 +86,19 @@ void lagrange_to_quad()
   web.headvnum = 1;
   web.modeltype = QUADRATIC;
   gauss_setup();    /* set up gaussian integration arrays */
-  
+  setup_q_info();
   LEAVE_GRAPH_MUTEX;
 
   recalc();
-}
+} // end lagrange_to_quad())
+
 /*************************************************************************
 *
 * Function: linear_to_lagrange()
 *
 * purpose: Convert from linear model to lagrange model.
 */
-void linear_to_lagrange(l_order) 
-int l_order;
+void linear_to_lagrange(int l_order)
 { int dim;
   facet_id f_id;
   facetedge_id fe;
@@ -117,7 +117,7 @@ int l_order;
 #endif
 
   if ( web.representation == SOAPFILM )
-     MFOR_ALL_FACETS(f_id)
+  {  MFOR_ALL_FACETS(f_id)
      { fe = get_facet_fe(f_id);
        v = get_facet_vertices(f_id);
        v[0] = get_fe_tailv(fe);
@@ -126,6 +126,8 @@ int l_order;
        fe = get_next_edge(fe);
        v[2] = get_fe_tailv(fe);
      }
+  }
+
   web.modeltype = LAGRANGE;
   web.lagrange_order = 1;
   dim = (web.representation==STRING)? 1 : web.dimension-1;
@@ -133,16 +135,17 @@ int l_order;
   gauss_lagrange_setup(web.dimension,web.lagrange_order,web.gauss2D_order);
   gauss_lagrange_setup(dim,web.lagrange_order,web.gauss1D_order);
   lagrange_to_lagrange(l_order);
-  if ( everything_quantities_flag ) recalc();
-}
+  setup_q_info();
+  recalc();
+} // end linear_to_lagrange()
+
 /*************************************************************************
 *
 * Function: quad_to_lagrange()
 *
 * purpose: Convert from quadratic model to Lagrange model.
 */
-void quad_to_lagrange(l_order) 
-int l_order;
+void quad_to_lagrange(int l_order)
 { int dim;
   facet_id f_id;
   facetedge_id fe;
@@ -150,7 +153,8 @@ int l_order;
   vertex_id *v,vv;
 
   if ( !everything_quantities_flag )
-  { if ( auto_convert_flag ) convert_to_quantities(); else
+  { if ( auto_convert_flag ) convert_to_quantities(); 
+    else
      kb_error(1798,"Must do convert_to_quantities for Lagrange model.\n",
           RECOVERABLE);
   }
@@ -191,17 +195,19 @@ int l_order;
   LEAVE_GRAPH_MUTEX;
 
   lagrange_to_lagrange(l_order);
-  if ( everything_quantities_flag ) recalc();
-}
+  setup_q_info();
+  recalc();
+} // end quad_to_lagrange()
+
 /*************************************************************************
 *
 * Function: lagrange_to_lagrange()
 *
 * purpose: Convert order of Lagrange model.
 */
-void lagrange_to_lagrange(l_order) 
-int l_order;
-{ int new_ectrl,new_fctrl; /* new number of control points */ 
+void lagrange_to_lagrange(int l_order)
+{ 
+  int new_ectrl,new_fctrl; /* new number of control points */ 
   int old_ectrl = web.skel[EDGE].ctrlpts;
   int old_fctrl = web.skel[FACET].ctrlpts;
   int i,k,m,spot; 
@@ -294,109 +300,111 @@ int l_order;
 
 
   if ( web.representation != STRING )
-  MFOR_ALL_FACETS(f_id)
-   { vertex_id *v;
-     dim = web.dimension;
-     get_facet_verts(f_id,oldx,NULL);
-     mat_mult(trans,oldx,newx,new_fctrl,web.skel[FACET].ctrlpts,SDIM);
-     v = get_facet_vertices(f_id);
-
-     /* free old interior */
-     for ( m = 0 ; m <= dim ; m++ ) inx[m] = 0;
-     inx[0] = web.lagrange_order;
-     for ( k = 0 ; k < old_fctrl ; k++ )
-     { for ( m = 0 ; m <= dim ; m++ )
-          if ( inx[m] == 0 ) break;
-        if ( m > dim ) free_element(v[k]);  /* free only interior */
-        increment_lagrange_index(dim,inx);
-     }
-     /* move extreme vertices */
-     for ( m = 0 ; m <= dim ; m++ ) inx[m] = 0;
-     if ( l_order < web.lagrange_order )
-        for ( k = 0 ; k <= dim ; k++ )
-        { inx[k] = web.lagrange_order; 
-          old = lagrange_index(dim,web.lagrange_order,inx); 
-          inx[k] = l_order;
-          new = lagrange_index(dim,l_order,inx);
-          inx[k] = 0;
-          v[new] = v[old];
-        }
-     else
-        for ( k = dim ; k >= 0 ; k-- )
-        { inx[k] = web.lagrange_order; 
-          old = lagrange_index(dim,web.lagrange_order,inx); 
-          inx[k] = l_order;
-          new = lagrange_index(dim,l_order,inx);
-          inx[k] = 0;
-          v[new] = v[old];
-        }
-
-     /* create new interior */
-     for ( m = 0 ; m <= dim ; m++ ) inx[m] = 0;
-     inx[0] = l_order;
-     for ( k = 0 ; k < new_fctrl ; k++ )
-     { for ( m = 0 ; m <= dim ; m++ )
-          if ( inx[m] == 0 ) break;
-        if ( m > dim ) /* create interior vertex */
-        { v[k] = new_vertex(newx[k],f_id);  
-          if ( get_fattr(f_id) & FIXED ) set_attr(v[k],FIXED);
-          set_attr(v[k],Q_MIDFACET);
-          set_vertex_facet(v[k],f_id);  /* since doesn't have edge */
-          /* find centerpoint parameters for facet on boundary */
-          if ( get_fattr(f_id) & BOUNDARY )    /* not working for torus */
-          {
-             REAL defaultp[MAXCOORD];
-             REAL *paramb,*parammid,*xb;
-             vertex_id base_v;
-             REAL s[MAXCOORD];
-             struct boundary *bdry;
-             facetedge_id fe;
-
-             set_attr(v[k],BOUNDARY);
-             bdry = get_facet_boundary(f_id);
-             set_boundary_num(v[k],bdry->num);
-
-             /* v[k] parameters extrapolate from a vertex */
-             /* try to find a vertex on same boundary */
-             base_v = NULLVERTEX;
-             fe = get_facet_fe(f_id);
-             for ( i = 0 ; i < FACET_EDGES ; i++, fe = get_next_edge(fe) )
-                { 
-                  if ( bdry == get_boundary(get_fe_tailv(fe)) )
-                     base_v = get_fe_tailv(fe);
-                }
-             if ( valid_id(base_v) )
-                { paramb = get_param(base_v);
-                  xb = get_coord(base_v);
-                  for ( i = 0 ; i < SDIM ; i++ )
-                     s[i] = xb[i];  /* displacement vector */
-                }
-             else
-                { paramb = defaultp;
-                  defaultp[0] = defaultp[1] = defaultp[2] = 0.1;
-                  for ( i = 0 ; i < SDIM ; i++ )
-                     s[i] = eval(bdry->coordf[i],defaultp,NULLID,NULL);
-                  sprintf(msg,
-                    "Could not find vertex on same boundary as facet %s.\n",
-                     ELNAME(f_id));
-                }
-
-             parammid = get_param(v[k]);
-             b_extrapolate(bdry,s,newx[k],newx[k],paramb,parammid,v[k]);
-          }
-          else if ( get_fattr(f_id) & CONSTRAINT )    
-          {
-             ATTR attr = get_fattr(f_id) & (BDRY_ENERGY|BDRY_CONTENT|CONSTRAINT);
-             conmap_t * conmap = get_f_constraint_map(f_id);
-
-             set_attr(v[k],attr);
-             set_v_conmap(v[k],conmap);
-             project_v_constr(v[k],ACTUAL_MOVE,RESET_ONESIDEDNESS);
-          }
-        }
-        increment_lagrange_index(dim,inx);
-     }
+  { MFOR_ALL_FACETS(f_id)
+    { vertex_id *v;
+      dim = web.dimension;
+      get_facet_verts(f_id,oldx,NULL);
+      mat_mult(trans,oldx,newx,new_fctrl,web.skel[FACET].ctrlpts,SDIM);
+      v = get_facet_vertices(f_id);
+ 
+      /* free old interior */
+      for ( m = 0 ; m <= dim ; m++ ) inx[m] = 0;
+      inx[0] = web.lagrange_order;
+      for ( k = 0 ; k < old_fctrl ; k++ )
+      { for ( m = 0 ; m <= dim ; m++ )
+           if ( inx[m] == 0 ) break;
+         if ( m > dim ) free_element(v[k]);  /* free only interior */
+         increment_lagrange_index(dim,inx);
+      }
+      /* move extreme vertices */
+      for ( m = 0 ; m <= dim ; m++ ) inx[m] = 0;
+      if ( l_order < web.lagrange_order )
+         for ( k = 0 ; k <= dim ; k++ )
+         { inx[k] = web.lagrange_order; 
+           old = lagrange_index(dim,web.lagrange_order,inx); 
+           inx[k] = l_order;
+           new = lagrange_index(dim,l_order,inx);
+           inx[k] = 0;
+           v[new] = v[old];
+         }
+      else
+         for ( k = dim ; k >= 0 ; k-- )
+         { inx[k] = web.lagrange_order; 
+           old = lagrange_index(dim,web.lagrange_order,inx); 
+           inx[k] = l_order;
+           new = lagrange_index(dim,l_order,inx);
+           inx[k] = 0;
+           v[new] = v[old];
+         }
+ 
+      /* create new interior */
+      for ( m = 0 ; m <= dim ; m++ ) inx[m] = 0;
+      inx[0] = l_order;
+      for ( k = 0 ; k < new_fctrl ; k++ )
+      { for ( m = 0 ; m <= dim ; m++ )
+           if ( inx[m] == 0 ) break;
+         if ( m > dim ) /* create interior vertex */
+         { v[k] = new_vertex(newx[k],f_id);  
+           if ( get_fattr(f_id) & FIXED ) set_attr(v[k],FIXED);
+           set_attr(v[k],Q_MIDFACET);
+           set_vertex_facet(v[k],f_id);  /* since doesn't have edge */
+           /* find centerpoint parameters for facet on boundary */
+           if ( get_fattr(f_id) & BOUNDARY )    /* not working for torus */
+           {
+              REAL defaultp[MAXCOORD];
+              REAL *paramb,*parammid,*xb;
+              vertex_id base_v;
+              REAL s[MAXCOORD];
+              struct boundary *bdry;
+              facetedge_id fe;
+ 
+              set_attr(v[k],BOUNDARY);
+              bdry = get_facet_boundary(f_id);
+              set_boundary_num(v[k],bdry->num);
+ 
+              /* v[k] parameters extrapolate from a vertex */
+              /* try to find a vertex on same boundary */
+              base_v = NULLVERTEX;
+              fe = get_facet_fe(f_id);
+              for ( i = 0 ; i < FACET_EDGES ; i++, fe = get_next_edge(fe) )
+                 { 
+                   if ( bdry == get_boundary(get_fe_tailv(fe)) )
+                      base_v = get_fe_tailv(fe);
+                 }
+              if ( valid_id(base_v) )
+                 { paramb = get_param(base_v);
+                   xb = get_coord(base_v);
+                   for ( i = 0 ; i < SDIM ; i++ )
+                      s[i] = xb[i];  /* displacement vector */
+                 }
+              else
+                 { paramb = defaultp;
+                   defaultp[0] = defaultp[1] = defaultp[2] = 0.1;
+                   for ( i = 0 ; i < SDIM ; i++ )
+                      s[i] = eval(bdry->coordf[i],defaultp,NULLID,NULL);
+                   sprintf(msg,
+                     "Could not find vertex on same boundary as facet %s.\n",
+                      ELNAME(f_id));
+                 }
+ 
+              parammid = get_param(v[k]);
+              b_extrapolate(bdry,s,newx[k],newx[k],paramb,parammid,v[k]);
+           }
+           else if ( get_fattr(f_id) & CONSTRAINT )    
+           {
+              ATTR attr = get_fattr(f_id) & (BDRY_ENERGY|BDRY_CONTENT|CONSTRAINT);
+              conmap_t * conmap = get_f_constraint_map(f_id);
+ 
+              set_attr(v[k],attr);
+              set_v_conmap(v[k],conmap);
+              project_v_constr(v[k],ACTUAL_MOVE,RESET_ONESIDEDNESS);
+           }
+         }
+         increment_lagrange_index(dim,inx);
+      }
+    }
   }
+
   /* do edges */
   /* calculate transition matrix */
   dim = (web.representation==STRING)? 1 : web.dimension-1;
@@ -544,7 +552,7 @@ int l_order;
   /* now install edge vertices in facets */
   /* being careful with edge orientation */
   if ( web.representation != STRING )
-    MFOR_ALL_FACETS(f_id)
+  { MFOR_ALL_FACETS(f_id)
      { vertex_id *v,*ev;
         facetedge_id fe;
 
@@ -586,6 +594,7 @@ int l_order;
              v[spot] = ev[l_order-k];
         }
      }
+  }
     
   free_matrix(trans);
   free_matrix(newx);
@@ -602,10 +611,13 @@ int l_order;
   change_flag = 1;
   web_timestamp = top_timestamp = ++global_timestamp;
   web.headvnum = l_order;
-
+  setup_q_info();
   LEAVE_GRAPH_MUTEX;
 
-}
+  recalc();
+
+} /* end of lagrange_to_lagrange() */
+
 
 /*******************************************************************
 *
@@ -658,7 +670,7 @@ void change_model()
       default : lagrange_to_lagrange(ans[0]-'0'); break;
     }
   }
-}
+} // end change_model())
 
 /***************************************************************
 *
@@ -725,13 +737,14 @@ void linear_to_quad()
     vertex_id headv,tailv;
     vertex_id new_v;
     REAL side[MAXCOORD];
-        
+
     headv = get_edge_headv(e_id);
     tailv = get_edge_tailv(e_id);
     t = get_coord(tailv);
     get_edge_side(e_id,side);
     for ( i = 0 ; i < SDIM ; i++ )
       x[i] = t[i] + side[i]/2;
+
     new_v = new_vertex(x,e_id);
     set_edge_midv(e_id,new_v);
 
@@ -748,10 +761,15 @@ void linear_to_quad()
       vertex_id base_v = NULLID;
      
       bdry = get_edge_boundary(e_id);
-      if ( get_boundary(headv) == bdry )
-          base_v = headv;
-      else if ( get_boundary(tailv) == bdry )
+      
+      if ( get_boundary(tailv) == bdry )
           base_v = tailv;
+      else if ( get_boundary(headv) == bdry )
+      {  t = get_coord(headv);  // patch up mid x, in case of torus wrap
+         for ( i = 0 ; i < SDIM ; i++ )
+            x[i] = t[i] - side[i]/2;
+         base_v = headv;
+      }
       else
          { sprintf(errmsg,
   "Vertices %s and %s of edge %s are on different boundaries than the edge.\n",
@@ -761,7 +779,7 @@ void linear_to_quad()
 
       set_attr(new_v,BOUNDARY);
       set_boundary_num(new_v,bdry->num);
-     
+    
       /* projecting on tangent */
       mv = get_coord(new_v);
       mu = get_coord(base_v);
@@ -807,10 +825,10 @@ void linear_to_quad()
   gauss_setup();    /* set up gaussian integration arrays */
   change_flag = 1;
   web_timestamp = top_timestamp = ++global_timestamp;
-
+  setup_q_info();
   LEAVE_GRAPH_MUTEX;
 
-}
+} // end linear_to_quad()
   
 /***************************************************************
 *
@@ -864,9 +882,9 @@ void quad_to_linear()
   gauss_setup();    /* set up gaussian integration arrays */
   change_flag = 1;
   web_timestamp = top_timestamp = ++global_timestamp;
-  
+  setup_q_info();
   LEAVE_GRAPH_MUTEX;
-}
+} // end quad_to_linear()
  
 /**********************************************************************
 *
@@ -881,187 +899,188 @@ void quad_to_linear()
 ***********************************************************************/
 
 #include "f2c.h"
-int gaussq_ ARGS((integer*, integer*, doublereal*, doublereal*, integer*, 
-    doublereal*, doublereal*, doublereal*, doublereal*));
-int class_ ARGS((integer*, integer*, doublereal*, doublereal*, doublereal*, 
-    doublereal*, doublereal*));
-int gausq2_ ARGS((integer*, doublereal*, doublereal*, doublereal*, integer*));
-REAL pow_dd ARGS((REAL*,REAL*));
-REAL dgamma_ ARGS((REAL*));
-REAL d1mach_ ARGS((void));
-REAL d_sign ARGS((REAL*,REAL*)); /* from f2c's libf77 */
+int gaussq_(integer*, integer*, doublereal*, doublereal*, integer*, 
+    doublereal*, doublereal*, doublereal*, doublereal*);
+int class_(integer*, integer*, doublereal*, doublereal*, doublereal*, 
+    doublereal*, doublereal*);
+int gausq2_(integer*, doublereal*, doublereal*, doublereal*, integer*);
+REAL pow_dd(REAL*,REAL*);
+REAL dgamma_(REAL*);
+REAL d1mach_(void);
+REAL d_sign(REAL*,REAL*); /* from f2c's libf77 */
 
 void gauss_setup()
-{  int i,j,k,m;
+{ int i,j,k,m;
 
-    if ( web.representation == STRING )
+  if ( web.representation == STRING )
          gauss_lagrange_setup(1,web.lagrange_order,web.gauss1D_order);
+  else
+  { gauss_lagrange_setup(web.dimension-1,web.lagrange_order,web.gauss1D_order);
+    gauss_lagrange_setup(web.dimension,web.lagrange_order,web.gauss2D_order);
+  }
+
+  /* set number of control points */
+  ctrl_num = web.dimension + 1;
+  if ( web.modeltype == QUADRATIC )
+    ctrl_num += web.dimension*(web.dimension+ 1)/2;
+
+  /* set number of integration points and weights */
+  gauss1D_num = (abs(web.gauss1D_order)+2)/2;
+  if ( web.dimension == 2 )
+  { 
+    if ( web.gauss2D_order >=  14 ) 
+    { /* use conical product formula */
+      int npts = 1+web.gauss2D_order/2; /* per dimension */
+      if ( conical_x ) free_matrix(conical_x);
+      if ( conical_w ) myfree((char*)conical_w);
+      conical_x = dmatrix(0,npts*npts-1,0,2);
+      conical_w = (REAL*)mycalloc(npts*npts,sizeof(REAL));
+      simplex_quadrature(2,web.gauss2D_order,npts*npts,conical_x,conical_w);
+      gauss2D_num = npts*npts;
+      gauss2Dpt = (barytype*)(conical_x[0]);
+      gauss2Dwt = conical_w;
+    }
+    else if ( web.gauss2D_order >=  12 ) 
+    { gauss2D_num = 37;
+      gauss2Dpt = gauss2Dpt13;
+      gauss2Dwt = gauss2Dwt13;
+    }
+    else if ( web.gauss2D_order >=  9 ) 
+    { gauss2D_num = 28;
+      gauss2Dpt = gauss2Dpt11;
+      gauss2Dwt = gauss2Dwt11;
+    }
+    else if ( web.gauss2D_order >=  7 ) 
+    { gauss2D_num = 16;
+      gauss2Dpt = gauss2Dpt8;
+      gauss2Dwt = gauss2Dwt8;
+    }
+    else if ( web.gauss2D_order >= 6 ) 
+    { gauss2D_num = 12;
+      gauss2Dpt = gauss2Dpt6;
+      gauss2Dwt = gauss2Dwt6;
+    }
+    else if ( web.gauss2D_order >= 3 ) 
+    { gauss2D_num = 7;
+      gauss2Dpt = gauss2Dpt5;
+      gauss2Dwt = gauss2Dwt5;
+    }
+    else if ( web.gauss2D_order >= 2 )
+    { gauss2D_num = 3;
+      gauss2Dpt = gauss2Dpt2;
+      gauss2Dwt = gauss2Dwt2;
+    }
     else
-    { gauss_lagrange_setup(web.dimension-1,web.lagrange_order,web.gauss1D_order);
-      gauss_lagrange_setup(web.dimension,web.lagrange_order,web.gauss2D_order);
+    { gauss2D_num = 1;
+      gauss2Dpt = gauss2Dpt1;
+      gauss2Dwt = gauss2Dwt1;
     }
+  }
+  else gauss2D_num = web.dimension + 1;
 
-    /* set number of control points */
-    ctrl_num = web.dimension + 1;
-    if ( web.modeltype == QUADRATIC )
-      ctrl_num += web.dimension*(web.dimension+ 1)/2;
+  /* always have 1D integration for edges on constraints */
+  web.gauss1D_order = abs(web.gauss1D_order);
+  gauss1Dpt = (REAL *)kb_realloc((char*)gauss1Dpt,gauss1D_num*sizeof(REAL));
+  gauss1Dwt = (REAL *)kb_realloc((char*)gauss1Dwt,gauss1D_num*sizeof(REAL));
+  grule(gauss1D_num,gauss1Dpt,gauss1Dwt);
+  if ( gauss1poly ) 
+  { free_matrix(gauss1poly); gauss1poly = NULL;
+    free_matrix(gauss1polyd); gauss1polyd = NULL;
+  }
+  if ( web.modeltype == LINEAR )
+  { edge_ctrl = 2;
+    gauss1poly = dmatrix(0,edge_ctrl-1,0,gauss1D_num-1);
+    gauss1polyd = dmatrix(0,edge_ctrl-1,0,gauss1D_num-1);
+    for ( m = 0 ; m < gauss1D_num ; m++ )
+    { gauss1poly[0][m] = (1-gauss1Dpt[m]);
+      gauss1poly[1][m] = gauss1Dpt[m];
+      gauss1polyd[0][m] = -1.0;
+      gauss1polyd[1][m] =  1.0;
+    }
+  }
+  else if ( web.modeltype == QUADRATIC )
+  { edge_ctrl = 3;
+    gauss1poly = dmatrix(0,edge_ctrl-1,0,gauss1D_num-1);
+    gauss1polyd = dmatrix(0,edge_ctrl-1,0,gauss1D_num-1);
+    for ( m = 0 ; m < gauss1D_num ; m++ )
+    { gauss1poly[0][m] = (1-2*gauss1Dpt[m])*(1-gauss1Dpt[m]);
+      gauss1poly[1][m] = 4*gauss1Dpt[m]*(1-gauss1Dpt[m]);
+      gauss1poly[2][m] = gauss1Dpt[m]*(2*gauss1Dpt[m]-1);
+      gauss1polyd[0][m] = 4*gauss1Dpt[m]-3;
+      gauss1polyd[1][m] = 4 - 8*gauss1Dpt[m];
+      gauss1polyd[2][m] = 4*gauss1Dpt[m]-1;
+    }
+  }
+  /* could have more modeltypes here */
+  /* would have to up EDGE_CTRL to max of possible edge_ctrl */
 
-    /* set number of integration points and weights */
-    gauss1D_num = (abs(web.gauss1D_order)+2)/2;
-    if ( web.dimension == 2 )
-      { 
-         if ( web.gauss2D_order >=  14 ) 
-         { /* use conical product formula */
-            int npts = 1+web.gauss2D_order/2; /* per dimension */
-            if ( conical_x ) free_matrix(conical_x);
-            if ( conical_w ) myfree((char*)conical_w);
-            conical_x = dmatrix(0,npts*npts-1,0,2);
-            conical_w = (REAL*)mycalloc(npts*npts,sizeof(REAL));
-            simplex_quadrature(2,web.gauss2D_order,npts*npts,conical_x,conical_w);
-            gauss2D_num = npts*npts;
-            gauss2Dpt = (barytype*)(conical_x[0]);
-            gauss2Dwt = conical_w;
-         }
-         else if ( web.gauss2D_order >=  12 ) 
-            { gauss2D_num = 37;
-              gauss2Dpt = gauss2Dpt13;
-              gauss2Dwt = gauss2Dwt13;
-            }
-         else if ( web.gauss2D_order >=  9 ) 
-            { gauss2D_num = 28;
-              gauss2Dpt = gauss2Dpt11;
-              gauss2Dwt = gauss2Dwt11;
-            }
-         else if ( web.gauss2D_order >=  7 ) 
-            { gauss2D_num = 16;
-              gauss2Dpt = gauss2Dpt8;
-              gauss2Dwt = gauss2Dwt8;
-            }
-         else if ( web.gauss2D_order >= 6 ) 
-            { gauss2D_num = 12;
-              gauss2Dpt = gauss2Dpt6;
-              gauss2Dwt = gauss2Dwt6;
-            }
-         else if ( web.gauss2D_order >= 3 ) 
-            { gauss2D_num = 7;
-              gauss2Dpt = gauss2Dpt5;
-              gauss2Dwt = gauss2Dwt5;
-            }
-         else if ( web.gauss2D_order >= 2 )
-            { gauss2D_num = 3;
-              gauss2Dpt = gauss2Dpt2;
-              gauss2Dwt = gauss2Dwt2;
-            }
-         else
-            { gauss2D_num = 1;
-              gauss2Dpt = gauss2Dpt1;
-              gauss2Dwt = gauss2Dwt1;
-            }
-      }
-    else gauss2D_num = web.dimension + 1;
+  if ( web.dimension == 1 )
+  {  gauss2Dwt = gauss1Dwt; gauss2Dpt = (barytype*)gauss1Dpt; gauss2D_num = gauss1D_num; 
+  }
+  else if ( web.dimension > 2 )
+  { gauss2Dwt = (REAL *)mycalloc(gauss2D_num,sizeof(REAL));
+     for ( i = 0 ; i < gauss2D_num ; i++ )
+        gauss2Dwt[i] = 1.0/gauss2D_num;  /* trivial points */
+  }
 
-    /* always have 1D integration for edges on constraints */
-    web.gauss1D_order = abs(web.gauss1D_order);
-    gauss1Dpt = (REAL *)mycalloc(gauss1D_num,sizeof(REAL));
-    gauss1Dwt = (REAL *)mycalloc(gauss1D_num,sizeof(REAL));
-    grule(gauss1D_num,gauss1Dpt,gauss1Dwt);
-    if ( gauss1poly ) 
-    { free_matrix(gauss1poly); gauss1poly = NULL;
-      free_matrix(gauss1polyd); gauss1polyd = NULL;
-    }
-    if ( web.modeltype == LINEAR )
-    { edge_ctrl = 2;
-      gauss1poly = dmatrix(0,edge_ctrl-1,0,gauss1D_num-1);
-      gauss1polyd = dmatrix(0,edge_ctrl-1,0,gauss1D_num-1);
-      for ( m = 0 ; m < gauss1D_num ; m++ )
-      { gauss1poly[0][m] = (1-gauss1Dpt[m]);
-         gauss1poly[1][m] = gauss1Dpt[m];
-         gauss1polyd[0][m] = -1.0;
-         gauss1polyd[1][m] =  1.0;
-      }
-    }
-    else if ( web.modeltype == QUADRATIC )
-    { edge_ctrl = 3;
-      gauss1poly = dmatrix(0,edge_ctrl-1,0,gauss1D_num-1);
-      gauss1polyd = dmatrix(0,edge_ctrl-1,0,gauss1D_num-1);
-      for ( m = 0 ; m < gauss1D_num ; m++ )
-      { gauss1poly[0][m] = (1-2*gauss1Dpt[m])*(1-gauss1Dpt[m]);
-         gauss1poly[1][m] = 4*gauss1Dpt[m]*(1-gauss1Dpt[m]);
-         gauss1poly[2][m] = gauss1Dpt[m]*(2*gauss1Dpt[m]-1);
-         gauss1polyd[0][m] = 4*gauss1Dpt[m]-3;
-         gauss1polyd[1][m] = 4 - 8*gauss1Dpt[m];
-         gauss1polyd[2][m] = 4*gauss1Dpt[m]-1;
-      }
-    }
-    /* could have more modeltypes here */
-    /* would have to up EDGE_CTRL to max of possible edge_ctrl */
-
-    if ( web.dimension == 1 )
-    {  gauss2Dwt = gauss1Dwt; gauss2Dpt = gauss2Dpt; gauss2D_num = gauss1D_num; 
-    }
-    else if ( web.dimension > 2 )
-      { gauss2Dwt = (REAL *)mycalloc(gauss2D_num,sizeof(REAL));
-         for ( i = 0 ; i < gauss2D_num ; i++ )
-            gauss2Dwt[i] = 1.0/gauss2D_num;  /* trivial points */
+  /* set up interpolation polynomial values */
+  if ( gpoly ) free_matrix(gpoly);
+  gpoly = dmatrix(0,gauss2D_num-1,0,ctrl_num-1);
+  if ( gpolypartial ) free_matrix3(gpolypartial);
+  gpolypartial = dmatrix3(gauss2D_num,web.dimension,ctrl_num);
+  if ( web.dimension == 1 )
+    for ( j = 0 ; j < gauss2D_num ; j++ )
+      for ( i = 0 ; i < ctrl_num ;  i++ )
+      {
+        REAL p=1.0,sum=0.0;
+        int scale = ctrl_num - 1;
+        for ( m = 0 ; m < ctrl_num ; m++ )
+        { if ( m == i ) continue;
+          p *= (gauss1Dpt[j]*scale - m)/(i - m);
+          if ( p == 0.0 ) break;
+          sum += scale/(gauss1Dpt[j]*scale - m);
         }
-
-    /* set up interpolation polynomial values */
-    if ( gpoly ) free_matrix(gpoly);
-    gpoly = dmatrix(0,gauss2D_num-1,0,ctrl_num-1);
-    if ( gpolypartial ) free_matrix3(gpolypartial);
-    gpolypartial = dmatrix3(gauss2D_num,web.dimension,ctrl_num);
-    if ( web.dimension == 1 )
-      for ( j = 0 ; j < gauss2D_num ; j++ )
-        for ( i = 0 ; i < ctrl_num ;  i++ )
-        {
-          REAL p=1.0,sum=0.0;
-          int scale = ctrl_num - 1;
-          for ( m = 0 ; m < ctrl_num ; m++ )
-          { if ( m == i ) continue;
-            p *= (gauss1Dpt[j]*scale - m)/(i - m);
-            if ( p == 0.0 ) break;
-            sum += scale/(gauss1Dpt[j]*scale - m);
-          }
-          gpoly[j][i] = p;
-          gpolypartial[j][0][i] = sum*p;
-        }
-    else if ( web.dimension == 2 )
-    { if ( web.modeltype == LINEAR )
-      { for ( k = 0 ; k < gauss2D_num ; k++ )
-        {
-          gpoly[k][0] = gauss2Dpt[k][0];
-          gpoly[k][1] = gauss2Dpt[k][1];
-          gpoly[k][2] = gauss2Dpt[k][2];
-          gpolypartial[k][0][0] = -1.0;
-          gpolypartial[k][1][0] = -1.0;
-          gpolypartial[k][0][1] =  1.0;
-          gpolypartial[k][1][2] =  1.0;    /* others 0 */
-        }
+        gpoly[j][i] = p;
+        gpolypartial[j][0][i] = sum*p;
       }
-      else /* QUADRATIC */
-      { for ( k = 0 ; k < gauss2D_num ; k++ )
-          for ( j = 0 ; j < ctrl_num ; j++ )
-          { gpoly[k][j] = intpoly6(j,2*gauss2Dpt[k][1],2*gauss2Dpt[k][2]);
-            for ( i = 0 ; i < 2 ; i++ )
-              gpolypartial[k][i][j] = 2*intpoly6part(j,i,
-                               2*gauss2Dpt[k][1], 2*gauss2Dpt[k][2]);
-                                  /* since intpoly was on side 2 triangle */
-                                  /* and gauss2Dpt barycentric  */
-          }
-       }
+  else if ( web.dimension == 2 )
+  { if ( web.modeltype == LINEAR )
+    { for ( k = 0 ; k < gauss2D_num ; k++ )
+      {
+        gpoly[k][0] = gauss2Dpt[k][0];
+        gpoly[k][1] = gauss2Dpt[k][1];
+        gpoly[k][2] = gauss2Dpt[k][2];
+        gpolypartial[k][0][0] = -1.0;
+        gpolypartial[k][1][0] = -1.0;
+        gpolypartial[k][0][1] =  1.0;
+        gpolypartial[k][1][2] =  1.0;    /* others 0 */
+      }
+    }
+    else /* QUADRATIC */
+    { for ( k = 0 ; k < gauss2D_num ; k++ )
+        for ( j = 0 ; j < ctrl_num ; j++ )
+        { gpoly[k][j] = intpoly6(j,2*gauss2Dpt[k][1],2*gauss2Dpt[k][2]);
+          for ( i = 0 ; i < 2 ; i++ )
+            gpolypartial[k][i][j] = 2*intpoly6part(j,i,
+                             2*gauss2Dpt[k][1], 2*gauss2Dpt[k][2]);
+                                /* since intpoly was on side 2 triangle */
+                                /* and gauss2Dpt barycentric  */
+        }
      }
-     else /* higher dimension */
-     { /* crude: gauss pts same as control points */
-       for ( k = 0 ; k < gauss2D_num ; k++ )
-       { gpoly[k][k] = 1.0;  /* rest 0 */
-         for ( j = 0 ; j < web.dimension ; j++ )
-         {
-           gpolypartial[k][j][0] = -1.0;
-           gpolypartial[k][j][j+1] = 1.0;
-         }          
-       }
+   }
+   else /* higher dimension */
+   { /* crude: gauss pts same as control points */
+     for ( k = 0 ; k < gauss2D_num ; k++ )
+     { gpoly[k][k] = 1.0;  /* rest 0 */
+       for ( j = 0 ; j < web.dimension ; j++ )
+       {
+         gpolypartial[k][j][0] = -1.0;
+         gpolypartial[k][j][j+1] = 1.0;
+       }          
      }
-}
+   }
+  setup_q_info();
+} // end gauss_setup()
 
     
 
@@ -1077,12 +1096,13 @@ void gauss_setup()
 *
 */
 
-int simplex_quadrature(dim,order,maxpt,x,w)
-int dim;  /* dimension of simplex */
-int order; /* order of polynomial to do correctly */
-int maxpt; /* points available in x,w */
-REAL **x; /* for barycentric coordinates of quadrature points */
-REAL *w;  /* weights at quadrature points */
+int simplex_quadrature(
+  int dim,  /* dimension of simplex */
+  int order, /* order of polynomial to do correctly */
+  int maxpt, /* points available in x,w */
+  REAL **x, /* for barycentric coordinates of quadrature points */
+  REAL *w  /* weights at quadrature points */
+)
 { int N = 1+order/2;  /* points needed in 1D integration */
   int bsize;  /* number of total points */
   int iter[100]; /* iteration variables */
@@ -1140,7 +1160,7 @@ REAL *w;  /* weights at quadrature points */
   free_matrix(gj_x);
   free_matrix(gj_w);
   return count;
-}
+} // end simplex_quadrature()
 
 
 /****************************************************************************
@@ -1151,11 +1171,12 @@ REAL *w;  /* weights at quadrature points */
 *             on (-1,1) with weight (1+x)^beta
 */
 
-void gauss_jacobi(n,beta,t,w)
-int n; /* the number of points used for the quadrature rule */
-REAL beta; /* parameter */
-REAL *t; /* will contain the desired nodes. */
-REAL *w; /* will contain the desired weights w(j). */
+void gauss_jacobi(
+  int n, /* the number of points used for the quadrature rule */
+  REAL beta, /* parameter */
+  REAL *t, /* will contain the desired nodes. */
+  REAL *w /* will contain the desired weights w(j). */
+)
 { int kind = 5; /* jacobi, w(x) = (1-x)**alpha * (1+x)**beta on (-1,1) */
   REAL alpha  = 0.0;
   int kpts = 0; /*  endpoint nodes */
@@ -1165,11 +1186,10 @@ REAL *w; /* will contain the desired weights w(j). */
   b = (REAL*)temp_calloc(n,sizeof(REAL));
   gaussq_(&kind, &n, &alpha, &beta, &kpts, endpts, b, t, w);
   temp_free((char*)b);
-}
+} // end gauss_jacobi()
 
 /* some stuff for gaussq() */
-REAL dgamma_(x)
-REAL *x;
+REAL dgamma_(REAL *x)
 { REAL b;
   int n,k;
 
@@ -1182,28 +1202,26 @@ REAL *x;
 
   for ( b = 1.0, k = 2 ; k < n ; k++ ) b *= k;
   return b;
-}
+} // end dgamma_()
 
 REAL d1mach_() { /* return DBL_EPSILON; */
   REAL eps;
   REAL one = 1.0;
   for ( eps = 1.0 ; one + eps != one ; eps /= 2.0 ) ;
   return 2.0*eps;
-}
+} // end d1mach_()
 
-REAL pow_dd(x,y)
-REAL *x,*y;
+REAL pow_dd(REAL *x,REAL *y)
 { REAL a =  pow(*x,*y); 
   return  a;
-}
+} // end pow_dd()
 
-REAL d_sign(a,b) /* from f2c's libf77 */
-REAL *a,*b;
+REAL d_sign(REAL *a,REAL *b) /* from f2c's libf77 */
 {
   REAL x;
   x = (*a >= 0. ? *a : - *a);
   return( *b >= 0. ? x : -x);
-}
+} // end d_sign()
 
 /***********************************************************************/
 /* gaussq.f -- translated by f2c (version 19950314).
@@ -1215,7 +1233,7 @@ REAL *a,*b;
 /* Table of constant values */
 
 static doublereal c_b19 = 2.;
-doublereal solve_ ARGS((REAL *, int *, REAL *, REAL *));
+doublereal solve_(REAL *, int *, REAL *, REAL *);
 
 /* ====================================================================== */
 /* NIST Guide to Available Math Software.                                 */
@@ -1223,11 +1241,15 @@ doublereal solve_ ARGS((REAL *, int *, REAL *, REAL *));
 /* Retrieved from NETLIB on Sat Mar 18 10:07:24 1995.                     */
 /* ====================================================================== */
 
-/* Subroutine */ int gaussq_(kind, n, alpha, beta, kpts, endpts, b, t, w)
-integer *kind, *n;
-doublereal *alpha, *beta;
-integer *kpts;
-doublereal *endpts, *b, *t, *w;
+int gaussq_(
+  integer *kind, integer *n,
+  doublereal *alpha, doublereal *beta,
+  integer *kpts,
+  doublereal *endpts, 
+  doublereal *b, 
+  doublereal *t, 
+  doublereal *w
+)
 {
      /* System generated locals */
      integer i__1;
@@ -1303,8 +1325,9 @@ doublereal *endpts, *b, *t, *w;
 /*      underflow may sometimes occur, but is harmless. */
 
 /*      references */
-/*          1.  golub, g. h., and welsch, j. h., "calculation of gaussian */
-/*                quadrature rules," mathematics of computation 23 (april, */
+/*          1.  golub, g. h., and welsch, j. h., 
+                "calculation of gaussian quadrature rules," 
+                  mathematics of computation 23 (april, */
 /*                1969), pp. 221-230. */
 /*          2.  golub, g. h., "some modified matrix eigenvalue problems," */
 /*                siam review 15 (april, 1973), pp. 318-334 (section 7). */
@@ -1388,10 +1411,12 @@ L100:
 
 
 
-doublereal solve_(shift, n, a, b)
-doublereal *shift;
-integer *n;
-doublereal *a, *b;
+doublereal solve_(
+  doublereal *shift,
+  integer *n,
+  doublereal *a, 
+  doublereal *b
+)
 {
      /* System generated locals */
      integer i__1;
@@ -1439,9 +1464,14 @@ doublereal *a, *b;
 
 
 
-/* Subroutine */ int class_(kind, n, alpha, beta, b, a, muzero)
-integer *kind, *n;
-doublereal *alpha, *beta, *b, *a, *muzero;
+int class_(
+  integer *kind, integer *n,
+  doublereal *alpha, 
+  doublereal *beta, 
+  doublereal *b, 
+  doublereal *a, 
+  doublereal *muzero
+)
 {
      /* System generated locals */
      integer i__1;
@@ -1601,10 +1631,13 @@ L60:
 
 
 
-/* Subroutine */ int gausq2_(n, d, e, z, ierr)
-integer *n;
-doublereal *d, *e, *z;
-integer *ierr;
+int gausq2_(
+  integer *n,
+  doublereal *d, 
+  doublereal *e, 
+  doublereal *z,
+  integer *ierr
+)
 {
      /* System generated locals */
      integer i__1, i__2;
@@ -1809,10 +1842,11 @@ L1001:
 *    inx[0] least significant, inx[dim] most significant
 *
 */
-int lagrange_index(dim,order,inx)
-int dim;
-int order;
-int *inx;
+int lagrange_index(
+  int dim,
+  int order,
+  int *inx
+)
 { int spot;
   int k;
   int left;
@@ -1825,7 +1859,7 @@ int *inx;
      spot -= binom_coeff(left-1+k,k);
   }
   return spot;
-}
+} // end lagrange_index()
  
 /******************************************************************************
 *
@@ -1839,16 +1873,17 @@ int *inx;
 *             0  done
 */
 
-int increment_lagrange_index(dim,inx)
-int dim;
-int *inx;
+int increment_lagrange_index(
+  int dim,
+  int *inx
+)
 { int j;
 
   for ( j = 0 ; j < dim ; j++ )
      if ( inx[j] > 0 ) 
      { inx[j+1]++; inx[0] = inx[j]-1; if ( j > 0 ) inx[j] = 0; return 1; }
   return 0;  /* done */
-}
+} // end increment_lagrange_index()
 
 
 /******************************************************************************
@@ -1861,10 +1896,11 @@ int *inx;
 *    Uses new global gauss arrays.
 */
 
-void gauss_lagrange_setup(dim,lagrange_order,gauss_order)
-int dim;  /* dimension of lagrange element */
-int lagrange_order; /* order of lagrange element */
-int gauss_order;    /* order of polynomial to integrate exactly */
+void gauss_lagrange_setup(
+  int dim,  /* dimension of lagrange element */
+  int lagrange_order, /* order of lagrange element */
+  int gauss_order    /* order of polynomial to integrate exactly */
+)
 { struct gauss_lag *gl;
   int i,j,k,n;
   REAL *temp;
@@ -2061,7 +2097,7 @@ do_lagrange:
       increment_lagrange_index(dim,linx);
     }
 
-}
+} // end gauss_lagrange_setup()
 
 
 /*************************************************************************
@@ -2078,10 +2114,10 @@ struct baryhash { int nn; /* number of vertices */
                 } *baryhash_table;
 int baryhash_size; /* allocated size */
 int baryhash_count; /* active entries */
-void baryhash_init ARGS((int));
-int baryhash_func ARGS((int,vertex_id*,int*));
-vertex_id baryhash_find ARGS((int,vertex_id*,int*,vertex_id));
-void baryhash_end ARGS((void));
+void baryhash_init(int);
+int baryhash_func(int,vertex_id*,int*);
+vertex_id baryhash_find(int,vertex_id*,int*,vertex_id);
+void baryhash_end(void);
 
 void baryhash_init(fctrl)
 int fctrl; /* points per facet */
@@ -2095,23 +2131,26 @@ void baryhash_end()
 { temp_free((char*)baryhash_table);
   baryhash_size = baryhash_count = 0;
 }
-int baryhash_func(n,v,x)
-int n;
-vertex_id *v;
-int  *x;
+
+int baryhash_func(
+  int n,
+  vertex_id *v,
+  int  *x
+)
 { unsigned int hash;
   int k;
   for ( k = 0, hash = 0 ; k < n ; k ++ ) 
   { hash += (unsigned int)(v[k]*1843723 + x[k]*17977); }
   return  hash % baryhash_size;
-}
+} // end baryhash_func()
 
 /* find and/or insert */
-vertex_id baryhash_find(n,v,x,newv)
-int n;        /* number of vertices */
-vertex_id *v; /* vertices */
-int *x;       /* barycentric coords, relative to l_order */
-vertex_id newv; /* insert if nonnul and not found */
+vertex_id baryhash_find(
+  int n,        /* number of vertices */
+  vertex_id *v, /* vertices */
+  int *x,       /* barycentric coords, relative to l_order */
+  vertex_id newv /* insert if nonnul and not found */
+)
 { int nn;  /* number of nonzero  coords */
   vertex_id vv[MAXCOORD+1];  /* needed vertices, in order */
   int xx[MAXCOORD+1];  /* needed coordinates */
@@ -2145,11 +2184,9 @@ vertex_id newv; /* insert if nonnul and not found */
           break;
      if ( i == nn )  /* match */
      { if ( (newv != NULLID) && (newv != b->v_id) ) 
-        { printf("nn = %d    newv = %08lX  b->v_id = %08lX\n",nn,
+        { sprintf(errmsg,"Internal error: Duplicate vertex in baryhash!\n nn = %d    newv = %08lX  b->v_id = %08lX\n",nn,
              (unsigned long)newv,(unsigned long)b->v_id);
-          for ( j = 0 ; j < nn ; j++ ) printf("%08lX %d ",vv[j],xx[j]);
-          printf("\n");
-          kb_error(1815,"Internal error: Duplicate vertex in baryhash!\n",RECOVERABLE);     
+          kb_error(1815,errmsg,RECOVERABLE);     
 
         }
         return b->v_id;
@@ -2169,15 +2206,15 @@ vertex_id newv; /* insert if nonnul and not found */
         kb_error(1816,"Internal error: Baryhash near full!\n",WARNING);
   }
   return NULLID;
-}
+} // end baryhash_find()
+
 /************************************************************************
 *
 * Function: simplex_lagrange_to_lagrange()
 *
 * purpose: Convert order of Lagrange model.
 */
-void simplex_lagrange_to_lagrange(l_order) 
-int l_order;
+void simplex_lagrange_to_lagrange(int l_order)
 { int new_ectrl,new_fctrl; /* new number of control points */ 
   int old_ectrl = web.skel[EDGE].ctrlpts;
   int old_fctrl = web.skel[FACET].ctrlpts;
@@ -2269,7 +2306,7 @@ int l_order;
      for ( k = 0 ; k < new_fctrl ; k++ )
      { int fixed;
         vertex_id newv;
-        conmap_t conmap[30];
+        conmap_t conmap[MAXCONPER];  // for common
         newv = baryhash_find(dim+1,cornerv,inx,NULLID);
         if ( newv == NULLID )
         { newv = new_vertex(newx[k],f_id);  
@@ -2284,8 +2321,8 @@ int l_order;
                 kb_error(1819,"Can't do simplex Lagrange with boundaries yet.\n",
                   RECOVERABLE);
              if ( get_vattr(cornerv[i]) & CONSTRAINT )    
-             { get_v_common_conmap(newv,cornerv[i],conmap);
-                set_v_conmap(newv,conmap);
+             { get_v_common_conmap(newv,cornerv[i],conmap,MAXCONPER);
+               set_v_conmap(newv,conmap);
              }
           }
           if ( fixed ) set_attr(newv,FIXED);
@@ -2353,7 +2390,7 @@ int l_order;
         vertex_id newv;
         newv = baryhash_find(dim+1,cornerv,inx,NULLID);
         if ( newv == NULLID )
-        { conmap_t conmap[30];
+        { conmap_t conmap[MAXCONPER];
           newv = new_vertex(newx[k],e_id);  
           set_attr(newv,Q_MIDEDGE);
           set_vertex_edge(newv,e_id); 
@@ -2366,7 +2403,7 @@ int l_order;
                 kb_error(1820,"Can't do simplex Lagrange with boundaries yet.\n",
                   RECOVERABLE);
              if ( get_vattr(cornerv[i]) & CONSTRAINT )    
-             { get_v_common_conmap(newv,cornerv[i],conmap);
+             { get_v_common_conmap(newv,cornerv[i],conmap,MAXCONPER);
                 set_v_conmap(newv,conmap);
              }
           }
@@ -2405,7 +2442,7 @@ int l_order;
   web.headvnum = l_order;
 
   LEAVE_GRAPH_MUTEX;
-}
+} // end simplex_lagrange_to_lagrange()
 
 /***********************************************************************
 *
@@ -2429,17 +2466,18 @@ void lagrange_to_bezier()
 
   /* do facet interiors first, so can use unchanged edge vertices */ 
   if ( web.representation == SOAPFILM )
-  MFOR_ALL_FACETS(f_id)
-  { 
-    v = get_facet_vertices(f_id);
-    for ( i = 0 ; i <= web.skel[FACET].ctrlpts ; i++ )
-      oldx[i] = get_coord(v[i]);
-    mat_mult(bezier2invert[web.lagrange_order],oldx,newx,
-		web.skel[FACET].ctrlpts,web.skel[FACET].ctrlpts,SDIM);
-    for ( i = 1 ; i < web.skel[FACET].ctrlpts ; i++ ) 
-    { if ( get_vattr(v[i]) & Q_MIDFACET )
-      for ( j = 0 ; j < SDIM ; j++ )
-        oldx[i][j] = newx[i][j];
+  { MFOR_ALL_FACETS(f_id)
+    { 
+      v = get_facet_vertices(f_id);
+      for ( i = 0 ; i <= web.skel[FACET].ctrlpts ; i++ )
+        oldx[i] = get_coord(v[i]);
+      mat_mult(bezier2invert[web.lagrange_order],oldx,newx,
+  		web.skel[FACET].ctrlpts,web.skel[FACET].ctrlpts,SDIM);
+      for ( i = 1 ; i < web.skel[FACET].ctrlpts ; i++ ) 
+      { if ( get_vattr(v[i]) & Q_MIDFACET )
+        for ( j = 0 ; j < SDIM ; j++ )
+          oldx[i][j] = newx[i][j];
+      }
     }
   }
  
@@ -2456,7 +2494,7 @@ void lagrange_to_bezier()
   }
 
   free_matrix(newx);
-}
+} // end lagrange_to_bezier()
 
 /***********************************************************************
 *
@@ -2480,17 +2518,18 @@ void bezier_to_lagrange()
  
   /* do facet interior vertices first, so can use unchanged edge verts */
   if ( web.representation == SOAPFILM )
-  MFOR_ALL_FACETS(f_id)
-  { 
-    v = get_facet_vertices(f_id);
-    for ( i = 0 ; i <= web.skel[FACET].ctrlpts ; i++ )
-      oldx[i] = get_coord(v[i]);
-    mat_mult(bezier2revert[web.lagrange_order],oldx,newx,
-		web.skel[FACET].ctrlpts,web.skel[FACET].ctrlpts,SDIM);
-    for ( i = 1 ; i < web.skel[FACET].ctrlpts ; i++ ) 
-    { if ( get_vattr(v[i]) & Q_MIDFACET )
-      for ( j = 0 ; j < SDIM ; j++ )
-        oldx[i][j] = newx[i][j];
+  { MFOR_ALL_FACETS(f_id)
+    { 
+      v = get_facet_vertices(f_id);
+      for ( i = 0 ; i <= web.skel[FACET].ctrlpts ; i++ )
+        oldx[i] = get_coord(v[i]);
+      mat_mult(bezier2revert[web.lagrange_order],oldx,newx,
+  		web.skel[FACET].ctrlpts,web.skel[FACET].ctrlpts,SDIM);
+      for ( i = 1 ; i < web.skel[FACET].ctrlpts ; i++ ) 
+      { if ( get_vattr(v[i]) & Q_MIDFACET )
+        for ( j = 0 ; j < SDIM ; j++ )
+          oldx[i][j] = newx[i][j];
+      }
     }
   }
 
@@ -2507,7 +2546,7 @@ void bezier_to_lagrange()
   }
  
   free_matrix(newx);
-}
+} // end bezier_to_lagrange()
 
 /************************************************************************
 *
@@ -2520,16 +2559,15 @@ struct vpair { vertex_id v[2];
                edge_id e;
 } *vpair_list;
 int vpair_count;
-int vpaircomp(a,b)
-struct vpair *a,*b;
+int vpaircomp(struct vpair *a, struct vpair *b)
 { if ( a->v[0] < b->v[0] ) return -1;
   if ( a->v[0] > b->v[0] ) return  1;
   if ( a->v[1] < b->v[1] ) return -1;
   if ( a->v[1] > b->v[1] ) return  1;
   return 0;
-} 
-void add_to_vpair_list(v1,v2)
-vertex_id v1,v2;
+} // end vpaircomp()
+
+void add_to_vpair_list(vertex_id v1,vertex_id v2)
 { if ( v1 < v2 ) 
   { vpair_list[vpair_count].v[0] = v1;
     vpair_list[vpair_count].v[1] = v2;
@@ -2539,11 +2577,13 @@ vertex_id v1,v2;
     vpair_list[vpair_count].v[1] = v1;
   }
   vpair_count++;
-}
+} // end add_to_vpair_list()
 
-facetedge_id vpair_fe(v1,v2,f_id)
-vertex_id v1,v2;
-facet_id f_id;
+facetedge_id vpair_fe(
+  vertex_id v1,
+  vertex_id v2,
+  facet_id f_id
+)
 { struct vpair key, *spot;
   facetedge_id fe,oldfe;
   if ( v1 < v2 ) { key.v[0] = v1; key.v[1] = v2; }
@@ -2551,7 +2591,7 @@ facet_id f_id;
   spot = bsearch(&key,vpair_list,vpair_count,sizeof(struct vpair),
       FCAST vpaircomp);
   if ( spot == NULL )
-  { kb_error(6432,"simplex_to_fe: could not find edge in vpair_list.\n",
+  { kb_error(1931,"simplex_to_fe: could not find edge in vpair_list.\n",
        RECOVERABLE);
   }
   fe = new_facetedge((v1 < v2) ? f_id : inverse_id(f_id),spot->e);
@@ -2570,7 +2610,7 @@ facet_id f_id;
   }
   
   return (v1 < v2) ? fe : inverse_id(fe);
-}
+} // end vpair_fe()
 
 void simplex_to_fe()
 { int i,j;
@@ -2646,8 +2686,9 @@ void simplex_to_fe()
 
   /* set links around edges */
   if ( web.representation == SOAPFILM )
-    FOR_ALL_EDGES(e_id)
+  { FOR_ALL_EDGES(e_id)
       fe_reorder(e_id);
+  }
 
 } /* end simplex_to_fe */
   

@@ -44,3 +44,9 @@ strdup := {
        printf "\nread\n";
        list procedures;
     }  // end strdup
+
+
+// End strdup.cmd
+
+// Usage:  dupnum := something; strdup >>> "filename.fe"
+

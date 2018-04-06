@@ -305,7 +305,7 @@ static int mouse_mode = MM_ROTATE;
 static int newarraysflag = 0; /* to cause rebuild of arrays */
 static int dindex = 1;  /* display list object index */
 
-void CALLBACK draw_screen ARGS((void));
+void CALLBACK draw_screen (void);
 
 void Ogl_init(void)
 { 
@@ -325,7 +325,7 @@ void graph_new_surface(void)
   stripdata = NULL;
 }
 
-void init_Oglz ARGS((void));
+void init_Oglz (void);
  
 int oldx,oldy,newx,newy;  /* for tracking motion */
 int basex=0,basey=0;  /* translation to do on object */

@@ -25,9 +25,9 @@ struct xsorting { int inx;  /* original row number */
          int deg;  /* degree of freedom */
          };
 
-void sp_aug_solve ARGS(( struct linsys *,REAL *,REAL *,REAL *,REAL *,REAL *));
-int xcomp ARGS((struct xsorting *, struct xsorting*));
-void BK_hess_project ARGS(( struct linsys *,REAL *,REAL *x));
+void sp_aug_solve ( struct linsys *,REAL *,REAL *,REAL *,REAL *,REAL *);
+int xcomp (struct xsorting *, struct xsorting*);
+void BK_hess_project ( struct linsys *,REAL *,REAL *x);
 /***************************************************************************
 *
 * function: sp_aug_solve()
@@ -36,11 +36,12 @@ void BK_hess_project ARGS(( struct linsys *,REAL *,REAL *x));
 *
 */
 
-void sp_aug_solve(S,X,B,T1,T2,T3)
-struct linsys *S;
-REAL *X;           /* incoming */
-REAL *B;           /* incoming rhs, possibly null */
-REAL *T1,*T2,*T3;  /* intermediates and final, preallocated */
+void sp_aug_solve(
+  struct linsys *S,
+  REAL *X,           /* incoming */
+  REAL *B,           /* incoming rhs, possibly null */
+  REAL *T1,REAL *T2,REAL *T3  /* intermediates and final, preallocated */
+)
 {
   if ( sparse_constraints_flag )
   { int i,j;
@@ -61,7 +62,7 @@ REAL *T1,*T2,*T3;  /* intermediates and final, preallocated */
     for ( i = 0 ; i < S->CN ; i++ )
       for ( j = S->CIA[i] ; j < S->CIA[i+1] ; j++ )
         T3[S->CJA[j]] += S->CA[j]*T2[i];
-    sp_solution(S,T3,T3);
+    sp_solution(S,T3,T3,MKL_INDEF);
   }
   else
   { int i;
@@ -77,7 +78,7 @@ REAL *T1,*T2,*T3;  /* intermediates and final, preallocated */
     matvec_mul(S->CHinvCinv,T1,T2,S->CN,S->CN); /* Lagrange multipliers */
     vec_mat_mul(T2,S->HinvC,T3,S->CN,S->N);
   }
-}
+} // end sp_aug_solve()
 
 /*******************************************************************
 * 
@@ -85,10 +86,11 @@ REAL *T1,*T2,*T3;  /* intermediates and final, preallocated */
 *
 * purpose: multiply vector by original sparse matrix
 */
-void bk_mul(S,w,v)
-struct linsys  *S;
-REAL *w; /* in */ 
-REAL *v; /* out */
+void bk_mul(
+  struct linsys  *S,
+  REAL *w, /* in */ 
+  REAL *v /* out */
+)
 { int row,col,i;
 
   PROF_START(hessian_mul);
@@ -121,8 +123,7 @@ REAL *v; /* out */
 * purpose: free all memory allocated to linear system structure.
 */
 
-void free_system(S)
-struct linsys *S;
+void free_system(struct linsys *S)
 { 
   if ( S->IA ) temp_free((char*)S->IA);
   if ( S->JA && !(S->flags & S_JA_INCLUDED) ) temp_free((char*)S->JA);
@@ -166,6 +167,9 @@ struct linsys *S;
   if ( S->low_rank_form ) free_matrix(S->low_rank_form);
   if ( S->low_rank_inverse_form ) free_matrix(S->low_rank_inverse_form);
 
+  if ( ysmp_flag == MKL_FACTORING )
+    mkl_free(S);
+
   memset((char*)S,0,sizeof(struct linsys));
 } /* end free_system() */
 
@@ -181,8 +185,10 @@ struct linsys *S;
 */
 
 /* comparison function for sorting */
-int xcomp(a,b)
-struct xsorting *a,*b;
+int xcomp(
+  struct xsorting *a,
+  struct xsorting *b
+)
 { if ( a->x < b->x ) return -1;
   if ( a->x > b->x ) return  1;
   if ( a->ord < b->ord ) return -1;
@@ -192,10 +198,11 @@ struct xsorting *a,*b;
   return 0;
 } /* end xcomp() */
 
-void find_ordering(verlist,n,P)
-struct hess_verlist *verlist;     /* pointers to rows */
-int n;        /* size of system */
-int *P;       /* preallocated for return of permutation */
+void find_ordering(
+  struct hess_verlist *verlist,     /* pointers to rows */
+  int n,        /* size of system */
+  int *P       /* preallocated for return of permutation */
+)
 {
   int i,j;
   struct xsorting *xlist,*Bptr;
@@ -230,9 +237,10 @@ int *P;       /* preallocated for return of permutation */
 *
 */
 
-void bk_AIJ_setup(N,S)
-int N;        /* size of system */
-struct linsys *S;  /* pointer to empty structure */
+void bk_AIJ_setup(
+  int N,        /* size of system */
+  struct linsys *S  /* pointer to empty structure */
+)
 {
 
 #ifdef OLDHASH
@@ -352,9 +360,10 @@ struct linsys *S;  /* pointer to empty structure */
 *
 */
 
-void bk_constraint_setup(concount,S)
-int concount;  /* number of constraints */
-struct linsys *S; 
+void bk_constraint_setup(
+  int concount,  /* number of constraints */
+  struct linsys *S
+)
 { int i,j;
  
   PROF_START(hessian_constraint_setup);
@@ -572,9 +581,10 @@ debug_print:
         { int k = 0;
           for ( j = S->CIA[i] ; j < S->CIA[i+1] ; j++ ) 
           { for ( ; k < S->CJA[j]-1 ; k++ ) printf("%9.6f ",0.0);
-            printf("%9.6f ",S->CA[j]); 
+            printf("%9.6f ",(DOUBLE)S->CA[j]); 
             k = S->CJA[j];
           }
+          printf("\n");
         }
       }
       else
@@ -601,8 +611,7 @@ debug_print:
 *           is in effect.
 */
 
-void BK_hess_project_setup(S)
-struct linsys *S;
+void BK_hess_project_setup(struct linsys *S)
 { int i;
   int con_index=0;
 
@@ -617,7 +626,7 @@ struct linsys *S;
     if ( S->HinvC ) free_matrix(S->HinvC);
     S->HinvC = dmatrix(0,S->CN-1,0,S->N-1);
     for ( i = 0 ; i < S->CN ; i++ )
-       sp_solution(S,S->C[i],S->HinvC[i]);
+       sp_solution(S,S->C[i],S->HinvC[i],MKL_INDEF);
   }
 
   if ( S->CHinvCinv ) free_matrix(S->CHinvCinv);
@@ -689,7 +698,8 @@ struct linsys *S;
 */
   con_index = mat_inv_sym(S->CHinvCinv,S->CN);
 
-  if ( con_index < 0 )
+
+ if ( con_index < 0 )
      kb_error(1823,"Constraints not independent, or Hessian too singular.\n",
          RECOVERABLE);
 
@@ -718,10 +728,11 @@ set_counts:
 *
 */
 
-void BK_hess_project(S,B,x)
-struct linsys *S; /* factored and constrained system */
-REAL *B;    /* incoming vector */
-REAL *x;    /* solution, may be incoming */
+void BK_hess_project(
+  struct linsys *S, /* factored and constrained system */
+  REAL *B,    /* incoming vector */
+  REAL *x    /* solution, may be incoming */
+  )
 { REAL *T1,*T2,*T3;
   int i;
   if ( S->CN == 0 ) return;
@@ -743,9 +754,10 @@ REAL *x;    /* solution, may be incoming */
 *  return: lowest eigenvalue;
 */
 
-REAL lowest_eigenpair(S,v)
-struct linsys *S;
-REAL *v; /* eigenvector, preallocated */
+REAL lowest_eigenpair(
+  struct linsys *S,
+  REAL *v /* eigenvector, preallocated */
+)
 { REAL lo;
   int old_quiet;
 
@@ -761,12 +773,12 @@ REAL *v; /* eigenvector, preallocated */
   /* find lower bound on lowest eigenvalue */
   lo = -0.01;
   S->lambda = lo; 
-  sp_factor(S);
+  sp_factor(S,MKL_INDEF);
   (*sp_hess_project_setup_func)(S);
   while ( S->neg > 0)
   { 
     S->lambda *= 10;
-    sp_factor(S);
+    sp_factor(S,MKL_INDEF);
     (*sp_hess_project_setup_func)(S);
   }
   
@@ -812,9 +824,10 @@ REAL *v; /* eigenvector, preallocated */
 *  return: lowest eigenvalue;
 */
 
-REAL old_cg_lowest_eigenpair(S,x)
-struct linsys *S;
-REAL *x; /* eigenvector, preallocated */
+REAL old_cg_lowest_eigenpair(
+  struct linsys *S,
+  REAL *x /* eigenvector, preallocated */
+)
 { REAL norm_inv;
   int i;
   REAL *h=NULL; /* search direction */
@@ -945,7 +958,9 @@ projecting off XAX M seems to hurt
       }
       if ( (count < maxcount) && (maxcount > 5) && (count % (maxcount/5) == 0) )
       { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     sprintf(msg,"%3d.    %3.*Qg\n",count,DPREC,xax);
+#elif defined(LONGDOUBLE)
      sprintf(msg,"%3d.    %3.*Lg\n",count,DPREC,xax);
 #else
      sprintf(msg,"%3d.    %3.17g\n",count,xax);
@@ -955,7 +970,9 @@ projecting off XAX M seems to hurt
     } while ( (fabs(xax - old_xax) > 10*machine_eps*fabs(xax)) && (count<maxcount) );
     if ( count < maxcount )
       { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     sprintf(msg,"%3d.    %3.*Qg  converged\n",count,DPREC,xax);
+#elif defined(LONGDOUBLE)
      sprintf(msg,"%3d.    %3.*Lg  converged\n",count,DPREC,xax);
 #else
      sprintf(msg,"%3d.    %3.17g  converged\n",count,xax);
@@ -963,7 +980,9 @@ projecting off XAX M seems to hurt
      outstring(msg);
       }
     else  { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     sprintf(msg,"%3d.    %3.*Qg  max iterations\n",count,DPREC,xax);
+#elif defined(LONGDOUBLE)
      sprintf(msg,"%3d.    %3.*Lg  max iterations\n",count,DPREC,xax);
 #else
      sprintf(msg,"%3d.    %3.17g  max iterations\n",count,xax);
@@ -1000,9 +1019,10 @@ projecting off XAX M seems to hurt
 *  return: lowest eigenvalue;
 */
 
-REAL cg_lowest_eigenpair(S,x)
-struct linsys *S;
-REAL *x; /* eigenvector, preallocated */
+REAL cg_lowest_eigenpair(
+  struct linsys *S,
+  REAL *x /* eigenvector, preallocated */
+)
 { REAL norm_inv;
   int i,j;
   REAL *h; /* search direction */
@@ -1158,7 +1178,9 @@ REAL *x; /* eigenvector, preallocated */
       }
       if ( (count < maxcount) && (maxcount > 5) && (count % (maxcount/5) == 0) )
       { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     sprintf(msg,"%3d.    %3.*Qg\n",count,DPREC,xax);
+#elif defined(LONGDOUBLE)
      sprintf(msg,"%3d.    %3.*Lg\n",count,DPREC,xax);
 #else
      sprintf(msg,"%3d.    %3.17g\n",count,xax);
@@ -1168,7 +1190,9 @@ REAL *x; /* eigenvector, preallocated */
     } while ( (fabs(xax - old_xax) > 10*machine_eps*fabs(xax)) && (count<maxcount) );
     if ( count < maxcount )
       { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     sprintf(msg,"%3d.    %3.*Qg  converged\n",count,DPREC,xax);
+#elif defined(LONGDOUBLE)
      sprintf(msg,"%3d.    %3.*Lg  converged\n",count,DPREC,xax);
 #else
      sprintf(msg,"%3d.    %3.17g  converged\n",count,xax);
@@ -1177,7 +1201,9 @@ REAL *x; /* eigenvector, preallocated */
       }
     else  { 
 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     sprintf(msg,"%3d.    %3.*Qg  max iterations\n",count,DPREC,xax);
+#elif defined(LONGDOUBLE)
      sprintf(msg,"%3d.    %3.*Lg  max iterations\n",count,DPREC,xax);
 #else
      sprintf(msg,"%3d.    %3.17g  max iterations\n",count,xax);
@@ -1212,11 +1238,12 @@ REAL *x; /* eigenvector, preallocated */
 *
 */
 
-void cg_ritz(S,n,x,ev)
-struct linsys *S;
-int n;  /* number of eigenpairs desired */
-REAL **x; /* eigenvectors, preallocated */
-REAL *ev; /* eigenvalues, preallocated */
+void cg_ritz(
+  struct linsys *S,
+  int n,  /* number of eigenpairs desired */
+  REAL **x, /* eigenvectors, preallocated */
+  REAL *ev /* eigenvalues, preallocated */
+)
 { 
   int i,j,k;
   REAL **h=NULL; /* search direction */
@@ -1389,7 +1416,9 @@ REAL *ev; /* eigenvalues, preallocated */
       if ( (count < maxcount) && (maxcount > 5) && (count % (maxcount/5) == 0) )
       { sprintf(msg,"%3d.  ",count);
           for ( j = 0 ; (j < 4)&&(j<n) ; j++ )
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+              sprintf(msg+strlen(msg)," %*.*Qg",DWIDTH,DPREC,evalues[2*n-1-j]);
+#elif defined(LONGDOUBLE)
               sprintf(msg+strlen(msg)," %*.*Lg",DWIDTH,DPREC,evalues[2*n-1-j]);
 #else
               sprintf(msg+strlen(msg)," %18.15g",evalues[2*n-1-j]);
@@ -1400,7 +1429,9 @@ REAL *ev; /* eigenvalues, preallocated */
     } while ( (fabs(trxax-old_trxax) > 10*machine_eps*fabs(trxax)) && (count<maxcount) );
     if ( count < maxcount )
       { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     sprintf(msg,"%3d.    %3.*Qg  converged\n",count,DPREC,trxax);
+#elif defined(LONGDOUBLE)
      sprintf(msg,"%3d.    %3.*Lg  converged\n",count,DPREC,trxax);
 #else
      sprintf(msg,"%3d.    %3.17g  converged\n",count,trxax);
@@ -1408,7 +1439,9 @@ REAL *ev; /* eigenvalues, preallocated */
      outstring(msg);
       }
     else  { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     sprintf(msg,"%3d.    %3.*Qg  max iterations\n",count,DPREC,trxax);
+#elif defined(LONGDOUBLE)
      sprintf(msg,"%3d.    %3.*Lg  max iterations\n",count,DPREC,trxax);
 #else
      sprintf(msg,"%3d.    %3.17g  max iterations\n",count,trxax);
@@ -1416,7 +1449,7 @@ REAL *ev; /* eigenvalues, preallocated */
      outstring(msg);
       }
   }
-  if ( S->zero != 0 ) last_eigenvalue = S->lambda;
+  if ( (S->zero != 0) && (S->neg == 0) ) last_eigenvalue = S->lambda;
   else
   last_eigenvalue = evalues[0];
 
@@ -1453,11 +1486,12 @@ REAL *ev; /* eigenvalues, preallocated */
 *
 */
 
-void sp_hessian_solve(S,rhs,X,set_pressure_flag)
-struct linsys *S;
-REAL *rhs;
-REAL *X;  /* solution */
-int set_pressure_flag; /* whether to set body pressures */
+void sp_hessian_solve(
+  struct linsys *S,
+  REAL *rhs,
+  REAL *X,  /* solution */
+  int set_pressure_flag /* whether to set body pressures */
+)
 { /* solve stuff */
   int i,j,ii,jj;
   REAL *T1,*T2,*T3;
@@ -1470,7 +1504,7 @@ int set_pressure_flag; /* whether to set body pressures */
         rhs[i] = - rhs[i];
     }
 
-  sp_solution(S,rhs,X);
+  sp_solution(S,rhs,X,MKL_INDEF);
 
   /* check decrease in residual */
   if ( itdebug || hess_debug )
@@ -1485,7 +1519,7 @@ int set_pressure_flag; /* whether to set body pressures */
     }
     if ( resmag > rhsmag/10 )
     { sprintf(errmsg,"Hessian solve only reduced residual from %g to %g.\n",
-             sqrt(rhsmag),sqrt(resmag));
+             (DOUBLE)sqrt(rhsmag),(DOUBLE)sqrt(resmag));
       kb_error(2561,errmsg,WARNING);
     }
     temp_free((char*)xrhs);
@@ -1526,12 +1560,14 @@ int set_pressure_flag; /* whether to set body pressures */
 
     if ( set_pressure_flag == SET_PRESSURE )
     {  if ( ! everything_quantities_flag )
-        FOR_ALL_BODIES(b_id)
-        { REAL p = get_body_pressure(b_id)+pressures[loc_ordinal(b_id)];
-          set_body_pressure(b_id,p);
-        }
+       { FOR_ALL_BODIES(b_id)
+         { REAL p = get_body_pressure(b_id)+pressures[loc_ordinal(b_id)];
+           set_body_pressure(b_id,p);
+         }
+       }
        for ( i = 0 ; i < gen_quant_count ; i++ )
        { q = GEN_QUANT(i);
+         if ( q->flags & Q_DELETED ) continue;
          if ( q->flags & (Q_FIXED|Q_CONSERVED) )
          { q->pressure += pressures[everything_quantities_flag ? i :
                      web.skel[BODY].max_ord+1+i];
@@ -1541,7 +1577,8 @@ int set_pressure_flag; /* whether to set body pressures */
        }
     }
   }
-  if ( hess_debug )
+  
+  if ( hess_debug == 101010101 )  // disable all this printing
   { 
     #ifdef MPI_EVOLVER
     for ( ii = 0 ; ii < S->N ; ii++ )
@@ -1572,11 +1609,12 @@ int set_pressure_flag; /* whether to set body pressures */
 *
 */
 
-void sp_hessian_solve_multi(S,rhs,X,rk)
-struct linsys *S;
-REAL **rhs;
-REAL **X;  /* solution */
-int rk;    /* number of right sides */
+void sp_hessian_solve_multi(
+  struct linsys *S,
+  REAL **rhs,
+  REAL **X,  /* solution */
+  int rk    /* number of right sides */
+)
 { /* solve stuff */
   int k;
  
@@ -1633,15 +1671,14 @@ int rk;    /* number of right sides */
 *      desired value.  Asks user for probe values.
 */
 
-void bk_eigenprobe(S)
-struct linsys *S;
+void bk_eigenprobe(struct linsys *S)
 { 
   for(;;)
   { char response[100];
     prompt("Enter probe value: ",response,sizeof(response));
     if ( (response[0] == 0) || (response[0] == 'q') ) break;
     S->lambda = atof(response);
-    sp_factor(S);
+    sp_factor(S,MKL_INDEF);
     (*sp_hess_project_setup_func)(S);
     sprintf(msg,"Eigencounts:    %d <,  %d ==,  %d > \n",S->neg,S->zero,S->pos);
     outstring(msg);
@@ -1656,9 +1693,10 @@ struct linsys *S;
 *  purpose: Find eigenvector near probe value.
 */
 
-void bk_inverse_it(S,V)
-struct linsys *S;
-REAL *V; /* for eigenvector return */
+void bk_inverse_it(
+  struct linsys *S,
+  REAL *V /* for eigenvector return */
+)
 { int i,ii,k,its;
   REAL t,oldt;
   char response[100];
@@ -1667,7 +1705,7 @@ REAL *V; /* for eigenvector return */
   prompt("Enter probe value: ",response,sizeof(response));
   if ( (response[0] == 0) || (response[0] == 'q') ) return;
   S->lambda = atof(response);
-  sp_factor(S);
+  sp_factor(S,MKL_INDEF);
   (*sp_hess_project_setup_func)(S);
   sprintf(msg,"Eigencounts:    %d <,  %d ==,  %d > \n",S->neg,S->zero,S->pos);
   outstring(msg);
@@ -1697,7 +1735,9 @@ REAL *V; /* for eigenvector return */
        t = 1/sqrt(sparse_metric_dot(V,V,&Met));
      else t = 1/sqrt(dot(V,V,S->N));
      if ( V[oldvi]*oldv0 < 0. ) t = -t;  /* get sign right */
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     if ( k % 10 == 0 ) printf("%d  ev = %*.*Qf\n",k,DWIDTH,DPREC,S->lambda+t);
+#elif defined(LONGDOUBLE)
      if ( k % 10 == 0 ) printf("%d  ev = %*.*Lf\n",k,DWIDTH,DPREC,S->lambda+t);
 #else
      if ( k % 10 == 0 ) printf("%d  ev = %20.15f\n",k,S->lambda+t);
@@ -1711,7 +1751,9 @@ REAL *V; /* for eigenvector return */
       }
      oldt = t;
   }
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+  printf("%d  ev = %*.*Qf\n",k,DWIDTH,DPREC,S->lambda+t);
+#elif defined(LONGDOUBLE)
   printf("%d  ev = %*.*Lf\n",k,DWIDTH,DPREC,S->lambda+t);
 #else
   printf("%d  ev = %20.15f\n",k,S->lambda+t);
@@ -1728,10 +1770,11 @@ afterits:
 *
 * purpose;  Set up and solve sparse Hessian with given right hand side.
 */
-void sp_Hessian_solver(S,rhs,Xptr)
-struct linsys *S;  /* system */
-REAL *rhs; /* right side */
-REAL **Xptr; /* returned vector */
+void sp_Hessian_solver(
+  struct linsys *S,  /* system */
+  REAL *rhs, /* right side */
+  REAL **Xptr /* returned vector */
+)
 {
   REAL *X;
   
@@ -1743,7 +1786,7 @@ REAL **Xptr; /* returned vector */
   (*sp_constraint_setup_func)
      (web.skel[BODY].max_ord+1 + gen_quant_count,S);
   if ( sp_ordering_func ) (*sp_ordering_func)(S);
-  sp_factor(S);
+  sp_factor(S,MKL_INDEF);
   (*sp_hess_project_setup_func)(S);
 
   if ( hess_debug )
@@ -1779,9 +1822,10 @@ REAL **Xptr; /* returned vector */
 *
 */
 
-REAL sparse_metric_dot(u,v,M)
-REAL *u,*v; /* the vectors to be dotted */
-struct linsys *M;  /* the metric */
+REAL sparse_metric_dot(
+  REAL *u, REAL *v, /* the vectors to be dotted */
+  struct linsys *M  /* the metric */
+)
 { int i,j,end;
   REAL sum;
 
@@ -1812,13 +1856,11 @@ struct linsys *M;  /* the metric */
 *          CN x N matrix.
 */
 
-void sp_CHinvC(S)
-struct linsys *S; /* factored system */
+void sp_CHinvC(struct linsys *S /* factored system */)
 {
   int n; /* row index */
   int i,j,k;
   REAL *BB,*Y;
-
 
   if ( S->P == NULL )
    kb_error(2530,"Internal error: Must call sp_factor before sp_CHinvC.\n",
@@ -1833,7 +1875,7 @@ struct linsys *S; /* factored system */
     memset(BB,0,S->N*sizeof(REAL));
     for ( n = S->CIA[i] ; n < S->CIA[i+1] ; n++ ) 
       BB[S->CJA[n]] = S->CA[n]; 
-    sp_solution(S,BB,Y);
+    sp_solution(S,BB,Y,MKL_INDEF);
 
     /* multiply by rows of C */
     for ( j = 0 ; j <= i ; j++ )
@@ -1848,7 +1890,8 @@ struct linsys *S; /* factored system */
 
   temp_free((char*)BB);
   temp_free((char*)Y);
-}
+
+} // end sp_CHinvC()
 
 /*************************************************************************
 *
@@ -1857,10 +1900,12 @@ struct linsys *S; /* factored system */
 *  purpose: solve system possibly in sparse + low rank update
 */
 
-void sp_solution(S,rhs,X)
-struct linsys *S;  /* factored sparse matrix */
-REAL *rhs; /* right side */
-REAL *X;   /* for solution */
+void sp_solution(
+  struct linsys *S,  /* factored sparse matrix */
+  REAL *rhs, /* right side */
+  REAL *X,   /* for solution */
+  int mtype  /* definiteness */
+)
 {
   REAL *Y; /* working full-size vector */
   REAL *Z; /* low rank working vector */
@@ -1869,7 +1914,7 @@ REAL *X;   /* for solution */
 
   if ( S->low_rank == 0 )
   { /* no low-rank update */
-    (*sp_solve_func)(S,rhs,X);
+    (*sp_solve_func)(S,rhs,X,mtype);
     return;
   }
 
@@ -1877,7 +1922,7 @@ REAL *X;   /* for solution */
   Y = (REAL*)temp_calloc(S->N,sizeof(REAL));
   Z = (REAL*)temp_calloc(S->low_rank, sizeof(REAL));
   W = (REAL*)temp_calloc(S->low_rank, sizeof(REAL));
-  (*sp_solve_func)(S,rhs,Y);
+  (*sp_solve_func)(S,rhs,Y,mtype);
   matvec_mul(S->low_rank_vectors,Y,Z,S->low_rank,S->low_rank_vecsize);
   matvec_mul(S->low_rank_form,Z,W,S->low_rank,S->low_rank);
   matvec_mul(S->low_rank_inverse_form,W,Z,S->low_rank,S->low_rank);
@@ -1886,12 +1931,14 @@ REAL *X;   /* for solution */
     Y[i] = rhs[i] - Y[i];
   for ( ; i < S->N ; i++ )
     Y[i] = rhs[i];
-  (*sp_solve_func)(S,Y,X);
+    
+  (*sp_solve_func)(S,Y,X,mtype);
 
   temp_free((char*)Y);
   temp_free((char*)Z);
   temp_free((char*)W);
-}
+
+}  // sp_solution()
   
 /**************************************************************************
 *
@@ -1901,18 +1948,16 @@ REAL *X;   /* for solution */
 *
 */
 
-void sp_factor(S)
-struct linsys *S;
+void sp_factor(struct linsys *S,int mtype)
 { 
-
-  (*sp_factor_func)(S);  /* factor just the matrix */
+  (*sp_factor_func)(S,mtype);  /* factor just the matrix */
 
   if ( S->low_rank )
   { REAL **W = dmatrix(0,S->low_rank-1,0,S->N-1);
     REAL **Z = dmatrix(0,S->low_rank-1,0,S->low_rank-1);
     int i;
 
-    (*sp_solve_multi_func)(S,S->low_rank_vectors,W,S->low_rank);
+    (*sp_solve_multi_func)(S,S->low_rank_vectors,W,S->low_rank,mtype);
     mat_mul_tr(S->low_rank_vectors,W,Z,S->low_rank,S->low_rank_vecsize,
          S->low_rank);
     mat_mult(S->low_rank_form,Z,S->low_rank_inverse_form,S->low_rank,

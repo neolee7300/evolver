@@ -8,6 +8,43 @@
 // Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
 
 rib := {
+
+  // Check assumptions
+  if torus then
+  { errprintf "Cannot run 'rib' command in torus mode. Do 'detorus' first.\n";
+    abort;
+  };
+
+  if symmetry_group then
+  { errprintf "Cannot run 'rib' command in symmetry group mode. Do 'detorus' first.\n";
+    abort;
+  };
+
+  if space_dimension != 3 then
+  { errprintf "The 'rib' command must be run in three-dimensional space.\n";
+    abort;
+  };
+
+  if surface_dimension == 1 then
+  { errprintf "The 'rib' command is not meant for the string model.\n";
+    abort;
+  };
+
+  if simplex_representation then
+  { errprintf "The 'rib' command is not meant for the simplex model.\n";
+    abort;
+  };
+
+  if lagrange_order >= 2 then
+  { errprintf "The 'rib' command is meant for the linear model, not quadratic or Lagrange.\n";
+    abort;
+  };
+  if rgb_colors then
+  { errprintf "The 'rib' command does not do RGB colors; do rgb_colors off.\n";
+    abort;
+  };
+
+
   printf"##RenderMan RIB-Structure 1.0\n";
   printf "version 3.03\n";
   printf "\n";
@@ -45,7 +82,7 @@ rib := {
   printf "\n";
   printf "AttributeBegin\n";
   printf "  Surface \"constant\"\n";
-  foreach facet ff do {
+  foreach facet ff where show do {
      if ( ff.color == CLEAR ) then continue;
      if ( ff.color == WHITE ) then printf "  Color [ 1.0 1.0 1.0 ]\n"
      else if ( ff.color == WHITE ) then printf "  Color [ 1.0 1.0 1.0 ]\n"
@@ -73,3 +110,9 @@ rib := {
   printf "\n";
   printf "WorldEnd\n";
 }
+
+
+// End rib.cmd
+
+// Usage: rib >>> "filename.rib"
+

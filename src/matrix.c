@@ -21,16 +21,16 @@
 
 #ifdef BLAS
 /* prototypes */
-void DPOTRF ARGS((char*,int*,double*,int*,int*));
-void DPOTRS ARGS((char*,int*,int*,double*,int*,double*,int*,int*));
-void DGEMM ARGS((char*,char*,int*,int*,int*,double*,
-           double*,int*,double*,int*,double*,double*,int*));
-void DSYMM ARGS((char*,char*,int*,int*,double*,double*,int*,
-          double*,int*,double*,double*,int*));
-void DGEMV ARGS((char*,int*,int*,double*,double*,int*,double*,int*,double*,  
-              double*,int*));
-void DSYMV ARGS((char*,int*,double*,double*,int*,double*,int*,double*,  
-              double*,int*));
+void DPOTRF(char*,int*,double*,int*,int*);
+void DPOTRS(char*,int*,int*,double*,int*,double*,int*,int*);
+void DGEMM(char*,char*,int*,int*,int*,double*,
+           double*,int*,double*,int*,double*,double*,int*);
+void DSYMM(char*,char*,int*,int*,double*,double*,int*,
+          double*,int*,double*,double*,int*);
+void DGEMV(char*,int*,int*,double*,double*,int*,double*,int*,double*,  
+              double*,int*);
+void DSYMV(char*,int*,double*,double*,int*,double*,int*,double*,  
+              double*,int*);
 #endif
 
 
@@ -42,15 +42,18 @@ void DSYMV ARGS((char*,int*,double*,double*,int*,double*,int*,double*,
 *           for zero-base indexing only 
 */
 
-void matcopy ARGS4((a,b,rows,cols),
-REAL **a, REAL **b,
-int rows, int cols)
+void matcopy (
+  REAL **a, 
+  REAL **b,
+  int rows, 
+  int cols
+)
 {
   int i;
 
   for ( i = 0 ; i < rows ; i++ )
      memcpy((char *)a[i],(char *)b[i],cols*sizeof(REAL));
-}
+} // end matcopy()
 
 /******************************************************************
 *
@@ -61,12 +64,21 @@ int rows, int cols)
 */
 
 #ifdef MEMSTRINGS
-REAL **kb_dmatrix ARGS6((rlo,rhi,clo,chi,file,line),
-int rlo, int rhi, int clo, int chi,
-char *file, int line)
+REAL **kb_dmatrix(
+  int rlo, 
+  int rhi, 
+  int clo, 
+  int chi,
+  char *file, 
+  int line
+)
 #else
-REAL **kb_dmatrix ARGS4((rlo,rhi,clo,chi),
-int rlo, int rhi, int clo, int chi)
+REAL **kb_dmatrix(
+  int rlo, 
+  int rhi, 
+  int clo, 
+  int chi
+)
 #endif
 {
   int i;
@@ -88,7 +100,7 @@ int rlo, int rhi, int clo, int chi)
         m[i] = m[rlo-1] + (i - rlo)*(chi - clo + 1) - clo;
 
   return m;
-}
+} // end kb_dmatrix()
 
 /******************************************************************
 *
@@ -100,12 +112,12 @@ int rlo, int rhi, int clo, int chi)
 */
 
 #ifdef MEMSTRINGS
-REAL ***kb_dmatrix3 ARGS5((n1,n2,n3,file,line),
-int n1, int n2,int n3,
-char * file, int line)
+REAL ***kb_dmatrix3(
+  int n1, int n2,int n3,
+  char * file, int line
+)
 #else
-REAL ***kb_dmatrix3 ARGS3((n1,n2,n3),
-int n1,int n2,int n3)
+REAL ***kb_dmatrix3(int n1,int n2,int n3)
 #endif
 {
   int i,j;
@@ -133,7 +145,7 @@ int n1,int n2,int n3)
         m[i][j] = m[0][0] + i*n2*n3 + j*n3;
 
   return m;
-}
+} // end kb_dmatrix3()
 
 /*********************************************************************
 *
@@ -144,9 +156,10 @@ int n1,int n2,int n3)
 *
 * return: 
 */
-REAL *** matrix3_reorder ARGS4((a,maxi,maxj,maxk),
-REAL ***a,
-int maxi, int maxj, int maxk) /* dimensions */
+REAL *** matrix3_reorder(
+  REAL ***a,
+  int maxi, int maxj, int maxk /* dimensions */
+)
 { int i,j,k;
   REAL ***newa;
   newa = dmatrix3(maxi,maxj,maxk);
@@ -156,7 +169,7 @@ int maxi, int maxj, int maxk) /* dimensions */
         newa[i][j][k] = a[i][j][k];
   free_matrix3(a);
   return newa;
-}
+} // end matrix3_reorder()
 
 /******************************************************************
 *
@@ -167,12 +180,14 @@ int maxi, int maxj, int maxk) /* dimensions */
 */
 
 #ifdef MEMSTRINGS
-REAL ****kb_dmatrix4 ARGS6((n1,n2,n3,n4,file,line),
-int n1, int n2, int n3, int n4,
-char * file, int line)
+REAL ****kb_dmatrix4(
+  int n1, int n2, int n3, int n4,
+  char * file, int line
+)
 #else
-REAL ****kb_dmatrix4 ARGS4((n1,n2,n3,n4),
-int n1, int n2, int n3, int n4)
+REAL ****kb_dmatrix4(
+  int n1, int n2, int n3, int n4
+)
 #endif
 {
   int i,j,k;
@@ -206,7 +221,7 @@ int n1, int n2, int n3, int n4)
           m[i][j][k] = m[0][0][0] + i*n2*n3*n4 + j*n3*n4 + k*n4;
 
   return m;
-}
+} // end kb_dmatrix4()
 
 
 /******************************************************************
@@ -219,12 +234,14 @@ int n1, int n2, int n3, int n4)
 */
 
 #ifdef MEMSTRINGS
-REAL **kb_temp_dmatrix ARGS6((rlo,rhi,clo,chi,file,line),
-int rlo, int rhi, int clo, int chi,
-char *file, int line)
+REAL **kb_temp_dmatrix(
+  int rlo, int rhi, int clo, int chi,
+  char *file, int line
+)
 #else
-REAL **kb_temp_dmatrix ARGS4((rlo,rhi,clo,chi),
-int rlo, int rhi, int clo, int chi)
+REAL **kb_temp_dmatrix(
+  int rlo, int rhi, int clo, int chi
+)
 #endif
 {
   int i;
@@ -246,7 +263,7 @@ int rlo, int rhi, int clo, int chi)
         m[i] = m[rlo-1] + (i - rlo)*(chi - clo + 1) - clo;
 
   return m;
-}
+} // end kb_temp_dmatrix()
 
 /******************************************************************
 *
@@ -259,12 +276,14 @@ int rlo, int rhi, int clo, int chi)
 */
 
 #ifdef MEMSTRINGS
-REAL ***kb_temp_dmatrix3 ARGS5((n1,n2,n3,file,line),
-int n1, int n2,int n3,
-char * file, int line)
+REAL ***kb_temp_dmatrix3(
+  int n1, int n2,int n3,
+  char * file, int line
+)
 #else
-REAL ***kb_temp_dmatrix3 ARGS3((n1,n2,n3),
-int n1,int n2,int n3)
+REAL ***kb_temp_dmatrix3(
+  int n1,int n2,int n3
+)
 #endif
 {
   int i,j;
@@ -292,8 +311,8 @@ int n1,int n2,int n3)
         m[i][j] = m[0][0] + i*n2*n3 + j*n3;
 
   return m;
-}
-
+} // end kb_temp_dmatrix3()
+ 
 /******************************************************************
 *
 * Function: kb_temp_dmatrix4()
@@ -304,12 +323,14 @@ int n1,int n2,int n3)
 */
 
 #ifdef MEMSTRINGS
-REAL ****kb_temp_dmatrix4 ARGS6((n1,n2,n3,n4,file,line),
-int n1, int n2, int n3, int n4,
-char * file, int line)
+REAL ****kb_temp_dmatrix4(
+  int n1, int n2, int n3, int n4,
+  char * file, int line
+)
 #else
-REAL ****kb_temp_dmatrix4 ARGS4((n1,n2,n3,n4),
-int n1, int n2, int n3, int n4)
+REAL ****kb_temp_dmatrix4(
+  int n1, int n2, int n3, int n4
+)
 #endif
 {
   int i,j,k;
@@ -343,7 +364,7 @@ int n1, int n2, int n3, int n4)
           m[i][j][k] = m[0][0][0] + i*n2*n3*n4 + j*n3*n4 + k*n4;
 
   return m;
-}
+} // end kb_temp_dmatrix4()
 
 /**********************************************************************
 *
@@ -351,16 +372,15 @@ int n1, int n2, int n3, int n4)
 *
 * purpose:  Allocate pointer-style 2D matrix in permanent memory.
 */
-REAL **perm_matrix2(rows,cols)
-int rows,cols;
+REAL **perm_matrix2(int rows,int cols)
 { REAL **m;
   int i;
-  m = (double**)calloc(rows,sizeof(double*));
-  m[0] = (double*)calloc(rows*cols,sizeof(double));
+  m = (REAL**)calloc(rows,sizeof(REAL*));
+  m[0] = (REAL*)calloc(rows*cols,sizeof(REAL));
   for ( i = 1 ; i < rows ; i++ )
     m[i] = m[i-1] + cols;
   return m;
-}
+} // end perm_matrix2()
   
 /******************************************************************
 *
@@ -370,20 +390,25 @@ int rows,cols;
 *          with MAT2D etc macros.  Note it does not zero the entries!
 */
 
-REAL ** mat2d_setup ARGS4((name,spacename,rows,cols),
-REAL **name,
-REAL *spacename,
-int rows, int cols)
+REAL ** mat2d_setup(
+  REAL **name,
+  REAL *spacename,
+  int rows, 
+  int cols
+)
 { REAL **spot = name;
   for ( ; rows > 0 ; rows--,spacename += cols,spot++ )
      *spot = spacename;
   return name;
-}
+} // end mat2d_setup()
 
-REAL *** mat3d_setup ARGS5((name,spacename,rows,cols,levels),
-REAL ***name,
-REAL *spacename,
-int rows, int cols, int levels)
+REAL *** mat3d_setup(
+  REAL ***name,
+  REAL *spacename,
+  int rows, 
+  int cols, 
+  int levels
+)
 { int i;
   REAL ***spot;
   REAL **row = (REAL **)(name + rows);
@@ -393,12 +418,16 @@ int rows, int cols, int levels)
         *row = spacename;
   }
   return name;
-}
+} // end mat3d_setup()
 
-REAL **** mat4d_setup ARGS6((name,spacename,rows,cols,levels,tiers),
+REAL **** mat4d_setup(
 REAL ****name,
 REAL *spacename,
-int rows, int cols, int levels, int tiers)
+  int rows, 
+  int cols, 
+  int levels, 
+  int tiers
+)
 { int i,j;
   REAL ***row = (REAL ***)(name + rows);
   REAL **col = (REAL **)(name + rows + rows*cols);
@@ -412,28 +441,32 @@ int rows, int cols, int levels, int tiers)
      }
   }
   return name;
-}
+} // end mat4d_setup()
 /* end local declaration routines */
 
 /******************************************************************
 *
 * Function: ivector()
 *
-* Purpose: allocate integer or real vector with given index range.
+* Purpose: allocate integer vector with given index range.
 */
 
-int *ivector ARGS2((lo,hi),
-int lo, int hi)
+int *ivector(int lo, int hi)
 /* allocates a int vector with range [lo..hi] */
 {
   int *v;
 
   v = (int *)mycalloc((unsigned)(hi-lo+1),sizeof(int));
   return v-lo;
-}
+} // end ivector()
 
-void free_ivector ARGS3((v,lo,hi),
-int *v, int lo,int hi)
+/******************************************************************
+*
+* Function: free_ivector()
+*
+* Purpose: de-allocate integer vector .
+*/
+void free_ivector(int *v, int lo,int hi)
 {
   myfree((char *)(v+lo));
 }
@@ -445,54 +478,48 @@ int *v, int lo,int hi)
 * Purpose: Deallocate storage allocated by kb_dmatrixN().
 */
 
-void free_matrix ARGS1((m),
-REAL **m)
+void free_matrix(REAL **m)
 {
   if ( !m ) return;
   myfree((char *)m[-1]);  /* using private pointer */
   myfree((char *)(m-1));
-}
+} // end free_matrix()
 
-void free_matrix3 ARGS1((m),
-REAL ***m)
+void free_matrix3(REAL ***m)
 {
   if ( !m ) return;
   myfree((char *)m[-1]);
   myfree((char *)(m-1));
-}
+} // end free_matrix3()
 
-void free_matrix4 ARGS1((m),
-REAL ****m)
+void free_matrix4(REAL ****m)
 {
   if ( !m ) return;
   myfree((char *)m[-1]);
   myfree((char *)(m-1));
-}
+} // end free_matrix4()
 
 
-void free_temp_matrix ARGS1((m),
-REAL **m)
+void free_temp_matrix(REAL **m)
 {
   if ( !m ) return;
   temp_free((char *)m[-1]);  /* using private pointer */
   temp_free((char *)(m-1));
-}
+} // end free_temp_matrix()
 
-void free_temp_matrix3 ARGS1((m),
-REAL ***m)
+void free_temp_matrix3(REAL ***m)
 {
   if ( !m ) return;
   temp_free((char *)m[-1]);
   temp_free((char *)(m-1));
-}
+} // end free_temp_matrix3()
 
-void free_temp_matrix4 ARGS1((m),
-REAL ****m)
+void free_temp_matrix4(REAL ****m)
 {
   if ( !m ) return;
   temp_free((char *)m[-1]);
   temp_free((char *)(m-1));
-}
+} // end free_temp_matrix4()
 
 /******************************************************************
 *
@@ -500,11 +527,13 @@ REAL ****m)
 *
 * Purpose: add vector b to vector a 
 */
-void vector_add ARGS3((a,b,n),
-REAL *a, REAL *b,
-int n)
+void vector_add(
+  REAL *a, 
+  REAL *b,
+  int n
+)
 { for(;n!=0;n--) *(a++) += *(b++);
-}
+} // end vector_add()
 
 /******************************************************************
 *
@@ -512,12 +541,14 @@ int n)
 *
 * Purpose: add scalar multiple of vector b to vector a 
 */
-void vector_add_smul ARGS4((a,b,c,n),
-REAL *a, REAL *b,
-REAL c,
-int n)
+void vector_add_smul(
+  REAL *a, 
+  REAL *b,
+  REAL c,
+  int n
+)
 { for(;n!=0;n--) *(a++) += c*(*(b++));
-}
+} // end vector_add_smul()
 
 /******************************************************************
 *
@@ -526,11 +557,13 @@ int n)
 * Purpose: subtract vector b from vector a  
 */
 
-void vector_sub ARGS3((a,b,n),
-REAL *a, REAL *b,
-int n)
+void vector_sub(
+  REAL *a, 
+  REAL *b,
+  int n
+)
 { for(;n!=0;n--) *(a++) -= *(b++);
-}
+} // end vector_sub()
 
 /******************************************************************
 *
@@ -538,8 +571,7 @@ int n)
 *
 * Purpose: given 3 points, find cross product of sides 
 */
-void vnormal ARGS4((a,b,c,n),
-REAL *a, REAL *b, REAL *c, REAL *n)
+void vnormal(REAL *a, REAL *b, REAL *c, REAL *n)
 {
   REAL aa[MAXCOORD],bb[MAXCOORD];
   int i;
@@ -549,7 +581,7 @@ REAL *a, REAL *b, REAL *c, REAL *n)
     bb[i] = b[i] - c[i];
   }
   cross_prod(aa,bb,n);
-}
+} // end vnormal()
   
 /******************************************************************
 *
@@ -557,13 +589,12 @@ REAL *a, REAL *b, REAL *c, REAL *n)
 *
 * Purpose; Find 3D cross product of a and b, return in c
 */
-void cross_prod ARGS3((a,b,c),
-REAL *a, REAL *b, REAL *c)
+void cross_prod(REAL *a, REAL *b, REAL *c)
 {
   c[0] = a[1]*b[2] - a[2]*b[1];
   c[1] = a[2]*b[0] - a[0]*b[2];
   c[2] = a[0]*b[1] - a[1]*b[0];
-} 
+} // end cross_prod()
 
 /******************************************************************
 *
@@ -571,12 +602,11 @@ REAL *a, REAL *b, REAL *c)
 *
 * Purpose: Find scalar triple product in 3D.
 */
-REAL triple_prod ARGS3((a,b,c),
-REAL *a, REAL *b, REAL *c)
+REAL triple_prod(REAL *a, REAL *b, REAL *c)
 {
   return  a[0]*(b[1]*c[2] - b[2]*c[1]) - a[1]*(b[0]*c[2] - b[2]*c[0])
              + a[2]*(b[0]*c[1] - b[1]*c[0]);
-}
+} // end triple_prod()
 
 /******************************************************************
 *
@@ -586,35 +616,38 @@ REAL *a, REAL *b, REAL *c)
 *
 */
 /* dot product of REALS */
-REAL dot ARGS3((a,b,n),
-REAL *a, REAL *b,
-int n)  /* number of items */
+REAL dot(
+  REAL *a, REAL *b,
+  int n  /* number of items */
+)
 {
   REAL x = 0.0;
   for (  ; --n >= 0 ;  ) x += (*(a++))*(*(b++));
   return x;
-}
+} // end dot()
 
 /* dot product for doubles and floats */
-REAL dotdf ARGS3((a,b,n),
-REAL *a,
-float *b,
-int n)  /* number of items */
+REAL dotdf(
+  REAL *a,
+  float *b,
+  int n  /* number of items */
+)
 {
   REAL x = 0.0;
   for (  ; --n >= 0 ;  ) x += (*(a++))*(*(b++));
   return x;
-}
+} // end dotdf()
 
 /* dot product for floats */
-REAL dotf ARGS3((a,b,n),
-float *a, float *b,
-int n)  /* number of items */
+REAL dotf(
+  float *a, float *b,
+  int n  /* number of items */
+)
 {
   REAL x = 0.0;
   for (  ; --n >= 0 ;  ) x += (*(a++))*(*(b++));
   return x;
-}
+} // end dotf()
 
 
 /******************************************************************
@@ -623,9 +656,9 @@ int n)  /* number of items */
 *
 * Purpose:  matrix times vector multiplication, c = a * b 
 */
-void matvec_mul ARGS5((a,b,c,rows,cols),
-REAL **a, REAL *b, REAL *c,
-int rows, int cols)
+void matvec_mul (
+  REAL **a, REAL *b, REAL *c,
+  int rows, int cols)
 {
   int i,j;
 
@@ -643,9 +676,9 @@ int rows, int cols)
 *
 * Purpose: vector times matrix multiplication, c = a * b 
 */
-void vec_mat_mul ARGS5((a,b,c,rows,cols),
-REAL *a, REAL **b, REAL *c,
-int rows, int cols)
+void vec_mat_mul (
+  REAL *a, REAL **b, REAL *c,
+  int rows, int cols)
 {
   int i,j;
 
@@ -666,9 +699,9 @@ int rows, int cols)
 *       Tests for zero entries in first matrix for larger matrices,
 *         so if one matrix is sparse, put it first.
 */
-void mat_mult ARGS6((a,b,c,imax,jmax,kmax),
-REAL **a, REAL **b, REAL **c,  /* not assumed distinct */
-int imax, int jmax,int kmax)
+void mat_mult (
+  REAL **a, REAL **b, REAL **c,  /* not assumed distinct */
+  int imax, int jmax,int kmax)
 { int i,j,k;
 
   if ( (a == c) || (b == c) )
@@ -715,9 +748,9 @@ int imax, int jmax,int kmax)
 *          a is imax x jmax, b is imax x kmax, c is jmax x kmax 
 *       a, b, and c need not be distinct.
 */
-void tr_mat_mul ARGS6((a,b,c,imax,jmax,kmax),
-REAL **a, REAL **b, REAL **c,  /* not assumed distinct */
-int imax,int jmax,int kmax) 
+void tr_mat_mul (
+  REAL **a, REAL **b, REAL **c,  /* not assumed distinct */
+  int imax,int jmax,int kmax) 
 {
   REAL **temp;  /* temporary storage, if needed */
   int i,j,k;
@@ -750,9 +783,9 @@ int imax,int jmax,int kmax)
 *       a is imax x jmax, b is kmax x jmax, c is imax x kmax
 *       a, b, and c need not be distinct.
 */  
-void mat_mul_tr ARGS6((a,b,c,imax,jmax,kmax),
-REAL **a, REAL **b, REAL **c,  /* not assumed distinct */
-int imax, int jmax, int kmax)
+void mat_mul_tr (
+  REAL **a, REAL **b, REAL **c,  /* not assumed distinct */
+  int imax, int jmax, int kmax)
 {
   REAL **temp;  /* temporary storage, if needed */
   int i,j,k;
@@ -787,10 +820,10 @@ int imax, int jmax, int kmax)
 * Purpose: matrix times own transpose, b = a*aT
 *          a and b must be different. 
 */
-void  mat_tsquare ARGS4((a,b,n,m),
-REAL **a, /* original */
-REAL **b, /* square  b = a*aT */
-int n, int m) /* a is nxm, b is nxn */
+void  mat_tsquare (
+  REAL **a, /* original */
+  REAL **b, /* square  b = a*aT */
+  int n, int m) /* a is nxm, b is nxn */
 {
   int i,j;
   if ( a == b )
@@ -806,9 +839,9 @@ int n, int m) /* a is nxm, b is nxn */
 *
 * Purpose: quadratic form evaluation, a*b*c; only uses lower triangle 
 */
-REAL quadratic_form ARGS4((a,b,c,n),
-REAL *a, REAL **b, REAL *c,
-int n) /* size */ 
+REAL quadratic_form (
+  REAL *a, REAL **b, REAL *c,
+  int n) /* size */ 
 { int i,j;
   REAL sum = 0.0;
   REAL temp;
@@ -840,9 +873,9 @@ int n) /* size */
 #define SWAP(a,b) {REAL temp = (a); (a) = (b); (b) = temp; }
 #define SMALL 10
 
-int mat_inv ARGS2((a,n),
-REAL **a,     /* matrix to invert in place */
-int n)        /* size of matrix */
+int mat_inv (
+  REAL **a,     /* matrix to invert in place */
+  int n)        /* size of matrix */
 {
   int *indxc,*indxr,*ipiv;
   int i,icol=0,irow=0,j,k,l,ll;
@@ -927,7 +960,7 @@ mat_inv_exit:
 */
 REAL mat_approx_solve_epsilon = 1e-6;
 
-int mat_approx_solve ARGS3((a,n,b),
+int mat_approx_solve (
 REAL **a,     /* matrix to invert in place */
 int n,        /* size of matrix */
 REAL *b)      /* right hand side */
@@ -951,10 +984,11 @@ REAL *b)      /* right hand side */
   /* now gaussian elimination */
   for ( i = 0 ; i < n ; i++ )
   { /* find pivot */
-    big = 0.0;
-    for ( j = i ; j < n ; j++ )
+    big = fabs(a[i][i]);
+    irow = i;
+    for ( j = i+1 ; j < n ; j++ )
     { 
-      if ( fabs(a[j][i]) >= big )
+      if ( fabs(a[j][i]) > big )
       { big = fabs(a[j][i]);
         irow = j;
       }
@@ -965,8 +999,11 @@ REAL *b)      /* right hand side */
         SWAP(a[irow][l],a[i][l])
       SWAP(b[irow],b[i]);
     }
-    if ( a[i][i] < mat_approx_solve_epsilon ) 
-    { rank--; continue; }
+    if ( fabs(a[i][i]) < mat_approx_solve_epsilon ) 
+    { rank--;
+      b[i] = 0.0;
+      continue; 
+    }
 
     pivinv = 1/a[i][i];
     a[i][i] = 1.0;
@@ -977,7 +1014,7 @@ REAL *b)      /* right hand side */
     { if ( ll == i ) continue;
       { dum = a[ll][i];
         a[ll][i] = 0.0;
-        for ( l = 0 ; l < n ; l++ ) 
+        for ( l = i+1 ; l < n ; l++ ) 
           a[ll][l] -= a[i][l]*dum;
         b[ll] -= b[i]*dum;
       }
@@ -1003,9 +1040,9 @@ REAL *b)      /* right hand side */
 #define PIV2 2
 #define PIV3 3  /* second of double pivot */
 
-int mat_inv_sym ARGS2((a,n),
-REAL **a,     /* matrix to invert in place */
-int n)        /* size of matrix */
+int mat_inv_sym (
+  REAL **a,     /* matrix to invert in place */
+  int n)        /* size of matrix */
 {
   int *spiv; /* 1 or 2, size of pivot */
   int *ipiv; /* permutation */
@@ -1029,7 +1066,7 @@ int n)        /* size of matrix */
   { /* find pivot */
     /* max in pivot column */
     int s = 1; /* pivot size */
-    double lambda = 0.0;
+    REAL lambda = 0.0;
     for ( j = i+1 ; j < n ; j++ )
     { if ( fabs(a[i][j]) > lambda )
       { lambda = fabs(a[i][j]);
@@ -1037,10 +1074,11 @@ int n)        /* size of matrix */
       }
     }
     if ( lambda > 0.0 )
-    { if ( fabs(a[i][i]) > BKalpha*lambda )
-        s = 1; 
+    { 
+      if ( fabs(a[i][i]) > BKalpha*lambda  )
+        s = PIV1; 
       else
-      { double sigma = 0.0;
+      { REAL sigma = 0.0;
         for ( j = i ; j < n ; j++ )
           if ( fabs(a[j][irow]) > sigma )
             sigma = fabs(a[j][irow]);
@@ -1053,7 +1091,7 @@ int n)        /* size of matrix */
           ipiv[i] = ipiv[irow];
           ipiv[irow] = itmp;
           s = PIV1;
-		  for ( j = 0 ; j < i ; j++ )
+          for ( j = 0 ; j < i ; j++ )
             SWAP(a[i][j],a[irow][j]);
           SWAP(a[i][i],a[irow][irow]);
           for ( j = i+1 ; j < irow ; j++ )
@@ -1090,16 +1128,16 @@ int n)        /* size of matrix */
       a[i][i] = piv;
       for ( j = i+1 ; j < n ; j++ )
       { for ( k = i+1 ; k < j ; k++ )
-           a[j][k] -= a[j][i]*a[k][i];
-	    a[j][j] -= a[j][i]*a[j][i]*piv;
+          a[j][k] -= a[j][i]*a[k][i];
+        a[j][j] -= a[j][i]*a[j][i]*piv;
         a[j][i] *= piv;
       }
       spiv[i] = PIV1;
       if ( piv < 0.0 ) negs++;
     }
     else /* s == 2, so 2 x 2 pivot */
-    { double t;
-	  double det = a[i][i]*a[i+1][i+1] - a[i+1][i]*a[i+1][i];
+    { REAL t;
+      REAL det = a[i][i]*a[i+1][i+1] - a[i+1][i]*a[i+1][i];
       if ( det == 0.0 ) 
       { negs = -1;
         goto mat_inv_sym_exit; 
@@ -1108,12 +1146,15 @@ int n)        /* size of matrix */
       a[i][i] = a[i+1][i+1]/det;
       a[i+1][i+1] = t/det; 
       a[i][i+1] = a[i+1][i] /= -det;
-      for ( j = i+1 ; j < n ; j++ )
-      { for ( k = i+1 ; k < j ; k++ )
-           a[j][k] -= a[j][i]*a[k][i] - a[j][i+1]*a[k][i+1];
+      for ( j = i+2 ; j < n ; j++ )
+      {
         t = a[i][i]*a[j][i] + a[i+1][i]*a[j][i+1];
         a[j][i+1] = a[i+1][i]*a[j][i] + a[i+1][i+1]*a[j][i+1];
         a[j][i] = t;
+        for ( k = i+2 ; k <= j ; k++ )
+        { a[j][k] -= a[j][i]*a[i][k] + a[j][i+1]*a[i+1][k];
+          a[k][j] = a[j][k];
+        }
       }
       spiv[i] = PIV2;
       spiv[i+1] = PIV3;
@@ -1125,20 +1166,18 @@ int n)        /* size of matrix */
   }
 
   /* convert from LDL to inverse */
-  /* invert L to upper triangle U */
+  /* invert L into upper triangle U */
   for ( i = 1 ; i < n ; i++ )
-  { for ( j = 0 ; j < i-1 ; j++ )
-    { a[j][i] = -a[i][j];
-      for ( k = i+1 ; k < n ; k++ )
-       a[j][k] += a[k][i]*a[j][i];
-    }
-    if ( spiv[i] == PIV3 )
-      for ( k = i+1 ; k < n ; k++ )
-         a[i-1][k] = 0.0;
-    else
-    { a[i-1][i] = -a[i][i-1];
-      for ( k = i+1 ; k < n ; k++ )
-        a[i-1][k] = a[k][i]*a[i-1][i]; 
+  { for ( j = 0 ; j < i ; j++ )
+    { if ( j == i-1 && spiv[i]==PIV3 )
+      { a[j][i] = 0 ;
+        continue;
+      }
+      a[j][i] = -a[i][j];
+      for ( k = j+1 ; k < i ; k++ )
+      { if ( !( ((k==i-1) && (spiv[i]==PIV3)) || ((k==j+1) && (spiv[k]==PIV3))) )
+          a[j][i] -= a[i][k]*a[j][k];
+      }
     }
   }
   /* multiply by already inverted diagonal into lower */
@@ -1148,34 +1187,30 @@ int n)        /* size of matrix */
         a[j][i] = a[i][j]*a[j][j];
     }
     else  /* PIV2 */
-    { for ( i = 0 ; i < j-1 ; i++ )
+    { for ( i = 0 ; i < j ; i++ )
       { a[j][i] = a[i][j]*a[j][j] + a[i][j+1]*a[j+1][j];
-        a[j+1][i] = a[i][j+1]*a[j][j+1] + a[i][j+1]*a[j+1][j+1];
-      }
+        a[j+1][i] = a[i][j]*a[j+1][j] + a[i][j+1]*a[j+1][j+1];
+       }
       j++; /* extra increment */
     }
   }
   /* multiply lower triangle and upper to get full inverse in lower */
-  for ( i = 0 ; i < n ; i++ )
+ for ( i = 0 ; i < n ; i++ )
   { 
-    for ( j = i ; j < n ; j++ )
-	{ double sum;
+    for ( j = 0 ; j <= i ; j++ )
+    { REAL sum;
       int first;
-	  if ( j == i )
-	  { sum = a[i][i];
-	    if ( spiv[j] == PIV2 )
-	      first = i+2;
-		else 
-		  first = i+1;
-	   }
-	   else if ( (j == i-1) && (spiv[j]==PIV2) ) 
-	   { sum = 0;
-	     first = i+1;
-	   }
-	   else 
-	   { sum = a[i][j]*a[i][i];
-	     first = i+1;
-	   }
+      if ( j == i )
+      { sum = a[i][i];
+        if ( spiv[j] == PIV2 )
+          first = i+2;
+        else 
+          first = i+1;
+      }
+      else 
+      { sum = a[i][j];
+        first = i+1;
+      }
        for ( k = first ; k < n ; k++ )
         sum += a[i][k]*a[k][j];
        a[i][j] = sum;
@@ -1212,7 +1247,7 @@ mat_inv_sym_exit:
     free_ivector(spiv,0,n-1);
   }
   return negs;
-}
+} // end mat_inv_sym()
 
 /*************************************************************************
 *
@@ -1223,9 +1258,10 @@ mat_inv_sym_exit:
 *          on positive definite matrices.
 */
 
-int LD_factor ARGS2(( H, N ),
-REAL **H,  /* lower triangular, row by row */
-int N)     /* size */
+int LD_factor (
+  REAL **H,  /* lower triangular, row by row */
+  int N     /* size */
+)
 { int i,j,k;
   int negs = 0;
 
@@ -1265,11 +1301,12 @@ int N)     /* size */
 * purpose: solve for a single rhs using matrix factored by LD_factor.
 */
 
-void LD_solve ARGS4((LD,B,X,N),
-REAL **LD,  /* from LD_factor() */
-REAL *B,  /* rhs */
-REAL *X,  /* solution */
-int N)
+void LD_solve (
+  REAL **LD,  /* from LD_factor() */
+  REAL *B,  /* rhs */
+  REAL *X,  /* solution */
+  int N
+  )
 { int i,j;
 #ifdef BLAS
   if ( blas_flag )
@@ -1303,9 +1340,9 @@ int N)
 *
 * Purpose: calculates determinant in place and leaves adjoint transpose 
 */
-REAL  det_adjoint ARGS2((a,n),
-REAL **a,     /* matrix to change in place */
-int n)        /* size of matrix */
+REAL  det_adjoint (
+  REAL **a,     /* matrix to change in place */
+  int n)        /* size of matrix */
 {
   int *indxc,*indxr,*ipiv;
   int i,icol=0,irow=0,j,k,l,ll;
@@ -1417,9 +1454,9 @@ det_lowrank: /* rank less than n-1, so adjoint = 0 */
 * Purpose: calculates determinant; no change in matrix for 3x3 or smaller 
 *           otherwise calls det_adjoint()
 */
-REAL  determinant ARGS2((a,n),
-REAL **a,     /* matrix to change in place */
-int n)        /* size of matrix */
+REAL  determinant (
+  REAL **a,     /* matrix to change in place */
+  int n)        /* size of matrix */
 {
   if ( n == 1 ) { return a[0][0];  }
   if ( n == 2 ) { return  a[0][0]*a[1][1] - a[0][1]*a[1][0]; }
@@ -1436,9 +1473,9 @@ int n)        /* size of matrix */
 * Function: print_matrix()
 *
 */
-void print_matrix ARGS3((a,rows,cols),
-REAL **a,
-int rows, int cols)
+void print_matrix (
+  REAL **a,
+  int rows, int cols)
 {
   int i,j;
 
@@ -1458,11 +1495,11 @@ int rows, int cols)
 * Purpose: conversion of k vectors to a k-vector 
 *          components in index lexicographic order 
 */
-void exterior_product ARGS4((v,w,k,n),
-REAL **v,  /* list of k vectors */
-REAL *w,    /* returned k-vector */
-int k,      /* number of vectors */
-int n)      /* space dimension */
+void exterior_product (
+  REAL **v,  /* list of k vectors */
+  REAL *w,    /* returned k-vector */
+  int k,      /* number of vectors */
+  int n)      /* space dimension */
 {
   /* anticipate only small k, so just brute force */
   int i1,i2,i3;
@@ -1502,10 +1539,10 @@ int n)      /* space dimension */
 *  purpose:  Find basis for kernel of matrix (nullspace of rows)
 */
 
-int kernel_basis ARGS4((a,ker,imax,jmax),
-REAL **a,  /* the matrix, will be altered */
-REAL **ker, /* for basis vectors in columns */
-int imax, int jmax)  /* rows and columns of a */
+int kernel_basis (
+  REAL **a,  /* the matrix, will be altered */
+  REAL **ker, /* for basis vectors in columns */
+  int imax, int jmax)  /* rows and columns of a */
 {
   int i,j,k;
   int pivrow[20];    /* pivot row in column */
@@ -1565,10 +1602,10 @@ int imax, int jmax)  /* rows and columns of a */
 *      basis vectors normalized, but not orthohormal.
 */
 
-int kernel_basis_rows ARGS4((a,ker,imax,jmax),
-REAL **a,  /* the matrix, will be altered */
-REAL **ker, /* for basis vectors in rows */
-int imax, int jmax)  /* rows and columns of a */
+int kernel_basis_rows (
+  REAL **a,  /* the matrix, will be altered */
+  REAL **ker, /* for basis vectors in rows */
+  int imax, int jmax)  /* rows and columns of a */
 {
   int i,j,k;
   int pivrow[20];    /* pivot row in column */
@@ -1645,9 +1682,9 @@ int imax, int jmax)  /* rows and columns of a */
 *
 */
 
-int matrix_index ARGS2((M,n),
-REAL **M,  /* square matrix */
-int n)  /* size */
+int matrix_index (
+  REAL **M,  /* square matrix */
+  int n)  /* size */
 { REAL **a = dmatrix(0,n-1,0,n-1);
   REAL *tempptr;
   int row,col,prow=0;
@@ -1697,12 +1734,12 @@ int n)  /* size */
 * output: eigenvalues in d[], sorted in descending order, and
 *         corresponding eigenvectors in columns of v[][].
 */
-void jacobi_eigenpairs ARGS5((a,n,d,v,work),
-REAL **a,  /* input matrix, destroyed */
-int n, /* size */
-REAL *d, /* for return of eigenvalues */
-REAL **v,  /* for return of eigenvectors */
-REAL *work)  /* space for 2*n values */
+void jacobi_eigenpairs (
+  REAL **a,  /* input matrix, destroyed */
+  int n, /* size */
+  REAL *d, /* for return of eigenvalues */
+  REAL **v,  /* for return of eigenvectors */
+  REAL *work)  /* space for 2*n values */
 { REAL sm,h,tresh,dum,g,t,theta,tau,s,c;
   int i,iq,ip,nrot,j;
   REAL *z,*b;
@@ -1826,10 +1863,10 @@ jacobi_exit:
 * Returns  h[i1][j1][i2][j2] as d^2 det(a)/da[i1][j1]/da[i2][j2]
 */
 
-void det_hess ARGS3((a,h,n),
-REAL **a,
-REAL ****h,
-int n)  /* size */
+void det_hess (
+  REAL **a,
+  REAL ****h,
+  int n)  /* size */
 { int i1,i2,jj1,j2,k;
 
   /* copy original matrix into h lots of times */
@@ -1876,9 +1913,11 @@ int n)  /* size */
 * return: number of independent rows
 */
 
-int gram_schmidt ARGS3((mat,rows,cols),
-REAL **mat,
-int rows, int cols)
+int gram_schmidt (
+  REAL **mat,
+  int rows, 
+  int cols
+  )
 { int i,j,k;
   REAL d;
   for ( i = 0 ; i < rows ; i++ )
@@ -1899,129 +1938,6 @@ int rows, int cols)
   }
   return rows;
 } 
-
-/**************************************************************************
-*
-* function: mat_inv_sparse()
-*
-* purpose: invert large sparse symmetric matrix in place, with input in 
-*          dense format.
-*          Should be just temporary until callers get fully integrated
-*          with sparse matrix stuff.
-*/
-
-int mat_inv_sparse ARGS2((a,n),
-REAL **a,     /* matrix to invert in place */
-int n)        /* size of matrix */
-{ struct linsys S;
-  int i,j,k;
-  REAL *BB,*Y;
-
-  memset(&S,0,sizeof(S));
-  S.N = n;
-  /* count entries */
-  S.IA = (int *)temp_calloc(n+1,sizeof(int));
-  for ( i = 0, k = 0 ; i < n ; i++ )
-  { S.IA[i] = k + A_OFF;
-    for ( j = i ; j < n ; j++ )
-      if ( a[i][j] != 0.0 ) k++;
-  }
-  S.IA[i] = k + A_OFF;
-
-  /* allocate main space and fill */
-  S.JA = (int *)temp_calloc(k,sizeof(int));
-  S.A  = (REAL *)temp_calloc(k,sizeof(REAL));
-  S.P = (int *)temp_calloc(n,sizeof(int));
-  S.IP = (int *)temp_calloc(n,sizeof(int));
-  for ( i = 0, k = 0 ; i < n ; i++ )
-  { 
-    for ( j = i ; j < n ; j++ )
-      if ( a[i][j] != 0.0 )
-      { S.A[k] = a[i][j];
-        S.JA[k] = j + A_OFF;
-        k++;
-      }
-  }
-
-#ifdef USEMINDEG
-  xmd_factor(&S);  /* use mindeg, since internals known */
-#else
-  ysmp_factor(&S);
-#endif
-
-  /* solve back for inverse matrix */
-  BB = (REAL*)temp_calloc(S.N+10,sizeof(REAL));  /* intermediate solutions */
-  Y = (REAL*)temp_calloc(S.N+10,sizeof(REAL));  /* intermediate solutions */
-  for ( i = 0 ; i < n ; i++ )
-  { 
-    memset(BB,0,n*sizeof(REAL));
-    BB[i] = 1.0;
-#ifdef USEMINDEG
-/* mindeg is too specific, using vertex structure to optimize for hessian */
-    /* solve U^T Y = B */
-   int *jp;REAL *e;
-    for ( j = 0 ; j < S.N ; j++ )
-    { int start,end;
-      Y[j] = BB[S.LJA[S.LIJA[j]]];  /* for BK inner permutation */
-      if ( S.psize[j] == FIRSTOFPAIR ) start = 2;
-      else start = 1;
-      end = S.LIA[j+1];
-      for ( i=S.LIA[j]+start, e=S.LA+i , jp=S.LJA+S.LIJA[j]+start ;
-                   i < end ; i++,e++,jp++ )
-        BB[*jp] -= (*e)*Y[j];
-    }
-
-    /* solve D V = Y (will use Y to store V) */
-    for ( j = 0 ; j < S.N ; j++ )
-    { if ( S.psize[j] == ONEBYONE )
-          Y[j] /= S.LA[S.LIA[j]];
-      else if ( S.psize[j] == ZEROPIVOT ) Y[j] = 0.0;  
-      else
-      { REAL piv[2][2];
-        REAL pinv[2][2];
-        REAL det,yy;
-        piv[0][0] = S.LA[S.LIA[j]];
-        piv[0][1] = piv[1][0] = S.LA[S.LIA[j]+1];
-        piv[1][1] = S.LA[S.LIA[j+1]];
-        det = piv[0][0]*piv[1][1] - piv[0][1]*piv[1][0];
-        pinv[0][0] = piv[1][1]/det;
-        pinv[1][0] = pinv[0][1] = -piv[0][1]/det;
-        pinv[1][1] = piv[0][0]/det;
-        yy = Y[j]*pinv[0][0] + Y[j+1]*pinv[1][0];
-        Y[j+1] = Y[j]*pinv[0][1] + Y[j+1]*pinv[1][1];
-        Y[j] = yy;
-        j++;
-      }
-    }
-
-    /* solve U X = V */
-    for ( j = S.N-1 ; j >= 0 ; j-- )
-    { int start,end;
-      if ( S.psize[j] == FIRSTOFPAIR ) start = 2;
-      else start = 1;
-      end = S.LIA[j+1];
-      for ( k=S.LIA[j]+start, e=S.LA+k, jp=S.LJA+S.LIJA[j]+start  ;
-           k < end ; k++,e++,jp++ )
-         Y[j] -= (*e)*BB[*jp];
-      BB[S.LJA[S.LIJA[j]]] = Y[j];
-    }
-
-    /* unpermute */
-    for ( j = 0 ; j < S.N ; j++ )
-      a[i][S.P[j]] = BB[j];
-/* end of mindeg version */
-#else
-    ysmp_solve(&S,BB,BB);
-    for ( j = 0 ; j < S.N ; j++ )
-      a[i][j] = BB[j];
-#endif
-  }
-
-  temp_free((char*)Y);
-  temp_free((char*)BB);
-  free_system(&S);
-  return 1;
-}
 
 /*************************************************************************
   General sparse matrix construction scheme.  Does not assume symmetry.
@@ -2062,7 +1978,7 @@ int n)        /* size of matrix */
 
 **************************************************************************/
 #define SP_PRIME 99991
-#define sp_hash(row,col)  (abs((row)*97+(col)*SP_PRIME))
+#define sp_hash(row,col)  ((abs((row)*97+(col)*SP_PRIME)) & 0x7FFFFFFF)
 
 /********************************************************************
 * 
@@ -2070,9 +1986,10 @@ int n)        /* size of matrix */
 *
 * purpose: Initialize hash table.
 */
-void sp_hash_init ARGS2((S,size_estimate),
-struct linsys *S,
-int size_estimate) /* from sp_hash_end of previous invocation */
+void sp_hash_init (
+  struct linsys *S,
+  int size_estimate /* from sp_hash_end of previous invocation */
+  )
 { int i;
   int estimate = SDIM*(web.skel[VERTEX].max_ord+10);
    
@@ -2099,8 +2016,7 @@ int size_estimate) /* from sp_hash_end of previous invocation */
 * purpose: Expands hash table
 */
 
-void sp_hash_expand ARGS1((S),
-struct linsys *S)
+void sp_hash_expand (struct linsys *S)
 { struct sp_entry *newtable,*oldtable;
   int i;
   struct sp_entry *e;
@@ -2143,10 +2059,12 @@ struct linsys *S)
 * purpose: Finds existing entry or allocates entry.
 *          Installs key values, and adds hessian value.
 */
-void sp_hash_search ARGS4((S,row,col,value),
-struct linsys *S,
-int row, int col,  /* Note these are in reverse order as from hessian version */
-REAL value)  /* value to add */
+void sp_hash_search (
+  struct linsys *S,
+  int row, 
+  int col,  /* Note these are in reverse order as from hessian version */
+  REAL value  /* value to add */
+)
 {
   struct sp_entry *e;
   int spot;
@@ -2188,11 +2106,12 @@ REAL value)  /* value to add */
 *
 * return:  Estimated size of hash table to use next time.
 */
-int sp_hash_end ARGS4((S,rows,cols,index_start),
-struct linsys *S,
-int rows, /* number of rows */
-int cols, /* number of columns */
-int index_start) /* for 0 or 1 based indexing */
+int sp_hash_end (
+  struct linsys *S,
+  int rows, /* number of rows */
+  int cols, /* number of columns */
+  int index_start /* for 0 or 1 based indexing */
+)
 { int i;
   struct sp_entry *e;
   int *counts;
@@ -2331,7 +2250,7 @@ int index_start) /* for 0 or 1 based indexing */
 #ifdef BLAS
 
 /* CPU clock timing */
-__int32 LD_block_factor_elapsed_time[2];
+__int64 LD_block_factor_elapsed_time;
 
 
 int blocksize = BLAS_BLOCKSIZE;
@@ -2721,11 +2640,12 @@ int *info;
 */
 
 /* returns index */
-int LD_block_factor( H, N )  /* actually, D^-1 on diagonal */
-REAL **H;  /* lower block triangular, row by row */
-           /* i.e. each consecutive BLOCKSIZE rows same length, */
-           /* in multiples of BLOCKSIZE */
-int N;     /* size */
+int LD_block_factor(   /* actually, D^-1 on diagonal */
+  REAL **H,  /* lower block triangular, row by row */
+             /* i.e. each consecutive BLOCKSIZE rows same length, */
+             /* in multiples of BLOCKSIZE */
+  int N     /* size */
+)
 { int i,j,k;
   int info;
   int rowcount; /* rows in block; less than blocksize for last block */
@@ -2804,11 +2724,12 @@ int N;     /* size */
 *          by LD_block_factor().
 */
 
-void LD_block_solve(LD,B,X,N)
-REAL **LD;  /* from LD_block_factor(), inverse blocks on diagonal */
-REAL *B;  /* rhs */
-REAL *X;  /* solution */
-int N;  /* size of system */
+void LD_block_solve(
+  REAL **LD,  /* from LD_block_factor(), inverse blocks on diagonal */
+  REAL *B,  /* rhs */
+  REAL *X,  /* solution */
+  int N  /* size of system */
+)
 { int i,j;
   REAL alpha = 0.0;
   REAL beta = 0.0;
@@ -2881,11 +2802,11 @@ int N;  /* size of system */
 * purpose: Evaluation of multi-dimensional simplicial Bezier basis
 *          function at given point.
 */
-REAL bezier_eval ARGS4((order,dim,inx,x),
-int order, /* Lagrange order */
-int dim,  /* simplicial dimension */
-int *inx, /* which basis function, barycentric, sums to order  */
-REAL *x)   /* barycentric coords of target, sums to 1 */
+REAL bezier_eval (
+  int order, /* Lagrange order */
+  int dim,  /* simplicial dimension */
+  int *inx, /* which basis function, barycentric, sums to order  */
+  REAL *x)   /* barycentric coords of target, sums to 1 */
 { REAL prod, prodpart[MAXCOORD];
   int i,j,k,mm;
   for ( k = 0 ; k <= dim ; k++ ) prodpart[k] = 0.0;
@@ -2906,12 +2827,13 @@ REAL *x)   /* barycentric coords of target, sums to 1 */
 *
 * purpose: Get point on curve at given parameter.
 */
-void bezier_eval_1d ARGS5((order,sdim,p,ctrl,dest),
-int order,
-int sdim, /* space dimension*/
-REAL p,   /* parameter, 0 to 1 */
-REAL **ctrl,  /* control point coordinates */
-REAL *dest)  /* output point */
+void bezier_eval_1d (
+  int order,
+  int sdim, /* space dimension*/
+  REAL p,   /* parameter, 0 to 1 */
+  REAL **ctrl,  /* control point coordinates */
+  REAL *dest  /* output point */
+)
 { int inx[2];
   REAL t[2];
   int i,k;
@@ -2938,8 +2860,7 @@ REAL *dest)  /* output point */
 *
 */
 
-void bezier_convert_1D_init ARGS1((order),
-int order)
+void bezier_convert_1D_init(int order)
 { int i,j;
   REAL x[2];  /* barycentric coords of target point */
   int inx[2]; /* barycentric index of basis function */
@@ -2972,8 +2893,7 @@ int order)
 *
 */
 
-void bezier_convert_2D_init ARGS1((order),
-int order)
+void bezier_convert_2D_init (int order)
 { int i,j,k,m,kk,mm;
   REAL x[3];  /* barycentric coords of target point */
   int inx[3]; /* barycentric index of basis function */
@@ -3011,10 +2931,11 @@ int order)
 *          to new.  Goes through intermediary of curve points.
 */
 
-void bezier_trans_1d ARGS3((old_order,new_order,trans),
-int old_order,
-int new_order,
-REAL **trans) /* trans[new][old] */
+void bezier_trans_1d (
+  int old_order,
+  int new_order,
+  REAL **trans /* trans[new][old] */
+  )
 { int i,k;
   int inx[2];
   REAL t[2];
@@ -3046,10 +2967,11 @@ REAL **trans) /* trans[new][old] */
 *          to new.  Goes through intermediary of surface points.
 */
 
-void bezier_trans_2d ARGS3((old_order,new_order,trans),
-int old_order,
-int new_order,
-REAL **trans) /* trans[new][old] */
+void bezier_trans_2d (
+  int old_order,
+  int new_order,
+  REAL **trans /* trans[new][old] */
+  )
 { int i,j,k,m,jj,kk;
   int inx[3];
   REAL t[3];
@@ -3089,8 +3011,7 @@ REAL **trans) /* trans[new][old] */
 *          refined edge.
 */
 
-void bezier_refine_1d_init ARGS1((order),
-int order)
+void bezier_refine_1d_init (int order)
 { int i,k;
   int inx[2];
   REAL t[2];
@@ -3128,8 +3049,7 @@ int order)
 *          refined facet.
 */
 
-void bezier_refine_2d_init ARGS1((order),
-int order)
+void bezier_refine_2d_init (int order)
 { int i,j,k,m,kk,mm,jj;
   int inx[3];
   REAL t[3];
@@ -3220,12 +3140,13 @@ int order)
 * purpose: Evaluate one curve point using Lagrange interpolation.
 */
 
-void lagrange_eval_1d ARGS5((order,sdim,t,ctrl,dest),
-int order,
-int sdim, /* space dimension*/
-REAL t,   /* parameter, 0 to 1 */
-REAL **ctrl,  /* control point coordinates */
-REAL *dest)  /* output point */
+void lagrange_eval_1d (
+  int order,
+  int sdim, /* space dimension*/
+  REAL t,   /* parameter, 0 to 1 */
+  REAL **ctrl,  /* control point coordinates */
+  REAL *dest  /* output point */
+  )
 {
   int i,k,m;
 
@@ -3251,12 +3172,13 @@ REAL *dest)  /* output point */
 * purpose: Evaluate one surface point using Lagrange 2D interpolation.
 */
 
-void lagrange_eval_2d ARGS5((order,sdim,t,ctrl,dest),
-int order,
-int sdim, /* space dimension*/
-REAL *t,   /* parameters, 0 to 1 */
-REAL **ctrl,  /* control point coordinates, in linear order */
-REAL *dest)  /* output point */
+void lagrange_eval_2d (
+  int order,
+  int sdim, /* space dimension*/
+  REAL *t,   /* parameters, 0 to 1 */
+  REAL **ctrl,  /* control point coordinates, in linear order */
+  REAL *dest  /* output point */
+  )
 {
   int i,j,k,m,jj;
   
@@ -3288,12 +3210,13 @@ REAL *dest)  /* output point */
 *
 * purpose: Get point on surface at given parameters.
 */
-void bezier_eval_2d ARGS5((order,sdim,p,ctrl,dest),
-int order,
-int sdim, /* space dimension*/
-REAL *p,   /* two parameters, 0 to 1 barycentric */
-REAL **ctrl,  /* control point coordinates, in linear order */
-REAL *dest)  /* output point */
+void bezier_eval_2d (
+  int order,
+  int sdim, /* space dimension*/
+  REAL *p,   /* two parameters, 0 to 1 barycentric */
+  REAL **ctrl,  /* control point coordinates, in linear order */
+  REAL *dest  /* output point */
+  )
 { int inx[3];
   REAL t[3];
   int i,j,k,jj;
@@ -3320,8 +3243,7 @@ REAL *dest)  /* output point */
 * purpose: calculate volume of a tetrahedron in 3D from its four vertices.
 */
 
-REAL tetra_vol ARGS4((a,b,c,d),
-REAL *a, REAL *b, REAL *c, REAL *d)
+REAL tetra_vol (REAL *a, REAL *b, REAL *c, REAL *d)
 { REAL bb[3],cc[3],dd[3];
   REAL vol;
   int i;
@@ -3342,7 +3264,7 @@ REAL *a, REAL *b, REAL *c, REAL *d)
 *
 * purpose: implements the matrix_multiply user command.
 */
-void matrix_multiply_command ARGS6((a,b,c,adata,bdata,cdata),
+void matrix_multiply_command (
 struct array *a, struct array *b,struct array *c, /* array infofor the matrices */
 REAL *adata, REAL *bdata, REAL *cdata ) /* data addresses */
 {
@@ -3437,15 +3359,16 @@ REAL *adata, REAL *bdata, REAL *cdata ) /* data addresses */
 *
 * purpose: implements the matrix_inverse user command.
 */
-int matrix_inverse_command ARGS4((a,b,adata,bdata),
-struct array *a,struct array *b,/* variable id numbers for the matrices */
-REAL *adata,REAL *bdata  /* source and destination matrices */
+int matrix_inverse_command (
+  struct array *a,struct array *b,/* variable id numbers for the matrices */
+  REAL *adata,REAL *bdata  /* source and destination matrices */
 ) 
 { 
   int i;
   int retval = 1;  /* 1 for success, 0 for singular */
   REAL **bptrs;
- 
+#define BPTRSPACE 100
+  REAL *bptrspace[BPTRSPACE]; // for row pointers
 
   if ( a->sizes[0] != a->sizes[1] )
     kb_error(3218, "matrix_inverse: first matrix is not square.\n",
@@ -3462,8 +3385,11 @@ REAL *adata,REAL *bdata  /* source and destination matrices */
     for ( i = 0 ; i < a->datacount ; i++ )
       bdata[i] = adata[i];
 
-  /* set up row pointers in allocated space after data */
-  bptrs = (REAL**)(bdata + b->datacount);
+  /* set up row pointers */
+  if ( b->sizes[0] <= BPTRSPACE )
+    bptrs = bptrspace;
+  else
+    bptrs = (REAL**)temp_calloc(b->sizes[0],sizeof(REAL*));
   for ( i = 0 ; i < b->sizes[0] ; i++ )
     bptrs[i] = bdata + i*b->sizes[1];
  
@@ -3471,6 +3397,9 @@ REAL *adata,REAL *bdata  /* source and destination matrices */
   retval = mat_inv(bptrs,a->sizes[0]);
   if ( retval < 0 )
     retval = 0; 
+
+  if ( b->sizes[0] > BPTRSPACE )
+    temp_free((char*)bptrspace);
 
   return retval;
 }
@@ -3481,9 +3410,9 @@ REAL *adata,REAL *bdata  /* source and destination matrices */
 *
 * purpose: implements the matrix_determinant user command.
 */
-REAL matrix_determinant_command ARGS2((a,adata),
-struct array *a, /* variable id numbers for the matrix */
-REAL *adata ) /* data address */
+REAL matrix_determinant_command (
+  struct array *a, /* matrix info */
+  REAL *adata ) /* data address */
 { 
   REAL **atmp;
   int i,j;

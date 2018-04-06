@@ -22,9 +22,10 @@ REAL wee_area = 0.0;
 *        Also does facet quantity integrands.
 */
 
-void facet_energy_l(f_id,mode)
-facet_id f_id;
-int mode; /* AREA_ONLY or ALL_ENERGY */
+void facet_energy_l(
+  facet_id f_id,
+  int mode /* AREA_ONLY or ALL_ENERGY */
+)
 {
   int i,j;
   REAL side[FACET_EDGES][MAXCOORD];
@@ -140,8 +141,7 @@ skip_from_metric:
 *  accumulates them at each control point.
 */
 
-void facet_force_l(f_id)
-facet_id f_id;
+void facet_force_l(facet_id f_id)
 {
   REAL side[FACET_EDGES][MAXCOORD];
   REAL normal[MAXCOORD];
@@ -222,7 +222,7 @@ facet_id f_id;
       outstring("Facet-edges and side vectors: \n");
       for ( i = 0 ; i < FACET_EDGES ; i++, ffe = get_next_edge(ffe) )
       { 
-         sprintf(msg," %8lX    %18.15f %18.15f %18.15f\n",ffe,
+         sprintf(msg," %s    %18.15f %18.15f %18.15f\n",ELNAME(ffe),
              (DOUBLE)side[i][0],(DOUBLE)side[i][1],(DOUBLE)side[i][2]);
          outstring(msg);
       }
@@ -290,8 +290,6 @@ end_euclidean:
        vertex_id vv_id;
        ee_id = get_fe_edge(fe_id);
        vv_id = get_edge_headv(ee_id);
-       add_vertex_star(vv_id,area);
-       add_edge_star(ee_id,area);
        fe_id = get_next_edge(fe_id);
      }
 
@@ -324,8 +322,7 @@ end_euclidean:
 *        face, and then oriented contributions added for each body. 
 */
 
-void facet_volume_l(f_id)
-facet_id f_id;
+void facet_volume_l(facet_id f_id)
 { 
   body_id b_id0,b_id1;
   facetedge_id fe_id;
@@ -391,9 +388,10 @@ void film_grad_l()
   REAL unwrap_x[FACET_VERTS][MAXCOORD];
 
 #ifdef NEWTORVOL
-  struct qinfo f_info; /* for calling q_facet_torus_volume */
-  if ( web.torus_flag )
-    q_info_init(&f_info,METHOD_GRADIENT);
+  struct qinfo *f_info = &(GET_THREAD_DATA->q_info); /* for calling q_facet_torus_volume */
+
+  if ( f_info->grad == NULL )
+    q_info_init(f_info,METHOD_GRADIENT);
 #endif
 
 
@@ -423,16 +421,16 @@ void film_grad_l()
         fe = get_next_edge(fe);
       }
 
-      f_info.id = f_id;
-      q_facet_setup(NULL,&f_info,NEED_SIDE|TORUS_MODULO_MUNGE|ORIENTABLE_METHOD);
-      q_facet_torus_volume_grad(&f_info);
+      f_info->id = f_id;
+      q_facet_setup(NULL,f_info,NEED_SIDE|TORUS_MODULO_MUNGE|ORIENTABLE_METHOD);
+      q_facet_torus_volume_grad(f_info);
 
       if ( valid_id(bi_id) && (get_battr(bi_id) & (FIXEDVOL|PRESSURE)) )
         for ( i = 0 ; i < FACET_VERTS ; i++ )
         { vgptr = get_bv_new_vgrad(get_body_fixnum(bi_id),v_ids[i]);
           vgptr->bb_id = bi_id;
           for ( n = 0 ; n < SDIM ; n++ )
-             vgptr->grad[n] += f_info.grad[i][n];
+             vgptr->grad[n] += f_info->grad[i][n];
         }
 
        if ( valid_id(bj_id) && (get_battr(bj_id) & (FIXEDVOL|PRESSURE)) )
@@ -440,7 +438,7 @@ void film_grad_l()
         { vgptr = get_bv_new_vgrad(get_body_fixnum(bj_id),v_ids[i]);
           vgptr->bb_id = bj_id;
           for ( n = 0 ; n < SDIM ; n++ )
-            vgptr->grad[n] -= f_info.grad[i][n];
+            vgptr->grad[n] -= f_info->grad[i][n];
         }
 #else
       /* kludge copy from torvol_project, so could ditch torvol_project */
@@ -605,10 +603,6 @@ void film_grad_l()
 
   } /* end facet loop */
   
-#ifdef NEWTORVOL
-  if ( web.torus_flag )
-    q_info_free(&f_info);
-#endif
 } /* end film_grad_l() */
 
 /*******************************************************************

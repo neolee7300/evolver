@@ -40,8 +40,7 @@ REAL poly2partial[FACET_CTRL][2][2] = { { {1.0, 1.0}, {1.0, 1.0} },
 *  Quadratic version.
 */
 
-void facet_force_q(f_id)
-facet_id f_id;
+void facet_force_q(facet_id f_id)
 {
   vertex_id v_id[FACET_CTRL];
   MAT2D(x,FACET_CTRL,MAXCOORD);
@@ -147,9 +146,10 @@ cumforces:
 * Purpose: Returns energy due to facet.  Quadratic version.
 */
 
-void facet_energy_q(f_id,mode)
-facet_id f_id;
-int mode; /* AREA_ONLY or ALL_ENERGY */
+void facet_energy_q(
+  facet_id f_id,
+  int mode /* AREA_ONLY or ALL_ENERGY */
+)
 {
   REAL energy = 0.0;
   body_id b_id;
@@ -204,9 +204,7 @@ skip_from_metric:
     { vertex_id vv_id;
       edge_id e_id = get_fe_edge(fe_id);
       vv_id = get_edge_headv(e_id);
-      add_vertex_star(vv_id,energy);
       vv_id = get_edge_midv(e_id);
-      add_vertex_star(vv_id,energy);
     }
   }
 
@@ -234,8 +232,7 @@ skip_from_metric:
 *  Purpose: Find triangle's contribution to volumes of neighboring bodies.
 */
 
-void facet_volume_q(f_id)
-facet_id f_id;
+void facet_volume_q(facet_id f_id)
 { 
   body_id b_id0,b_id1;
   REAL vol = 0.0;
@@ -278,6 +275,7 @@ facet_id f_id;
      add_body_volume(b_id0,vol);
   if ( valid_id(b_id1) )
      add_body_volume(b_id1,-vol);
+
 } /* end facet_volume_q() */
 
 /****************************************************************
@@ -350,13 +348,8 @@ void film_grad_q()
 *  Purpose: Used by vcoeff_init() to calculate volume coefficients.
 *
 */
-REAL triangle_integral ARGS(( REAL(*)(REAL,REAL)));
-REAL triangle_integral(f)  /* on side 2 triangle, 5th degree */
-#ifdef NOPROTO
-REAL (*f)();
-#else
-REAL (*f)(REAL,REAL);
-#endif
+
+REAL triangle_integral(REAL (*f)(REAL,REAL))
 {
   int i;
   REAL sum = 0.0;
@@ -365,7 +358,8 @@ REAL (*f)(REAL,REAL);
      sum += gauss2Dwt5[i]*(*f)(2*gauss2Dpt5[i][0],2*gauss2Dpt5[i][1]);
 
   return 2*sum;
-}
+
+} // end triangle_integral()
 
 /* Interpolation polynomials for 6 point interpolation on triangle.
 
@@ -385,9 +379,11 @@ REAL (*f)(REAL,REAL);
 *  Purpose: interpolation polynomial evaluation
 */
 
-REAL intpoly6(k,u,v)
-int k;       /* polynomial number */
-REAL u,v;    /* evaluation point */
+REAL intpoly6(
+  int k,       /* polynomial number */
+  REAL u,
+  REAL v    /* evaluation point */
+)
 {
   switch ( k )
     {
@@ -401,7 +397,8 @@ REAL u,v;    /* evaluation point */
 
   /* bad index */
   return 0.0;
-}
+
+} // end intpoly6()
 
 /************************************************************************
 *
@@ -410,10 +407,11 @@ REAL u,v;    /* evaluation point */
 * Purpose: partials of interpolation polynomials 
 */
 
-REAL intpoly6part(k,i,u,v)
-int k;  /* which polynomial (control point index) */
-int i;  /* partial number: 0 for u, 1 for v */
-REAL u,v;    /* evaluation point */
+REAL intpoly6part(
+  int k,  /* which polynomial (control point index) */
+  int i,  /* partial number: 0 for u, 1 for v */
+  REAL u, REAL v    /* evaluation point */
+)
 {
   if ( i == 0 )
     switch ( k )
@@ -438,7 +436,7 @@ REAL u,v;    /* evaluation point */
 
   /* bad index */
   return 0.0;
-}
+} // intpoly6part()
 
 
 /**********************************************************************
@@ -450,12 +448,12 @@ REAL u,v;    /* evaluation point */
 
 /* integrand function */
 static int al,be,ga;
-REAL vintzf(u,v)
-REAL u,v;
+REAL vintzf(REAL u, REAL v)
 { 
   return 
       intpoly6(al,u,v)*intpoly6part(be,0,u,v)*intpoly6part(ga,1,u,v);
-}
+
+} // end vintzf()
 
 void vcoeff_init()
 {
@@ -469,8 +467,8 @@ void vcoeff_init()
         t = (int)(t*90.001)/90.0;
         vcoeff[al][be][ga] = t;
       }
-
-}
+ 
+}  // end vcoeff_init()
 
 
 /*********************************************************************
@@ -494,8 +492,7 @@ void vcoeff_init()
 *  Quadratic version.
 */
 
-REAL q_facet_tension_q(f_info)
-struct qinfo *f_info;
+REAL q_facet_tension_q(struct qinfo *f_info)
 {
   REAL value = 0.0;
   int m;
@@ -536,8 +533,7 @@ struct qinfo *f_info;
 *  Quadratic version.
 */
 
-REAL q_facet_tension_q_grad(f_info)
-struct qinfo *f_info;
+REAL q_facet_tension_q_grad(struct qinfo *f_info)
 {
   REAL value = 0.0;
   int m,j,k;
@@ -585,8 +581,7 @@ struct qinfo *f_info;
 *  Quadratic version.
 */
 
-REAL q_facet_tension_q_hess(f_info)
-struct qinfo *f_info;
+REAL q_facet_tension_q_hess(struct qinfo *f_info)
 {
   REAL value = 0.0;
   int m,j,jj,k,kk,p,q;
@@ -670,8 +665,7 @@ struct qinfo *f_info;
 *  Quadratic version.
 */
 
-REAL q_facet_tension_uq(f_info)
-struct qinfo *f_info;
+REAL q_facet_tension_uq(struct qinfo *f_info)
 {
   REAL value = 0.0;
   int m;
@@ -702,7 +696,7 @@ struct qinfo *f_info;
 
   return value; 
 
-}
+} // end q_facet_tension_uq()
 
 /*********************************************************************
 *
@@ -710,8 +704,7 @@ struct qinfo *f_info;
 *  Quadratic version.
 */
 
-REAL q_facet_tension_uq_grad(f_info)
-struct qinfo *f_info;
+REAL q_facet_tension_uq_grad(struct qinfo *f_info)
 {
   REAL value = 0.0;
   int m,j,k;
@@ -754,7 +747,7 @@ struct qinfo *f_info;
 
   return density*sqrt(value)/2;
 
-}
+} // end q_facet_tension_uq_grad()
 
 /*********************************************************************
 *
@@ -762,8 +755,7 @@ struct qinfo *f_info;
 *  Quadratic version.
 */
 
-REAL q_facet_tension_uq_hess(f_info)
-struct qinfo *f_info;
+REAL q_facet_tension_uq_hess(struct qinfo *f_info)
 {
   REAL value = 0.0;
   int m,j,jj,k,kk,r,q;
@@ -850,7 +842,7 @@ struct qinfo *f_info;
 
   return density*sqrt(value)/2; 
 
-}
+} // end q_facet_tension_uq_hess()
 
 /**********************************************************************
                     Quadratic volume quantity
@@ -863,8 +855,7 @@ struct qinfo *f_info;
 *  purpose: value of volume integral on quadratic facet
 */
 
-REAL q_facet_volume_q(f_info)
-struct qinfo *f_info;
+REAL q_facet_volume_q(struct qinfo *f_info)
 { 
   REAL vol = 0.0;
   int m,i;
@@ -888,8 +879,7 @@ struct qinfo *f_info;
 *  purpose: value and gradient of volume integral on quadratic facet
 */
 
-REAL q_facet_volume_q_grad(f_info)
-struct qinfo *f_info;
+REAL q_facet_volume_q_grad(struct qinfo *f_info)
 { 
   REAL vol = 0.0;
   int i,j,k;
@@ -931,8 +921,7 @@ struct qinfo *f_info;
 *  purpose: hessian, value, and gradof volume integral on quadratic facet
 */
 
-REAL q_facet_volume_q_hess(f_info)
-struct qinfo *f_info;
+REAL q_facet_volume_q_hess(struct qinfo *f_info)
 { 
   REAL vol = 0.0;
   int i,j,k;

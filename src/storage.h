@@ -34,6 +34,9 @@
 #define  QUANTITY_OBJECT 5
 #define  INSTANCE_OBJECT 6
 
+// For datafile prediction of storage needs
+extern size_t elements_predicted[NUMELEMENTS];
+
 #ifdef xelement
 /*****************************************************************
 *
@@ -114,7 +117,7 @@ typedef unsigned int
 #define like_sign(id1,id2)     (((id1) & SIGNMASK) == ((id2) & SIGNMASK))
 
 /* number of elements to allocate memory for at one time */
-#define BATCHSIZE 100
+#define BATCHSIZE 1000
 
 /* machine number of id, for MPI */
 #define id_task(id) (int)(((id)&TASKMASK) >> TASK_ID_SHIFT)

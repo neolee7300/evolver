@@ -15,8 +15,16 @@
 
 /* maximum errors of any type before aborting */
 #define MAXERR 20
-int wrap_check ARGS((void));
-int check_body_facets ARGS((void));
+int wrap_check (void);
+int check_body_facets (void);
+
+// Counts of particular types of problems
+int bad_next_prev_count;
+int inconsistent_bodies_count;
+int edge_loop_count;
+int edges_same_vertices_count;
+int facets_same_vertices_count;
+int bad_errors_count; // probably evolver bugs
 
 /*********************************************************************
 *
@@ -28,6 +36,14 @@ int check_body_facets ARGS((void));
 int run_checks()
 {
   int numerr = 0;
+
+  bad_next_prev_count = 0;
+  inconsistent_bodies_count = 0;
+  edge_loop_count = 0;
+  edges_same_vertices_count = 0;
+  facets_same_vertices_count = 0;
+  bad_errors_count = 0; 
+
   if ( memdebug ) memory_report();
   numerr += list_check();
   if ( web.representation != SIMPLEX )
@@ -45,6 +61,8 @@ int run_checks()
   #endif
 
   check_count = numerr;
+  bad_errors_count += bad_next_prev_count;
+
   return numerr;
 } /* end run_checks() */
 
@@ -95,70 +113,82 @@ int list_check()
   element_id id;
   int numerr = 0;
 
-
   /* free_discards(DISCARDS_ALL); */
   for ( type = 0 ; type < NUMELEMENTS ; type++ )
   { 
     element_id backid = NULLID;
 
+#ifdef MPI_EVOLVER
+    if ( (this_task == MASTER_TASK) && (type != BODY) )
+      continue;
+#endif
+
     if ( (web.representation == SIMPLEX)  && (type == EDGE) ) continue;
     #ifndef HASH_ID
     /* check free list */
-    {  int freecount,maxfree;
-     maxfree = web.skel[type].maxcount - web.skel[type].count
+    { int freecount,maxfree;
+      maxfree = web.skel[type].maxcount - web.skel[type].count
                  - web.skel[type].discard_count;
-    id = web.skel[type].free;
-    freecount = 0;
-    while ( id != NULLID )
-    { freecount++;
-      if ( freecount > maxfree )
-      { sprintf(msg,"Type %d freelist has too many elements: %d.\n",
-            type,freecount);
-        erroutstring(msg);
-        if ( ++numerr > MAXERR )
-        {erroutstring("Too many errors.\n"); return numerr;}
-        break;
-      }
-      if ( id_type(id) != type )
-      { sprintf(msg,"Type %d freelist has bad id %lX\n",type,(unsigned long)id);
-        erroutstring(msg);
-        if ( ++numerr > MAXERR )
-        {erroutstring("Too many errors.\n"); return numerr;}
-        break;
-      }
-      if ( elptr(id)->backchain != backid )
-      { sprintf(msg,
-         "Type %d freelist has bad backchain %X instead of %X for id %lX\n",
+      id = web.skel[type].free;
+      freecount = 0;
+      while ( id != NULLID )
+      { freecount++;
+
+        if ( freecount > web.skel[type].maxcount )
+        { sprintf(errmsg,"Type %d freelist seems to be in a loop.\n",
+            type);
+          erroutstring(errmsg);
+          if ( ++numerr > MAXERR )
+          {erroutstring("Too many errors.\n"); return numerr;}
+          break;
+        }
+        if ( id_type(id) != type )
+        { sprintf(errmsg,"Type %d freelist has bad id %lX\n",type,(unsigned long)id);
+          erroutstring(errmsg);
+          if ( ++numerr > MAXERR )
+          {erroutstring("Too many errors.\n"); return numerr;}
+          break;
+        }
+        if ( elptr(id)->backchain != backid )
+        { sprintf(errmsg,
+           "Type %d freelist has bad backchain %lX instead of %lX for id %lX\n",
             type, (unsigned long)elptr(id)->backchain,(unsigned long)backid,
            (unsigned long)id);
-        erroutstring(msg);
+          erroutstring(errmsg);
+          if ( ++numerr > MAXERR )
+          {erroutstring("Too many errors.\n"); return numerr;}
+        }
+        backid = id;
+       
+        id = elptr(id)->forechain;
+      } /* end while */
+
+      if ( backid != web.skel[type].freelast )
+      { sprintf(errmsg,"Type %d freelist has bad freelast %lX instead of %lX.\n",
+          type, (unsigned long)web.skel[type].freelast,(unsigned long)backid);
+        erroutstring(errmsg);
         if ( ++numerr > MAXERR )
         {erroutstring("Too many errors.\n"); return numerr;}
       }
-      backid = id;
-       
-      id = elptr(id)->forechain;
-    } /* end while */
-    if ( backid != web.skel[type].freelast )
-    { sprintf(msg,"Type %d freelist has bad freelast %lX instead of %lX.\n",
-          type, (unsigned long)web.skel[type].freelast,(unsigned long)backid);
-      erroutstring(msg);
-    }
 
-    if ( freecount != maxfree )
-    { sprintf(msg,"Type %d freelist has %d elements instead of %d.\n",
+      if ( freecount != maxfree )
+      { sprintf(errmsg,"Type %d freelist has %d elements instead of %d.\n",
           type,freecount,maxfree);
-      erroutstring(msg);
-    }
-    if ( !equal_id(id,NULLID) )
-    { sprintf(msg,"Type %d freelist last id is non-null: %lX\n",type,
+        erroutstring(errmsg);
+        if ( ++numerr > MAXERR )
+        {erroutstring("Too many errors.\n"); return numerr;}
+      }
+      if ( !equal_id(id,NULLID) )
+      { sprintf(errmsg,"Type %d freelist last id is non-null: %lX\n",type,
           (unsigned long)id);
-      erroutstring(msg);
-    }
+        erroutstring(errmsg);
+        if ( ++numerr > MAXERR )
+        {erroutstring("Too many errors.\n"); return numerr;}
+      }
     }
     #endif
     
-#ifndef MPI_EVOLVER
+
   { int usedcount,maxused,discards;
     element_id prev_id;
 
@@ -175,26 +205,26 @@ int list_check()
       else discards++;
 
       if ( usedcount > maxused )
-      { sprintf(msg,"Type %d usedlist has too many elements: %d.\n",
+      { sprintf(errmsg,"Type %d usedlist has too many elements: %d.\n",
             type,usedcount);
-        erroutstring(msg);
+        erroutstring(errmsg);
         if ( ++numerr > MAXERR )
         {erroutstring("Too many errors.\n"); return numerr;}
         break;
       }
       if ( id_type(id) != type )
-      { sprintf(msg,"Type %d usedlist has bad id %lX of type %d\n",
+      { sprintf(errmsg,"Type %d usedlist has bad id %lX of type %d\n",
             type,(unsigned long)id,id_type(id));
-        erroutstring(msg);
+        erroutstring(errmsg);
         if ( ++numerr > MAXERR )
         { erroutstring("Too many errors.\n"); return numerr;}
         break;
       }
       if ( !equal_id(prev_id,elptr(id)->backchain) )
-      { sprintf(msg,"Type %d used list id %lX has backchain %lX instead of %lX\n",
+      { sprintf(errmsg,"Type %d used list id %lX has backchain %lX instead of %lX\n",
               type,(unsigned long)id,(unsigned long)elptr(id)->backchain,
              (unsigned long)prev_id);
-        erroutstring(msg);
+        erroutstring(errmsg);
         if ( ++numerr > MAXERR )
         {erroutstring("Too many errors.\n"); return numerr;}
       }
@@ -202,35 +232,41 @@ int list_check()
       id = elptr(id)->forechain;
     } /* end while */
     if ( usedcount != maxused )
-    { sprintf(msg,"Type %d usedlist has %d elements.\n",type,usedcount);
-      erroutstring(msg);
+    { sprintf(errmsg,"Type %d usedlist has %d elements instead of %d.\n",type,usedcount,maxused);
+      erroutstring(errmsg);
+      if ( ++numerr > MAXERR )
+      {erroutstring("Too many errors.\n"); return numerr;}
     }
     if ( discards != web.skel[type].discard_count )
-    { sprintf(msg,"Type %d usedlist has %d elements.\n",type,usedcount);
-      erroutstring(msg);
+    { sprintf(errmsg,"Type %d usedlist has %d elements.\n",type,usedcount);
+      erroutstring(errmsg);
+      if ( ++numerr > MAXERR )
+      {erroutstring("Too many errors.\n"); return numerr;}
     }
     if ( !equal_id(id,NULLID) )
-    { sprintf(msg,"Type %d usedlist last id is non-null: %lX\n",type,
+    { sprintf(errmsg,"Type %d usedlist last id is non-null: %lX\n",type,
           (unsigned long)id);
-      erroutstring(msg);
+      erroutstring(errmsg);
+      if ( ++numerr > MAXERR )
+      {erroutstring("Too many errors.\n"); return numerr;}
     }
   }
-#endif
+
   } /* end for loop */
 
   #ifdef MPI_EVOLVER
   for ( type = VERTEX ; type < NUMELEMENTS ; type++ )
   { int k;
     for ( k = 0 ; k < web.skel[type].maxcount ; k++ )
-      if ( (web.skel[type].ibase[k]->local_id & OFFSETMASK) != k )
-      { sprintf(msg,"Task %d: local_id is %08X on %s ibase[0x%X], self id %08X\n",
+      if ( web.skel[type].ibase[k] && (web.skel[type].ibase[k]->local_id & OFFSETMASK) != k )
+      { sprintf(errmsg,"Task %d: local_id is %08X on %s ibase[0x%X], self id %08X\n",
           this_task,(int)(web.skel[type].ibase[k]->local_id),
            typenames[type],k, (int)(web.skel[type].ibase[k]->self_id));
-        erroutstring(msg);
+        erroutstring(errmsg);
       }
   }
   #endif
-  
+    
   return numerr;
 } /* end list_check() */
 
@@ -243,8 +279,9 @@ int list_check()
 *  Purpose:  Check integrity of facetedge chains both ways.
 */
 
-int facetedge_check(flag)
-int flag;  /* PRELIMCHECK for check before subdivision, else REGCHECK */
+int facetedge_check(
+  int flag  /* PRELIMCHECK for check before subdivision, else REGCHECK */
+)
 {
   vertex_id v_id;
   edge_id e_id;
@@ -253,6 +290,11 @@ int flag;  /* PRELIMCHECK for check before subdivision, else REGCHECK */
   int count;
   int numerr = 0;
   int n;
+
+#ifdef MPI_EVOLVER
+  if ( this_task == MASTER_TASK )
+    return 0;
+#endif
 
   /* check facetedge chain consistencies */
   if ( numerr >= MAXERR ) numerr = 0;
@@ -265,122 +307,171 @@ int flag;  /* PRELIMCHECK for check before subdivision, else REGCHECK */
 	if ( (web.representation==SOAPFILM) || (id_task(f_id)==this_task) )
 #endif
    if ( valid_id(f_id) && !valid_element(f_id) )
-     { sprintf(msg,"Facetedge  %s links to invalid facet %08lX.\n",
+     { sprintf(errmsg,"Facetedge  %s links to invalid facet %08lX.\n",
           ELNAME(fe_id), (unsigned long)f_id);
-        erroutstring(msg);
+        erroutstring(errmsg);
+        bad_errors_count++;
+        if ( ++numerr > MAXERR )
+        {erroutstring("Too many errors.\n"); return numerr;}
      }
 #ifdef MPI_EVOLVER
 	if ( (web.representation==SOAPFILM) || (id_task(f_id)==this_task) )
 #endif
     if ( valid_id(f_id) && !valid_element(get_facet_fe(f_id)) )
-    { sprintf(msg,"Facetedge %s links to facet %s with invalid facetedge %s.\n",
+    { sprintf(errmsg,"Facetedge %s links to facet %s with invalid facetedge %s.\n",
         ELNAME(fe_id),ELNAME1(f_id),ELNAME2(get_facet_fe(f_id)));
-      erroutstring(msg);
+      erroutstring(errmsg);
+      bad_errors_count++;
+      if ( ++numerr > MAXERR )
+      {erroutstring("Too many errors.\n"); return numerr;}
     }
     e_id = get_fe_edge(fe_id);
  #ifdef MPI_EVOLVER
     if ( mpi_corona_state > NO_CORONA || id_task(e_id) == this_task )
  #endif
-    {
-    if ( valid_id(e_id) && !valid_element(e_id) )
-    { sprintf(msg,"Facetedge %s links to invalid edge %08lX.\n",
+    
+    if ( valid_id(e_id) )
+    { if ( !valid_element(e_id) )
+      { sprintf(msg,"Facetedge %s links to invalid edge %08lX.\n",
             ELNAME(fe_id),(unsigned long)e_id);
-       erroutstring(msg);
-    }
-    if ( valid_id(e_id) && !valid_element(get_edge_fe(e_id)) )
-     { sprintf(msg,"Facetedge %s links to edge %s with invalid facetedge %s.\n",
-         ELNAME(fe_id),ELNAME1(e_id),ELNAME2(get_edge_fe(e_id)));
-        erroutstring(msg);
-     }
+         erroutstring(msg);
+         bad_errors_count++;
+         if ( ++numerr > MAXERR )
+              {erroutstring("Too many errors.\n"); return numerr;}
+      }
+      else
+      { facetedge_id ffe_id = get_edge_fe(e_id);
+        if ( valid_id(e_id) && !valid_element(ffe_id) )
+        { sprintf(msg,"Facetedge %s links to edge %s with invalid facetedge %s.\n",
+           ELNAME(fe_id),ELNAME1(e_id),ELNAME2(ffe_id));
+           erroutstring(msg);
+           bad_errors_count++;
+           if ( ++numerr > MAXERR )
+           {erroutstring("Too many errors.\n"); return numerr;}
+        }
+      }
     }
     fe = get_prev_edge(fe_id);
-    if ( valid_id(fe) && !equal_id(get_next_edge(fe),fe_id) )
-      { sprintf(msg,"Facetedge %s has bad prev edge link\n",ELNAME(fe_id));
-        erroutstring(msg);
-        if ( ++numerr > MAXERR )
-              {erroutstring("Too many errors.\n"); return numerr;}
-      }
+    if ( valid_id(fe) && (!valid_element(fe) || !equal_id(get_next_edge(fe),fe_id)) )
+    { sprintf(msg,"Facetedge %s has bad prev edge link\n",ELNAME(fe_id));
+      erroutstring(msg);
+      bad_next_prev_count++;
+      if ( ++numerr > MAXERR )
+      {erroutstring("Too many errors.\n"); return numerr;}
+    }
     fe = get_next_edge(fe_id);
-    if ( valid_id(fe) && !equal_id(get_prev_edge(fe),fe_id) )
-      { sprintf(msg,"Facetedge %s has bad next edge link\n",ELNAME(fe_id));
-        erroutstring(msg);
-        if ( ++numerr > MAXERR )
-              {erroutstring("Too many errors.\n"); return numerr;}
-      }
+    if ( valid_id(fe) && (!valid_element(fe) || !equal_id(get_prev_edge(fe),fe_id)) )
+    { sprintf(msg,"Facetedge %s has bad next edge link\n",ELNAME(fe_id));
+      erroutstring(msg);
+      bad_next_prev_count++;
+      if ( ++numerr > MAXERR )
+      {erroutstring("Too many errors.\n"); return numerr;}
+    }
     fe = get_next_facet(fe_id);
     if ( valid_id(fe) && !equal_id(get_prev_facet(fe),fe_id) )
-      { sprintf(msg,"Facetedge %s has bad next facet link\n",ELNAME(fe_id));
-        erroutstring(msg);
-        if ( ++numerr > MAXERR )
-              {erroutstring("Too many errors.\n"); return numerr;}
-      }
+    { sprintf(msg,"Facetedge %s has bad next facet link\n",ELNAME(fe_id));
+      erroutstring(msg);
+      bad_next_prev_count++;
+      if ( ++numerr > MAXERR )
+      {erroutstring("Too many errors.\n"); return numerr;}
+    }
     fe = get_prev_facet(fe_id);
     if ( valid_id(fe) && !equal_id(get_next_facet(fe),fe_id) )
-      { sprintf(msg,"Facetedge %s has bad prev facet link\n",ELNAME(fe_id));
-        erroutstring(msg);
-        if ( ++numerr > MAXERR )
-              {erroutstring("Too many errors.\n"); return numerr;}
-      }
+    { sprintf(msg,"Facetedge %s has bad prev facet link\n",ELNAME(fe_id));
+      erroutstring(msg);
+      bad_next_prev_count++;
+      if ( ++numerr > MAXERR )
+      {erroutstring("Too many errors.\n"); return numerr;}
+    }
     fe = get_next_edge(fe_id);
 #ifndef MPI_EVOLVER
     if ( valid_id(fe) && !equal_id(get_fe_headv(fe_id),get_fe_tailv(fe)) )
-      { sprintf(msg,"Facetedge %s head vertex disagrees with next tail.\n",
-        ELNAME(fe_id));
-        erroutstring(msg);
-        if ( ++numerr > MAXERR )
-              {erroutstring("Too many errors.\n"); return numerr;}
-      }
+    { sprintf(msg,"Facetedge %s head vertex disagrees with next tail.\n",
+      ELNAME(fe_id));
+      erroutstring(msg);
+      bad_next_prev_count++;
+      if ( ++numerr > MAXERR )
+      {erroutstring("Too many errors.\n"); return numerr;}
+    }
 #endif
     fe = get_prev_edge(fe_id);
 #ifndef MPI_EVOLVER
     if ( valid_id(fe) && !equal_id(get_fe_tailv(fe_id),get_fe_headv(fe)) )
-      { sprintf(msg,"Facetedge %s tail vertex disagrees with prev head.\n",
-        ELNAME(fe_id));
-        erroutstring(msg);
-        if ( ++numerr > MAXERR )
-              {erroutstring("Too many errors.\n"); return numerr;}
-      }
+    { sprintf(msg,"Facetedge %s tail vertex disagrees with prev head.\n",
+      ELNAME(fe_id));
+      erroutstring(msg);
+      bad_next_prev_count++;
+      if ( ++numerr > MAXERR )
+      {erroutstring("Too many errors.\n"); return numerr;}
+    }
 #endif
     count++;
   }
   if ( count != web.skel[FACETEDGE].count )
-    { sprintf(msg,"Only %d facetedges out of %ld generated.\n",
+  { sprintf(msg,"Only %d facetedges out of %ld generated.\n",
          count,web.skel[FACETEDGE].count);
-      erroutstring(msg);
-    }
+    erroutstring(msg);
+    bad_errors_count++;
+    if ( ++numerr > MAXERR )
+    {erroutstring("Too many errors.\n"); return numerr;}
+  }
 
-    /* check that vertices have legit edge link */
+  /* check that vertices have legit edge link */
   FOR_ALL_VERTICES(v_id)
-  {
+  { size_t orig;
     e_id = get_vertex_edge(v_id);
-    if ( !valid_id(e_id) ) continue; 
-    if ( !valid_element(e_id) ) 
-     { sprintf(errmsg,"Vertex %s has invalid edge link.\n",
-          ELNAME(v_id)+1);
-       kb_error(1829,errmsg,WARNING);
-       continue;
-     }
-    else if (get_vattr(v_id) & Q_MIDPOINT)
-     { if ( !equal_id(v_id,get_edge_midv(e_id)) )
-        { sprintf(errmsg,"Vertex %s has bad midpoint edge link.\n",ELNAME(v_id));
-          kb_error(1830,errmsg,WARNING);
-          continue;
+    if ( !valid_id(e_id) )
+    { if ( !(get_vattr(v_id) & BARE_NAKED) )
+      { sprintf(errmsg,"Vertex %s has no edges.\n",
+          ELNAME(v_id));
+        erroutstring(errmsg);
+        orig = get_original(v_id);
+        if ( valid_id(orig) && !equal_element(orig,v_id) )
+        { sprintf(errmsg,"      (originally vertex %s)\n",ELNAME(v_id));
+          erroutstring(errmsg);
         }
-     }
+      }
+      continue;
+    }
+    if ( !valid_element(e_id) ) 
+    { sprintf(errmsg,"Vertex %s has invalid edge link.\n",
+          ELNAME(v_id)+1);
+      kb_error(1829,errmsg,WARNING);
+      bad_errors_count++;
+      if ( ++numerr > MAXERR )
+      {erroutstring("Too many errors.\n"); return numerr;}  
+      continue;
+    }
+    else if (get_vattr(v_id) & Q_MIDPOINT)
+    { if ( !equal_id(v_id,get_edge_midv(e_id)) )
+      { sprintf(errmsg,"Vertex %s has bad midpoint edge link.\n",ELNAME(v_id));
+        kb_error(1830,errmsg,WARNING);
+        bad_errors_count++;
+        if ( ++numerr > MAXERR )
+        {erroutstring("Too many errors.\n"); return numerr;}   
+        continue;
+      }
+    }
     else if (get_vattr(v_id) & Q_MIDEDGE)
     { vertex_id *v = get_edge_vertices(e_id);
       int i;
       for ( i = 0 ; i <= web.lagrange_order ; i++ )
          if ( equal_id(v_id,v[i]) ) break;
+      bad_errors_count++;
       if ( i > web.lagrange_order )
       { sprintf(errmsg,"Vertex %s has bad edge link.\n",ELNAME(v_id));
         kb_error(1831,errmsg,WARNING);
+        if ( ++numerr > MAXERR )
+              {erroutstring("Too many errors.\n"); return numerr;}   
       }
     }
     else if (get_vattr(v_id) & Q_MIDFACET) { }
     else if ( !equal_id(v_id,get_edge_tailv(e_id)) )
      { sprintf(errmsg,"Vertex %s has bad edge link.\n",ELNAME(v_id));
        kb_error(1832,errmsg,WARNING);
+       bad_errors_count++;
+       if ( ++numerr > MAXERR )
+       {erroutstring("Too many errors.\n"); return numerr;}   
        continue;
      }
   } /* end vertices */
@@ -396,6 +487,9 @@ int flag;  /* PRELIMCHECK for check before subdivision, else REGCHECK */
       { sprintf(errmsg,"Vertex %s has bad edge loop from edge %s.\n",
             ELNAME(v_id),ELNAME1(e_id));
         kb_error(1833,errmsg,WARNING);
+        bad_errors_count++;
+        if ( ++numerr > MAXERR )
+        {erroutstring("Too many errors.\n"); return numerr;}
         break;
       }
     }
@@ -408,6 +502,9 @@ int flag;  /* PRELIMCHECK for check before subdivision, else REGCHECK */
       { sprintf(errmsg,"Vertex %s has bad edge loop from edge %s.\n",
             ELNAME(v_id),ELNAME1(e_id));
         kb_error(1834,errmsg,WARNING);
+        bad_errors_count++;
+        if ( ++numerr > MAXERR )
+        {erroutstring("Too many errors.\n"); return numerr;} 
         break;
       }
     }
@@ -425,28 +522,33 @@ int flag;  /* PRELIMCHECK for check before subdivision, else REGCHECK */
     if ( mpi_corona_state > NO_CORONA || id_task(v_id) == this_task )
 #endif
     if ( get_vattr(v_id) & AXIAL_POINT )
-      { sprintf(msg,"Vertex %s is axial and not first vertex of edge %s.\n",
+    { sprintf(msg,"Vertex %s is axial and not first vertex of edge %s.\n",
             ELNAME(v_id),ELNAME1(e_id));
-        erroutstring(msg);
-      }
+      erroutstring(msg);
+      if ( ++numerr > MAXERR )
+      {erroutstring("Too many errors.\n"); return numerr;}
+   
+    }
     last_fe = NULLID;
     fe_id = first_fe = get_edge_fe(e_id);
     if ( valid_id(fe_id) ) do
     { edge_id ee_id = get_fe_edge(fe_id);
       if ( !equal_id(e_id,ee_id) )
-         { sprintf(msg,"Facetedge %s on edge %s instead of %s.\n",
-             ELNAME(fe_id),SELNAME1(ee_id), SELNAME2(e_id));
-           erroutstring(msg);
-           if ( ++numerr > MAXERR )
-              {erroutstring("Too many errors.\n"); goto facet_check;}
-         }
+      { sprintf(msg,"Facetedge %s on edge %s but found in loop of edge %s.\n",
+            ELNAME(fe_id),SELNAME1(ee_id), SELNAME2(e_id));
+        erroutstring(msg);
+        bad_errors_count++;
+        if ( ++numerr > MAXERR )
+            {erroutstring("Too many errors.\n"); goto facet_check;}
+      }
       count++;
       if ( count > web.skel[FACETEDGE].count )
       { sprintf(msg,"Bad chain of facetedges around edge %s.\n",
           ELNAME(e_id));
         erroutstring(msg);
+        bad_errors_count++;
         if ( ++numerr > MAXERR )
-              {erroutstring("Too many errors.\n"); goto facet_check;}
+        {erroutstring("Too many errors.\n"); goto facet_check;}
       }
       last_fe = fe_id;
       fe_id = get_next_facet(fe_id);
@@ -457,13 +559,13 @@ int flag;  /* PRELIMCHECK for check before subdivision, else REGCHECK */
        { edge_id orig;
          bare_edge_count++;
          if ( get_eattr(e_id) & BARE_NAKED ) continue;
-         sprintf(msg,"Edge %s has no facets.\n",ELNAME(e_id));
+         sprintf(msg,"Edge %s has no facets, and is not marked \"bare\".\n",ELNAME(e_id));
          erroutstring(msg);
          orig = get_original(e_id);
          if ( valid_id(orig) && !equal_element(orig,e_id) )
-            { sprintf(msg,"      (originally edge %s)\n",ELNAME(e_id));
-              erroutstring(msg);
-            }
+         { sprintf(msg,"      (originally edge %s)\n",ELNAME(e_id));
+           erroutstring(msg);
+         }
        }
      }
     else if ( !equal_id(get_edge_fe(e_id),get_next_facet(last_fe)) )
@@ -473,9 +575,12 @@ int flag;  /* PRELIMCHECK for check before subdivision, else REGCHECK */
        erroutstring(msg);
        orig = get_original(e_id);
        if ( valid_id(orig) && !equal_element(orig,e_id) )
-          { sprintf(msg,"      (originally edge %s)\n",ELNAME(e_id));
-            erroutstring(msg);
-          }
+       { sprintf(msg,"      (originally edge %s)\n",ELNAME(e_id));
+         erroutstring(msg);
+       }
+       bad_next_prev_count++;
+       if ( ++numerr > MAXERR )
+       {erroutstring("Too many errors.\n"); return numerr;}  
      }
   }
 #ifndef MPI_EVOLVER
@@ -526,8 +631,9 @@ facet_check:
         { sprintf(msg,"Facetedge %s on facet %s instead of %s.\n",
              ELNAME(fe_id),SELNAME1(ff_id), SELNAME2(f_id));
            erroutstring(msg);
+           bad_errors_count++;
            if ( ++numerr > MAXERR )
-              {erroutstring("Too many errors.\n"); break;}
+            {erroutstring("Too many errors.\n"); break;}
          }
          count++;
          if ( ++thiscount > web.skel[FACETEDGE].count )
@@ -537,10 +643,13 @@ facet_check:
            erroutstring(msg);
            orig = get_original(f_id);
            if ( valid_id(orig) && !equal_element(orig,f_id)  )
-             { sprintf(msg,"      (originally facet %s)\n", ELNAME(orig));
-                erroutstring(msg);
-             }
-           break;
+           { sprintf(msg,"      (originally facet %s)\n", ELNAME(orig));
+             erroutstring(msg);
+           }
+           bad_errors_count++;
+           if ( ++numerr > MAXERR )
+           {erroutstring("Too many errors.\n"); return numerr;}
+              break;
          }
        last_fe = fe_id;
      } /* end while */
@@ -552,11 +661,12 @@ facet_check:
        erroutstring(msg);
        orig = get_original(f_id);
        if ( valid_id(orig) &&  !equal_element(orig,f_id) )
-          { sprintf(msg,"      (originally facet %s)\n", ELNAME(orig));
-            erroutstring(msg);
-          }
+       { sprintf(msg,"      (originally facet %s)\n", ELNAME(orig));
+         erroutstring(msg);
+       }
+       bad_errors_count++;
        if ( ++numerr > MAXERR )
-              {erroutstring("Too many errors.\n"); break;}
+       {erroutstring("Too many errors.\n"); break;}
      }
      if ( (thiscount != 3) && (flag == REGCHECK)  )
      { facet_id orig;
@@ -564,20 +674,60 @@ facet_check:
        erroutstring(msg);
        orig = get_original(f_id);
        if ( valid_id(orig) && !equal_element(orig,f_id) )
-          { sprintf(msg,"      (originally facet %s)\n", ELNAME(orig));
-            erroutstring(msg);
-          }
+       { sprintf(msg,"      (originally facet %s)\n", ELNAME(orig));
+         erroutstring(msg);
+       }
+       bad_errors_count++;
        if ( ++numerr > MAXERR )
-          {erroutstring("Too many errors.\n"); break;}
+        {erroutstring("Too many errors.\n"); break;}
      }
     }
     if ( count != web.skel[FACETEDGE].count )
-     { sprintf(msg,"Facets have %d facet-edges out of %ld used.\n",
+    { sprintf(msg,"Facets have %d facet-edges out of %ld used.\n",
           count,web.skel[FACETEDGE].count);
-       erroutstring(msg);
-       ++numerr;
-     }
+      erroutstring(msg);
+      ++numerr;
+      bad_errors_count++;
+    }
   } /* end SOAPFILM */
+  else if ( web.representation == STRING )
+  { // see if facets account for all facetedges, to detect
+    // split facet edge chains.
+    int count = 0;
+    MFOR_ALL_FACETEDGES(fe_id)
+    { unset_attr(fe_id,CHECKMARKED);
+      if ( !valid_id(get_fe_facet(fe_id)) )
+      { count++;
+        set_attr(fe_id,CHECKMARKED);
+      }
+    }
+    MFOR_ALL_FACETS(f_id)
+    { facetedge_id start_fe = fe_id = get_facet_fe(f_id);
+      while ( valid_id(fe_id) )
+      { count++;
+        set_attr(fe_id,CHECKMARKED);
+        fe_id = get_next_edge(fe_id);
+        if ( equal_id(fe_id,start_fe) )
+          break;
+      }
+    }
+    if ( count != web.skel[FACETEDGE].count )
+    { sprintf(msg,"Facets have %d facet-edges out of %ld used.\n",
+          count,web.skel[FACETEDGE].count);
+      erroutstring(msg);
+      ++numerr;   
+      bad_errors_count++;
+    }
+    // check all facetedges reached
+    MFOR_ALL_FACETEDGES(fe_id)
+      if ( !(get_attr(fe_id) & CHECKMARKED) )
+      { sprintf(msg,"Facetedge %s on facet %s and edge %s not reached in facet edge list.\n",
+           ELNAME(fe_id),ELNAME2(get_fe_facet(fe_id)),ELNAME3(get_fe_edge(fe_id)));
+        erroutstring(msg);
+        ++numerr;
+        bad_errors_count++;
+      }
+  } // end STRING
   return numerr;
 } /* end facetedge_check() */
 
@@ -596,20 +746,35 @@ int vertex_facet_check()
   { element_id f_id, start_f_id;
     int count = 0;
     start_f_id = get_vertex_first_facet(v_id);
+    f_id = start_f_id;
     if ( !valid_id(start_f_id) )
       continue;
-    f_id = start_f_id;
+    if ( get_vattr(v_id) & Q_MIDFACET )
+    { vertex_id *v = get_facet_vertices(f_id);
+      int i,j,k;
+      for ( i = 0, k=0 ; i <= web.lagrange_order ; i++ )
+        for ( j = 0 ; i+j <= web.lagrange_order ; j++,k++ )
+          if ( equal_id(v_id,v[k]) )
+            goto vfc_cont;
+      sprintf(msg,"Vertex %s not found in facet %s.\n",ELNAME(v_id),ELNAME2(f_id));
+      erroutstring(msg);
+      ++numerr;
+      bad_errors_count++;
+vfc_cont:          
+      continue;
+    }
+
     do
     { f_id = get_next_vertex_facet(v_id,f_id);
       count++;
-      if ( count > web.skel[FACET].count )
+      if ( count > 3*web.skel[FACET].count )
       { sprintf(msg,"Vertex %s has bad facet list.\n",ELNAME(v_id));
         erroutstring(msg);
         ++numerr;
+        bad_errors_count++;
         break;
       }
     } while ( !equal_id(f_id,start_f_id) );
-
   }
 
   if ( (numerr > 0) && (web.representation == SIMPLEX) )
@@ -618,7 +783,7 @@ int vertex_facet_check()
   }
 
   return numerr;
-}
+} // end vertex_facet_check()
 
 /************************************************************************
 *
@@ -646,6 +811,7 @@ int facet_body_check()
        ELNAME(b_id),ELNAME1(f_id));
       erroutstring(msg);
       numerr++;
+      bad_errors_count++;
       continue;
      }
      if ( !equal_id(b_id,get_facet_body(f_id) ) )
@@ -653,6 +819,7 @@ int facet_body_check()
          ELNAME(b_id),SELNAME1(f_id),ELNAME2(get_facet_body(f_id)));
        erroutstring(msg);
        numerr++;
+       bad_errors_count++;
      }
   }
 
@@ -676,10 +843,12 @@ int facet_body_check()
       if ( /* !equal_id(b_id,bb_id)  */
            (ordinal(b_id) != ordinal(bb_id))  /* for MPI, temp kludge */
              && !(get_attr(e_id)&(CONSTRAINT|FIXED|BOUNDARY)) )
-      { sprintf(msg,"Inconsistent bodies for facets on edge %s.",
+      { sprintf(errmsg,"Inconsistent bodies for facets on edge %s.",
               ELNAME(e_id) );
-        erroutstring(msg);
+        //erroutstring(errmsg);
+        kb_error(8745,errmsg,WARNING);
         numerr++;
+        inconsistent_bodies_count++;
         orig = get_original(e_id);
         if ( valid_id(orig) && !equal_element(orig,e_id) )
         { sprintf(msg,"      (originally edge %s)",ELNAME(orig));
@@ -750,12 +919,14 @@ int check_body_facets()
               ELNAME(f_id),ELNAME1(b_id));
         erroutstring(msg);
         numerr++;
+        bad_errors_count++;
       }        
       if ( !equal_id(b_id,get_facet_body(f_id)) )
       { sprintf(msg,"Facet %s on body %s facet list, but is on body %s.\n",
           SELNAME(f_id),ELNAME1(b_id),ELNAME2(get_facet_body(f_id))); 
         erroutstring(msg);
         numerr++;
+        bad_errors_count++;
       }
       next_f = get_next_body_facet(f_id);  
       if ( !equal_id(f_id,get_prev_body_facet(next_f)) )
@@ -763,13 +934,14 @@ int check_body_facets()
          SELNAME(f_id));
         erroutstring(msg);
         numerr++;
+        bad_errors_count++;
         break;
       }
       f_id = next_f;
     } while ( !equal_id(f_id,start_f) );
   }
   return numerr;
-}
+}  // end check_body_facets()
 
 /**********************************************************************
 *
@@ -780,15 +952,14 @@ int check_body_facets()
 *        Also checks for edges that have the same endpoints.
 */
 
-int vvvvcomp(a,b)
-struct vvvv *a,*b;
+int vvvvcomp(struct vvvv *a,struct vvvv*b)
 { int i;
   for ( i = 0 ; i < 3 ; i++ )
   { if ( a->v[i] < b->v[i] ) return -1;
     if ( a->v[i] > b->v[i] ) return 1;
   }
   return 0;
-}
+} // end vvvvcomp()
 
 int collapse_check()
 {
@@ -829,6 +1000,7 @@ int collapse_check()
       }
       erroutstring(".\n");
       numerr++;
+      edge_loop_count++;
     }
     if ( v1 <= v2 )
       { current->id = e_id;
@@ -844,6 +1016,7 @@ int collapse_check()
       { erroutstring("Edge count disagrees with supposed value.");
         count--;
         numerr++;
+        bad_errors_count++;
         break;
       }
     current++;
@@ -855,11 +1028,13 @@ int collapse_check()
    { if ( vvvvcomp(vvlist+i,vvlist+i+1) == 0 )
      if ( !web.symmetry_flag ||
         (get_edge_wrap(vvlist[i].id) == get_edge_wrap(vvlist[i+1].id)) )
-      { sprintf(msg,"Edges %s and %s have same endpoints: %s %s.\n",
+      { sprintf(errmsg,"Edges %s and %s have same endpoints: %s %s",
          ELNAME(vvlist[i].id),ELNAME1(vvlist[i+1].id),
            ELNAME2(vvlist[i].v[0]), ELNAME3(vvlist[i].v[1]));
-         erroutstring(msg);
+        // erroutstring(errmsg);
+         kb_error(8744,errmsg,WARNING);
          numerr++;
+         edges_same_vertices_count++;
       }
    }
   temp_free((char*)vvlist);
@@ -897,6 +1072,7 @@ int collapse_check()
     current->v[2] = v3;
     if ( ++count > web.skel[FACET].count )
       { erroutstring("Facet count disagrees with supposed value.");
+        bad_errors_count++;
         count--;
         if ( ++numerr > MAXERR )
               {erroutstring("Too many errors.\n"); return numerr;}
@@ -913,11 +1089,13 @@ int collapse_check()
           && !(get_vattr(vvlist[i].v[1]) & AXIAL_POINT)
           && !(get_vattr(vvlist[i].v[2]) & AXIAL_POINT)
        )
-    { sprintf(msg,"Facets %s and %s have same vertices: %s %s %s.\n",
+    { sprintf(errmsg,"Facets %s and %s have same vertices: %s %s %s.",
          ELNAME(vvlist[i].id),ELNAME1(vvlist[i+1].id), ELNAME2(vvlist[i].v[0]),
          ELNAME3(vvlist[i].v[1]),ELNAME4(vvlist[i].v[2]));
-      erroutstring(msg);
+     // erroutstring(errmsg);
+      kb_error(8473,errmsg,WARNING);
       numerr++;
+      facets_same_vertices_count++;
     }
   }
   temp_free((char*)vvlist);
@@ -1022,21 +1200,22 @@ int wrap_check()
   int i;
 
   if ( web.torus_flag )
-  FOR_ALL_EDGES(e_id)
-  { WRAPTYPE wrap = get_edge_wrap(e_id);
-    for ( i = 0 ; i < SDIM ; i++, wrap >>= TWRAPBITS )
-      switch ( wrap & WRAPMASK  )
-      {
-          case  NEGWRAP :  break;
-          case  0       :  break;
-          case  POSWRAP :  break;
-          default : 
-              sprintf(errmsg,"Big wrap %d on edge %s period %d\n",
-                  WRAPNUM(wrap&WRAPMASK),ELNAME(e_id),i+1);
-              erroutstring(errmsg);
-              numerr++;
-            break;
-      }
+  { FOR_ALL_EDGES(e_id)
+    { WRAPTYPE wrap = get_edge_wrap(e_id);
+      for ( i = 0 ; i < SDIM ; i++, wrap >>= TWRAPBITS )
+        switch ( wrap & WRAPMASK  )
+        {
+            case  NEGWRAP :  break;
+            case  0       :  break;
+            case  POSWRAP :  break;
+            default : 
+                sprintf(errmsg,"Big wrap %d on edge %s period %d\n",
+                    (int)WRAPNUM(wrap&WRAPMASK),ELNAME(e_id),i+1);
+                erroutstring(errmsg);
+                numerr++;
+              break;
+        }
+    }
   }
 
   FOR_ALL_FACETS(f_id)

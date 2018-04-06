@@ -1,25 +1,29 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML>
 <html>
 <head>
 <title>Surface Evolver catenoid example</title>
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+<link rel="stylesheet" type="text/css" href="evdoc-style.css" />
 </head>
 <BODY>
-<center>
-<h1><a href="http://www.susqu.edu/facstaff/b/brakke/evolver/evolver.htm">
+<h1 class="center"><a href="http://www.susqu.edu/facstaff/b/brakke/evolver/evolver.htm" class="comic">
 Surface Evolver</a> Documentation</h1>
-</center>
 
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
-<a href="index.htm">Index.</a>
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<a href="index.htm">Index.</a><br>
+<a href="twointor.htm">Next: Kelvin foam example.</a> <br>
+<a href="tutorial.htm#tutorial">Back to top of tutorial.</a>
 
-<a name="catenoid example"></a>
+<a id="catenoid_example"></a>
 <h1> Example: Catenoid. </h1>
 
 The catenoid is the minimal surface formed between two rings not too far apart.
-In cylindrical coordinates, its equation is r = (1/a)cosh(az).
+In cylindrical coordinates, its equation is <code>r = (1/a)cosh(az)</code>.
 In cat.fe, both the upper and lower rings are given as one-parameter
 boundary wires.  The separation and radius are parameters, so
-you can change them during a run with the A command.
+you can change them during a run with assignment statements or the 
+<a href="single.htm#A" class="keyword">A</a> command.
 The initial radius given is the minimum for which a catenoid can exist
 for the given separation of the rings. To get a stable catenoid, you
 will have to increase this value.  However, if you do run with the 
@@ -33,7 +37,7 @@ from subdividing the edges are likewise fixed.  <P>
 
 <table>
 <tr><td>
-<img src="catbare.gif" align="middle" alt="catenoid skeleton"></td>
+<img src="catbare.gif" alt="catenoid skeleton"></td>
 <td>  The initial catenoid skeleton, with
 vertices and edges numbered. </td></tr>
 </table>
@@ -100,7 +104,7 @@ faces
 
 </pre>
 
-The parameter in a boundary definition is always P1 (and P2
+The parameter in a boundary definition is always <code>p1</code> (and <code>p2</code>
 in a two-parameter boundary). The Evolver can handle periodic parameterizations,
 as is done in this example.
 
@@ -116,8 +120,8 @@ commands (displaying at your convenience):
     <a href="single.htm#g">g</a>       (spikes collapse) 
 </pre>
 The catenoid shows some of the subtleties of evolution.  Suppose the
-initial radius is set to RMAX = 1.0 and the initial height to
-ZMAX = 0.55 (these are pre-set in catman.fe).
+initial radius is set to <code>RMAX = 1.0</code> and the initial height to
+<code>ZMAX = 0.55</code> (these are pre-set in <code>catman.fe</code>).
 Fifty iterations with optimizing scale factor result in an area of 6.458483.
  At this point, each iteration is reducing the area by only .0000001,
 the triangles are all nearly equilateral, everything
@@ -131,15 +135,20 @@ horizontal circles. Hence the optimum triangulation appears to be
 rectangles with diagonals. <P>
 
 The evolution can be speeded up by turning on the 
-<a href="iterate.htm#conjugate gradient">conjugate gradient</a>
-method with the <a href="single.htm#U">U</a> command.  
-With catman.fe, try the script "<tt>r; u; U; g 70</tt>".
+<a href="iterate.htm#conjugate-gradient" >conjugate gradient</a>
+method with the 
+<a href="single.htm#U" class="keyword">U</a> 
+command.  
+With <code>catman.fe</code>, try the script "<code>r; u; U; g 70</code>".
 For conjugate gradient cognoscenti,
 the saddle point demonstrates the difference between the Fletcher-Reeves
 and Polak-Ribiere versions of conjugate gradient. The saddle point
 seems to confuse the Fletcher-Reeves version (which used to be the default).
 However, the Polak-Ribiere version (the current default) has little problem.
-The U toggles conjugate gradient on and off, and ribiere
+The 
+<a href="single.htm#U" class="keyword">U</a> 
+command toggles conjugate gradient on and off, and 
+<a href="toggle.htm#ribiere" class="keyword">ribiere</a>
 toggles the Polak-Ribiere version.
 With Fletcher-Reeves conjugate gradient in effect, the
 saddle point is reached at iteration 17 and area starts decreasing again
@@ -151,15 +160,18 @@ In Polak-Ribiere mode, no restart is necessary. <P>
 
 Exercise for the reader: Get the Surface Evolver to display an unstable
 catenoid by declaring the catenoid facets to be the boundary of a body,
-and adjusting the body volume with the b command to get zero pressure.
-See the sample datafile catbody.fe.
+and adjusting the body volume with the 
+<a href="single.htm#b" class="keyword">b</a> 
+command to get zero pressure.
+See the sample datafile <code>catbody.fe</code>.
 <P>
 
 <hr>
-<a href="twointor.htm">Kelvin foam example.</a>
+<a href="twointor.htm">Next: Kelvin foam example.</a> <br>
 <a href="tutorial.htm#tutorial">Back to top of tutorial.</a>
 <br>
-<a href="evolver.htm#doc top">Back to top of Evolver documentation.</a>
+<a href="evolver.htm#doc-top">Back to top of Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 </body>
 </html> 

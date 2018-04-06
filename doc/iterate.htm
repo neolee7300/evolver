@@ -1,44 +1,48 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
-<HEAD><TITLE>Surface Evolver Documentation: iteration
-</title></head>
+<!DOCTYPE HTML>
+<HEAD><TITLE>Surface Evolver Documentation: iteration </title>
+<link rel="stylesheet" type="text/css" href="evdoc-style.css" />
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+</head>
 
 <BODY>
 <!--NewPage-->
-<center>
-<h1><a href="http://www.susqu.edu/facstaff/b/brakke/evolver/evolver.htm">
+
+<h1 class="center">
+<a href="http://www.susqu.edu/brakke/evolver/evolver.htm" class="comic">
 Surface Evolver</a> Documentation</h1>
-</center>
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
+
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 
 
-<hr><a name="gradient descent iteration"> </a>
+<hr><a   id="gradient-descent-iteration"> </a>
 <h2>Gradient Descent Iteration</h2>
 
 Basic surface evolution is done by gradient descent iteration.
 Relevant topics are:
 <ul>
-<li><a href="#iteration step">Iteration step</a>
-<li><a href="#scale factor">Scale factor</a>
-<li><a href="#optimizing scale">Optimizing scale factor</a>
-<li><a href="#conjugate gradient">Conjugate gradient</a>
+<li><a href="#iteration-step">Iteration step</a>
+<li><a href="#scale-factor">Scale factor</a>
+<li><a href="#optimizing-scale">Optimizing scale factor</a>
+<li><a href="#conjugate-gradient">Conjugate gradient</a>
 <li><a href="#diffusion">Diffusion</a>
 <li><a href="#stability">Stability</a>
 </ul>
 <hr>
-<a name="iteration step"></a><h2>Gradient descent iteration step</h2>
+<a   id="iteration-step"></a><h2>Gradient descent iteration step</h2>
 Each <a href="single.htm#g">g</a> command iteration does the following:
 <ul>
 <li> Calculates the force vector at each vertex as the gradient
 of the total <a href="energies.htm">energy</a>.
 <li> Calculates the gradients at each vertex of constrained 
-<a href="elements.htm#body volume">body
+<a href="elements.htm#body-volume">body
 volumes</a> and 
-<a href="quants.htm#fixed quantity">named quantities</a>.  
+<a href="quants.htm#fixed-quantity">named quantities</a>.  
 Also calculates the multiple of
 gradient motion needed to restore target values of the constraints.
 <li> Projects the forces to be tangent to 
-<a href="constrnt.htm#level set constraints">level set constraints</a>,
+<a href="constrnt.htm#level-set-constraints">level set constraints</a>,
 volume constraints (pressure is calculated here), 
 and fixed quantity constraints.
 <li> If any <a href="model.htm#mobility">mobility</a> options are in effect,
@@ -46,7 +50,7 @@ the proper force to velocity conversion is done.
 <li> If the <a href="toggle.htm#normal_motion">normal_motion</a> toggle is
 on, then velocities are projected to the surface normal.
 <li> Does the 
-<a href="#conjugate gradient">conjugate gradient</a>
+<a href="#conjugate-gradient">conjugate gradient</a>
  projection, if conjugate gradient is in effect.
 <li> The current vertex positions are saved.
 <li> If the optimizing mode is on, then trial motions are made to
@@ -69,7 +73,7 @@ a simple Euler step.
          of steps are done (which generates a warning message).
          The default constraint tolerance is 1e-12, but it can
          be set with the  
-<a href="datafile.htm#constraint_tolerance decl">CONSTRAINT_TOLERANCE</a>
+<a href="datafile.htm#constraint_tolerance-decl">CONSTRAINT_TOLERANCE</a>
  option in the datafile,
 	 or setting the 
 <a href="syntax.htm#constraint_tolerance">constraint_tolerance</a> variable. 
@@ -92,22 +96,22 @@ from the velocities, gradients, and scale factor.
 are redrawn.
 </ul>
 <hr>
-<a name="scale factor"></a><h2>Scale factor</h2>
+<a   id="scale-factor"></a><h2>Scale factor</h2>
 Once a direction of motion is found, the direction must be
 multiplied by a scale factor to compute the actual motion.
 If one interprets the direction of motion as a velocity
 (as in motion by mean curvature), then the scale factor becomes
 a time step.  The scale factor may be fixed with the 
 <a href="single.htm#m">m</a> command, or it may be in
-<a href="#optimizing scale">optimizing</a> mode.  The default
+<a href="#optimizing-scale">optimizing</a> mode.  The default
 is to start in optimizing mode.
 <hr>
-<a name="optimizing scale"></a><h2>Optimizing scale</h2>
+<a   id="optimizing-scale"></a><h2>Optimizing scale</h2>
 In using gradient descent to seek a minimum energy, one finds
 a direction of motion and does a line search along that direction
 to find the minimum energy.  Evolver will do that in optimizing
 scale mode.  The line search consists of halving  or doubling
-the current <a href="#scale factor">scale factor</a> until an
+the current <a href="#scale-factor">scale factor</a> until an
 energy minimum is bracketed; then quadratic interpolation is
 used to estimate the optimum scale.  Optimizing scale is the
 default; it also may be turned on with the <a href="single.htm#m">m</a>
@@ -126,7 +130,7 @@ satisfied.
 In general, a good scale factor depends on the type of energy being
 minimized and the level of refinement.  However, for minimizing area,
  when the triangulation is well-behaved and 
-<a href="model.htm#area normalization">area normalization</a> is off,
+<a href="model.htm#area-normalization">area normalization</a> is off,
 the best scale factor is usually around 0.2, independent of refinement.
  In optimizing
  mode, a scale factor getting small, say below 0.01, indicates
@@ -141,7 +145,7 @@ the best scale factor is usually around 0.2, independent of refinement.
  satisfy constraints.
 <hr>
 
-<a name="conjugate gradient"></a><h2>Conjugate gradient</h2>
+<a   id="conjugate-gradient"></a><h2>Conjugate gradient</h2>
 "Conjugate gradient" is a method of accelerating gradient descent.
 In ordinary  gradient descent, one uses the gradient of energy to
 find the steepest downhill direction, then moves along that line
@@ -151,7 +155,7 @@ you can spend a lot of time zigzagging across an energy "valley"
 without making much progress "downstream".  With conjugate gradient,
 the search direction is chosen to be in a "conjugate" direction to
 the previous direction.  For a mathematical explanation, see any
-decent book in numerical analysis, such as <a href="biblio.htm#ref[P]">[P]</a>.
+decent book in numerical analysis, such as <a href="biblio.htm#refP">[P]</a>.
 In practice, the conjugate gradient method remembers a cumulative
 "history vector", which it combines with the ordinary gradient to
 figure out the conjugate gradient direction.  The upshot is that
@@ -160,7 +164,7 @@ descent.
 <p>
 Conjugate gradient can be toggled with the <a href="single.htm#U">U</a>
 command, or with the <a href="toggle.htm#conj_grad">conj_grad</a> toggle.
-It should always be used with <a href="#optimizing scale">optimizing scale</a>.
+It should always be used with <a href="#optimizing-scale">optimizing scale</a>.
 <p>
 Notes: The conjugate gradient method is designed for quadratic energy
 functions.  As long as the energy function is nearly quadratic, as it
@@ -174,16 +178,16 @@ On the other hand, if it looks like conjugate gradient is converging,
 it may have simply become confused by its own history. See the
 <a href="catenoid.htm">catenoid</a> example for a case in point.
 A danger signal is the scale factor going to zero.  If you are suspicious,
-toggle conjugate gradient off and on ("<tt>U 2</tt>" does nicely)
+toggle conjugate gradient off and on ("<code>U 2</code>" does nicely)
 to erase the history vector and start over.
 
 
 
 <hr>
-<a name="diffusion"></a><h2>Diffusion</h2>
-<a name="diffusion_coeff"></a>
-<a name="edge_diffusion"></a>
-<a name="facet_diffusion"></a>
+<a   id="diffusion"></a><h2>Diffusion</h2>
+<a   id="diffusion_coeff"></a>
+<a   id="edge_diffusion"></a>
+<a   id="facet_diffusion"></a>
          The Evolver can simulate the real-life phenomenon
          of gas diffusion between neighboring bubbles.  This
          diffusion is driven by the pressure difference across
@@ -197,7 +201,7 @@ to erase the history vector and start over.
          from the prescribed volumes of the bodies on either
          side of the facet.  The diffusion constant can be
          accessible at runtime through the read-write 
-         internal variable <tt>diffusion_coeff</tt>. 
+         internal variable <code>diffusion_coeff</code>. 
 <p>  If you want finer control over the rate of diffusion across
 various surfaces, you can define the edge_diffusion edge attribute
 in the string model or the facet_diffusion facet attribute in
@@ -206,7 +210,7 @@ as you desire.  If the attribute is defined, then its value is
 used instead of the global diffusion constant.
 
 <hr>
-<a name="stability"></a><h2>Stability</h2>
+<a   id="stability"></a><h2>Stability</h2>
 
 The timestep of an iteration should not be so large as to amplify
 perturbations of the surface. Short wavelength perturbations
@@ -273,7 +277,8 @@ time step four times shorter.
 
 <hr>
 
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 </body>
 </html>

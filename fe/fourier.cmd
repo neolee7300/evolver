@@ -1,14 +1,22 @@
 // fourier.cmd
-// Evolver command to print Fourier components for closed curve
+// Evolver command to print Fourier components for closed curve.
 
 // Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
 
-// Usage: f_component(order)
+/* Usage: f_component(order)
+   Results returned in global variables
+   x_sin_coeff
+   y_sin_coeff
+   z_sin_coeff
+   x_cos_coeff
+   y_cos_coeff
+   z_cos_coeff
+*/
 
 procedure f_component (integer f_order)
 // f_order is the order of Fourier components.
 {
-   local e_id,first_e,v_id,newe_id;
+   local ecount,e_id,first_e,v_id,newe_id;
 
    x_sin_coeff := 0.0;
    y_sin_coeff := 0.0;
@@ -46,3 +54,9 @@ procedure f_component (integer f_order)
    printf "sin: %20.15f %20.15f %20.15f\n",x_sin_coeff,y_sin_coeff,z_sin_coeff;
    printf "cos: %20.15f %20.15f %20.15f\n",x_cos_coeff,y_cos_coeff,z_cos_coeff;
 }
+
+
+// End fourier.cmd
+
+// Usage: f_component(order)
+

@@ -40,9 +40,15 @@ slice_c := 1;
 slice_d := .1; 
 
 // Attributes for marking vertices and edges on slice with timestamp
-slice_timestamp := 0
+slice_timestamp := 1   // so won't conflict with 0 for new edges or 1 for
+                       // original edges
 define vertex attribute v_timestamp integer
 define edge attribute e_timestamp integer
+
+// Mark existing edges and vertices (if not already marked)
+set edge e_timestamp 1 where e_timestamp==0
+set vertex v_timestamp 1 where v_timestamp==0
+
 
 // First put in new edges along slicing plane
 drawslice := { 
@@ -54,6 +60,7 @@ drawslice := {
         local xx2;
         local yy2;
         local zz2;
+        local xb,yb,zb;
 
         slice_timestamp += 1;  // marker for this slice
         foreach edge ee do 
@@ -123,11 +130,10 @@ drawslice := {
         } ; 
       } ; 
 
-     // mark edges created by slicing
-     set edge ee e_timestamp min(ee.vertex,v_timestamp); 
    }
 
 slicer := {
+    local former_autodisplay;
     drawslice;
     former_autodisplay := (autodisplay);
     autodisplay off; // prevent display while dissolving
@@ -140,8 +146,20 @@ slicer := {
       dissolve ff;
     };
     dissolve bodies bbb where sum(bbb.facets,1) == 0;
-    dissolve edges;  // just does bare edges
-    dissolve vertices; // just does bare vertices
+    dissolve edges ee where min(ee.vertex vv, 
+      slice_a*vv.x + slice_b*vv.y + slice_c*vv.z) < slice_d;  
+      // just does bare edges
+    dissolve vertices vv where
+      slice_a*vv.x + slice_b*vv.y + slice_c*vv.z < slice_d;  
+      // just does bare vertices
+
+    // mark edges and vertices created by slicing
+    set edge ee e_timestamp slice_timestamp where 
+          (ee.valence==1) and (ee.e_timestamp == 0); 
+    set edge ee e_timestamp 1 where ee.e_timestamp == 0; 
+    foreach edge ee where e_timestamp==slice_timestamp do
+      set ee.vertex v_timestamp slice_timestamp;
+
     if former_autodisplay then autodisplay on;
 }
 
@@ -163,6 +181,8 @@ color_slice := {
 
 startv := 1
 slice_list := {
+   local thisv,thisedge,nextedge;
+
    if vertex[startv].v_timestamp != slice_timestamp then
    { errprintf "slice_list: starting vertex startv is %d, not on latest slice.\n",
         startv;

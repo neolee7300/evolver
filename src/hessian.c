@@ -37,7 +37,7 @@ REAL rhs_norm;
 static int ritz_done_flag;
 REAL **ritzvecs;
 static int ritzdim;
-void optparamhess ARGS((struct linsys *,REAL *));  /* right side */
+void optparamhess (struct linsys *,REAL *);  /* right side */
 
 #ifdef OLDHASH
 /********************************************************************
@@ -48,9 +48,10 @@ void optparamhess ARGS((struct linsys *,REAL *));  /* right side */
 *             Installs key values, and adds hessian value.
 * return:  Pointer to entry.
 */
-void hess_hash_search(col,row,value)
-int row,col;  /* meant to do upper triangle */
-REAL value;  /* value to add */
+void hess_hash_search(
+int row, int col;  /* meant to do upper triangle */
+REAL value  /* value to add */
+)
 {
   struct hess_entry *e;
   int spot;
@@ -87,7 +88,7 @@ REAL value;  /* value to add */
   /* if here, then have empty slot and need to insert */
   e->col = col; e->row = row;  hashcount++; 
   e->value = value;
-}
+} // end hess_hash_search()
 #endif
 
 /***********************************************************************
@@ -97,11 +98,12 @@ REAL value;  /* value to add */
 * purpose: process gradient of function at constraint 
 */
 
-void fill_grad(S,v,grad,rhs)
-struct linsys *S;
-struct hess_verlist *v;
-REAL *grad;
-REAL *rhs;
+void fill_grad(
+  struct linsys *S,
+  struct hess_verlist *v,
+  REAL *grad,
+  REAL *rhs
+)
 { REAL g[MAXCOORD];
   int k,a,b;
 
@@ -123,8 +125,8 @@ REAL *rhs;
        sp_hash_search(S,v->rownum+b,v->rownum+a,
           SDIM_dot(grad,v->conhess[a][b]));
   }
-}
-
+} // end fill_grad()
+ 
 /*************************************************************************
 *
 * function: fill_self_entry()
@@ -132,10 +134,11 @@ REAL *rhs;
 * purpose: fill proper hessian matrix spot for single vertex second derivs
 */
 
-void fill_self_entry(S,v_id,self)
-struct linsys *S;
-vertex_id v_id;
-REAL **self; /* full dim values */
+void fill_self_entry(
+  struct linsys *S,
+  vertex_id v_id,
+  REAL **self /* full dim values */
+)
 { int j,k;
   struct hess_verlist *v;
 
@@ -155,7 +158,7 @@ REAL **self; /* full dim values */
       for ( k = 0 ; k <= j ; k++ )
         sp_hash_search(S,v->rownum+k,v->rownum+j,self[j][k]);
   }
-}
+} // end fill_self_entry()
 
 
 /*************************************************************************
@@ -165,10 +168,12 @@ REAL **self; /* full dim values */
 * purpose: fill proper hessian matrix spot for mixed vertex second derivs
 */
 
-void fill_mixed_entry(S,v_id1,v_id2,mixed)
-struct linsys *S;
-vertex_id v_id1,v_id2;
-REAL **mixed; /* full dim values */
+void fill_mixed_entry(
+  struct linsys *S,
+  vertex_id v_id1,
+  vertex_id v_id2,
+  REAL **mixed /* full dim values */
+)
 { int k,j;
   REAL **oo;
   MAT2D(temp_mat,MAXCOORD,MAXCOORD);
@@ -201,7 +206,7 @@ REAL **mixed; /* full dim values */
       for ( k = 0 ; k < v2->freedom ; k++ )
         sp_hash_search(S,v2->rownum+k,v1->rownum+j,oo[j][k]);
 
-}
+} // end fill_mixed_entry(
 
 #ifdef OLDHASH
 /********************************************************************
@@ -214,10 +219,11 @@ REAL **mixed; /* full dim values */
 * output:  *nptr - number of entries
 *             **listptr - allocated list (temp_calloc)
 */
-void hess_hash_sort(hessian_rows,nptr,listptr)
-int hessian_rows;  /* rows in hessian */
-int *nptr; /* for return of total entries */
-struct hess_entry **listptr; /* list in, for return of sorted list */
+void hess_hash_sort(
+  int hessian_rows,  /* rows in hessian */
+  int *nptr, /* for return of total entries */
+  struct hess_entry **listptr /* list in, for return of sorted list */
+)
 { int i;
   struct hess_entry *e;
   int *counts;
@@ -279,7 +285,7 @@ struct hess_entry **listptr; /* list in, for return of sorted list */
      sprintf(msg,"Hash extra probes: %d\n",hash_extraprobes);
      outstring(msg);
   }
-}
+} // end hess_hash_sort()
 
 
 /********************************************************************
@@ -320,10 +326,15 @@ void hessian_auto() /* automatic hessian */
   hmode = hessian_normal_flag;
   hessian_cleanup(); /* cleanup from previous round */
   hessian_init(&S,&rhs);
-  hess_flag = 1; rhs_flag = 1; 
+  hess_flag = 1; rhs_flag = 1;
+
   hessian_fill(&S,&rhs); 
+
   sp_Hessian_solver(&S,rhs,&X);
+
+  hessian_iterate_flag = 1;
   hessian_move((REAL)1.0,ACTUAL_MOVE,X);
+  hessian_iterate_flag = 0;
 
   if ( check_increase_flag && 
          (web.total_energy > (1+100*machine_eps)*old_energy) )
@@ -334,8 +345,9 @@ void hessian_auto() /* automatic hessian */
   hessian_exit(X);
   free_system(&S);
   temp_free((char*)rhs);
-  temp_free((char*)X); 
-}
+  temp_free((char*)X);
+
+} // end hessian_auto()
 
 /**************************************************************
 *
@@ -347,8 +359,7 @@ void hessian_auto() /* automatic hessian */
 *  Return: best stepsize
 */
 
-REAL hessian_seek(maxscale) /* automatic hessian */
-REAL maxscale;
+REAL hessian_seek(REAL maxscale)
 { REAL best_scale;
   REAL *rhs=NULL,*X=NULL;
   struct linsys S;
@@ -369,7 +380,8 @@ REAL maxscale;
   temp_free((char*)rhs);
   temp_free((char*)X);
   return best_scale;
-}
+
+} // end hessian_seek()
 
 /*****************************************************************************
 *
@@ -416,7 +428,8 @@ REAL square_grad()
   for ( i = 0 ; i < optparamcount ; i++ )
      sum += optparam[i].grad*optparam[i].grad;
   return sum;
-}
+
+} // end square_grad()
 
 
 /*****************************************************************************
@@ -446,14 +459,17 @@ void square_grad_forces()
 
   X = (REAL*)temp_calloc(S.N,sizeof(REAL));
   sp_hessian_mult(&S,rhs,X);
+  hessian_iterate_flag = 1;
   hessian_move(0,SET_VELOCITY,X);
+  hessian_iterate_flag = 0;
 
   hessian_exit(X);
   free_system(&S);
   if ( hessian_linear_metric_flag || web.area_norm_flag ) free_system(&Met);
   temp_free((char*)rhs);
   temp_free((char*)X);
-}
+
+} // end square_grad_forces()
 
 /*****************************************************************************
 *
@@ -468,74 +484,96 @@ void square_grad_forces()
 * return: optimal stepsize
 */
 
-REAL hessian_line_seek(S,maxscale,X)
-struct linsys *S;
-REAL maxscale;
-REAL *X;
+REAL hessian_line_seek(
+  struct linsys *S,
+  REAL maxscale,
+  REAL *X
+)
 { REAL scale0=0.0,scale1,scale2=0.0;
   REAL energy0,energy1,energy2=0.0;
   int seekcount = 0;
-  int dirflag = 1; /* for positive or negative direction */
+  int dirflag = 0; /* for positive or negative direction */
   REAL stepsize;
-  REAL typescale;
   
   if ( maxscale <= 0.0 ) return 0.0;
 
-  typescale = maxscale/100;
-  
   ENTER_GRAPH_MUTEX;
- 
+
+  save_coords(&saved,SAVE_IN_ATTR);
+
   /* base energy; may be volume adjustments, so can't just take current values */
+  hessian_iterate_flag = 1;
   hessian_move(0.0,ACTUAL_MOVE/*TEST_MOVE*/,X); 
   energy0 = min_square_grad_flag ? square_grad(): web.total_energy;
   restore_coords(&saved,SAVE_IN_ATTR);
+  hessian_iterate_flag = 0;
   if ( itdebug )
-  { sprintf(msg,"stepsize 0   energy0 %18.15g\n",energy0);
+  { sprintf(msg,"stepsize 0   energy0 %18.15g\n",(DOUBLE)energy0);
     outstring(msg);
   }
 
-  hessian_move(typescale*1e-3,ACTUAL_MOVE/*TEST_MOVE*/,X);
-  energy1 = min_square_grad_flag ? square_grad(): web.total_energy;
-  restore_coords(&saved,SAVE_IN_ATTR);
-  if ( itdebug )
-  { sprintf(msg,"stepsize %f   energy1 %18.15g\n",typescale*1e-3,energy1);
-    outstring(msg);
-  }
+  // seek some move that reduces energy
+  for ( stepsize = maxscale/100 ; stepsize > 1e-15 ; stepsize /= 10 )
+  { hessian_iterate_flag = 1;  // so CTRL-C doesn't break while surface moved
+    hessian_move(stepsize,ACTUAL_MOVE/*TEST_MOVE*/,X);
+    energy1 = min_square_grad_flag ? square_grad(): web.total_energy;
+    restore_coords(&saved,SAVE_IN_ATTR);
+    hessian_iterate_flag = 0;
+    if ( itdebug )
+    { sprintf(msg,"stepsize %g   energy1 %18.15g\n",(DOUBLE)stepsize,
+        (DOUBLE)energy1);
+      outstring(msg);
+    }
 
-  hessian_move(-typescale*1e-3,ACTUAL_MOVE/*TEST_MOVE*/,X);
-  energy2 = min_square_grad_flag ? square_grad(): web.total_energy;
-  restore_coords(&saved,SAVE_IN_ATTR);
-  if ( itdebug )
-  { sprintf(msg,"stepsize %f   energy2 %18.15g\n",-typescale*1e-3,energy2);
-    outstring(msg);
+    hessian_iterate_flag = 1;  // so CTRL-C doesn't break while surface partially moved
+    hessian_move(-stepsize,ACTUAL_MOVE/*TEST_MOVE*/,X);
+    energy2 = min_square_grad_flag ? square_grad(): web.total_energy;
+    restore_coords(&saved,SAVE_IN_ATTR);
+    if ( itdebug )
+    { sprintf(msg,"stepsize %g   energy2 %18.15g\n",(DOUBLE)stepsize,
+        (DOUBLE)energy2);
+      outstring(msg);
+    }
+    hessian_iterate_flag = 0;
+
+    if ( (energy1 < energy0) || (energy2 < energy0) )
+    { if ( energy1 > energy2 ) dirflag = -1;
+      else dirflag = 1;
+      break;
+    }
+     
   }
   LEAVE_GRAPH_MUTEX;
 
-  if ( (energy1 >= energy0) && (energy2 >= energy0) )
-     return 0.0;
-  if ( energy1 > energy2 ) dirflag = -1;
-  else dirflag = 1;
+  if ( dirflag == 0 )
+     return 0;
 
   ENTER_GRAPH_MUTEX;
 
-  stepsize = scale1 = 0.499999999*typescale;
+  scale1 = stepsize;
+  hessian_iterate_flag = 1;  // so CTRL-C doesn't break while surface moved
   hessian_move(dirflag*stepsize,ACTUAL_MOVE/*TEST_MOVE*/,X);
   energy1 = min_square_grad_flag ? square_grad(): web.total_energy;
   restore_coords(&saved,SAVE_IN_ATTR);
+  hessian_iterate_flag = 0;
   if ( itdebug )
-  { sprintf(msg,"stepsize %f   energy1 %18.15g\n",dirflag*stepsize,energy1);
+  { sprintf(msg,"stepsize %g   energy1 %18.15g\n",(DOUBLE)(dirflag*stepsize),
+       (DOUBLE)energy1);
     outstring(msg);
   }
   if ( energy1 < energy0 )
   { do
      { stepsize *= 2;
         if ( stepsize > maxscale ) { stepsize = maxscale; /*break;*/ }
+        hessian_iterate_flag = 1;
         hessian_move(dirflag*stepsize,ACTUAL_MOVE/*TEST_MOVE*/,X);
         energy2 = min_square_grad_flag ? square_grad(): web.total_energy;
         scale2 = stepsize;
         restore_coords(&saved,SAVE_IN_ATTR);
+        hessian_iterate_flag = 0;
         if ( itdebug )
-        { sprintf(msg,"stepsize %f   energy2 %18.15g\n",dirflag*stepsize,energy2);
+        { sprintf(msg,"stepsize %g   energy2 %18.15g\n",
+              (DOUBLE)(dirflag*stepsize),(DOUBLE)energy2);
           outstring(msg);
         }
         if ( energy2 > energy1 )
@@ -552,12 +590,15 @@ REAL *X;
      { if ( seekcount++ > 20 ) { stepsize = 0.0; break; }
         energy2 = energy1; scale2 = scale1;
         stepsize = scale2/2;
+        hessian_iterate_flag = 1;
         hessian_move(dirflag*stepsize,ACTUAL_MOVE/*TEST_MOVE*/,X);
         energy1 = min_square_grad_flag ? square_grad(): web.total_energy;
         scale1 = stepsize;
         restore_coords(&saved,SAVE_IN_ATTR);
+        hessian_iterate_flag = 0;
         if ( itdebug )
-        { sprintf(msg,"stepsize %f   energy1 %18.15g\n",dirflag*stepsize,energy1);
+        { sprintf(msg,"stepsize %g   energy1 %18.15g\n",
+            (DOUBLE)(dirflag*stepsize),(DOUBLE)(energy1));
           outstring(msg);
         }
      } while ( energy1 > energy0 );
@@ -578,13 +619,17 @@ REAL *X;
   }
   else if ( stepsize < 0.0 ) stepsize = 0.0;
   else if ( stepsize > maxscale ) stepsize = maxscale;
+  hessian_iterate_flag = 1;
   hessian_move(dirflag*stepsize,ACTUAL_MOVE,X);
+  hessian_iterate_flag = 0;
 
   LEAVE_GRAPH_MUTEX;
 
   if ( min_square_grad_flag )
   { energy1 =  square_grad();
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     sprintf(msg,"square gradient: %3.*Qg\n",DPREC,energy1);
+#elif defined(LONGDOUBLE)
      sprintf(msg,"square gradient: %3.*Lg\n",DPREC,energy1);
 #else
      sprintf(msg,"square gradient: %3.15g\n",energy1);
@@ -602,8 +647,7 @@ REAL *X;
 * purpose: move downhill optimally if at saddle point
 */
 
-void hessian_saddle(maxscale)
-REAL maxscale;
+void hessian_saddle(REAL maxscale)
 { REAL low;
   REAL stepsize;
   REAL *rhs=NULL,*X=NULL;
@@ -630,7 +674,9 @@ REAL maxscale;
   low =  lowest_eigenpair(&S,X);
   if ( low >= 0.0 )
      { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+        sprintf(msg,"Lowest eigenvalue %2.*Qg. Not a saddle point.\n",DPREC,low); 
+#elif defined(LONGDOUBLE)
         sprintf(msg,"Lowest eigenvalue %2.*Lg. Not a saddle point.\n",DPREC,low); 
 #else
         sprintf(msg,"Lowest eigenvalue %2.15g. Not a saddle point.\n",low); 
@@ -638,7 +684,9 @@ REAL maxscale;
         outstring(msg);
         goto saddle_exit;
      }
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+  sprintf(msg,"Lowest eigenvalue %2.*Qg\n",DPREC,low);
+#elif defined(LONGDOUBLE)
   sprintf(msg,"Lowest eigenvalue %2.*Lg\n",DPREC,low);
 #else
   sprintf(msg,"Lowest eigenvalue %2.15g\n",low);
@@ -647,7 +695,9 @@ REAL maxscale;
   stepsize = hessian_line_seek(&S,maxscale,X);
   sprintf(msg,"stepsize %g\n",(DOUBLE)stepsize);
   outstring(msg);
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+  sprintf(msg,"1.  energy: %17.*Qg \n", DPREC,web.total_energy);
+#elif defined(LONGDOUBLE)
   sprintf(msg,"1.  energy: %17.*Lg \n", DPREC,web.total_energy);
 #else
   sprintf(msg,"1. %s: %17.15g energy: %17.15g \n",
@@ -694,7 +744,8 @@ void print_hessian_menu()
   outstring("U. Toggle Bunch-Kaufman version of min deg.\n");
   outstring("M. Toggle projecting to global constraints in move. (Leave this alone!)\n");
   outstring("G. Toggle minimizing square gradient in seek.\n");
-  outstring("D. Dump Hessian to text file.\n");
+  outstring("D. Dump Hessian to text file in Matlab sparse format.\n");
+  outstring("K. Dump Hessian to text file in Mathematica sparse format.\n");
   outstring("=. Execute Evolver commands in subprompt.\n");
 #ifdef MPI_EVOLVER
   outstring("A. Build corona (MPI version only).\n");
@@ -702,7 +753,8 @@ void print_hessian_menu()
   outstring("I. Free discard lists (MPI version only).\n");
 #endif
   outstring("0. Exit hessian.\n");
-}
+
+} // end print_hessian_menu()
 
 /***********************************************************************
 *
@@ -730,10 +782,10 @@ void hessian_menu()
     for(;;)
      {
 #ifdef MPI_EVOLVER
-        prompt("Choice(?,1,2,3,4,7,9,B,C,E,F,L,R,Z,X,P,V,S,Y,U,M,G,D,A,=,0,q): ",
+        prompt("Choice(?,1,2,3,4,7,9,B,C,E,F,L,R,Z,X,P,V,S,Y,U,M,G,D,K,A,=,0,q): ",
 		 response,sizeof(response));
 #else
-        prompt("Choice(?,1,2,3,4,7,9,B,C,E,F,L,R,Z,X,P,V,S,Y,U,M,G,D,=,0,q): ",
+        prompt("Choice(?,1,2,3,4,7,9,B,C,E,F,L,R,Z,X,P,V,S,Y,U,M,G,D,K,=,0,q): ",
 		 response,sizeof(response));
 #endif
         switch ( toupper(response[0]) )
@@ -761,14 +813,16 @@ void hessian_menu()
 
              case '2': 
                   if ( left_flag == 0 )
-                     { outstring("Error: Must do step 1 first.\n"); break; }
+                     { erroutstring("Error: Must do step 1 first.\n"); break; }
                   if ( hess_debug )
                   { int i;
                     for ( i = 0 ; i < S.N ; i++ )
                       printf("B[%d]  %20.15f\n",i,(DOUBLE)(rhs[i]));
                   }
                   rhs_norm = dot(rhs,rhs,S.N);
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+                  sprintf(msg,"RHS norm: %20.*Qg\n",DPREC, rhs_norm);
+#elif defined(LONGDOUBLE)
                   sprintf(msg,"RHS norm: %20.*Lg\n",DPREC, rhs_norm);
 #else
                   sprintf(msg,"RHS norm: %20.15g\n", rhs_norm);
@@ -779,25 +833,32 @@ void hessian_menu()
                 
              case '3': 
                  if ( left_flag == 0 )
-                     { outstring("Error: Must do step 1 first.\n"); break; }
+                     { erroutstring("Error: Must do step 1 first.\n"); break; }
                  if ( right_flag == 0 )
-                     { outstring("Error: Must do step 2 first.\n"); break; }
-                 if ( !(S.flags & S_FACTORED) ) sp_factor(&S);
+                     { erroutstring("Error: Must do step 2 first.\n"); break; }
+                 if ( !(S.flags & S_FACTORED) ) sp_factor(&S,MKL_INDEF);
                  if ( !(S.flags & S_PROJECTED)) (*sp_hess_project_setup_func)(&S);
                  sp_hessian_solve(&S,rhs,X,SET_PRESSURE);
-                 outstring("Motion found.  Pressures adjusted.\n");
+                 if ( S.CN )
+                   outstring("Motion found.  Pressures adjusted.\n");
+                 else
+                   outstring("Motion found. \n");
                  dir_flag = 1;
                  break;
 
              case '4': 
                   if ( dir_flag == 0 )
-                  { outstring("Error: Must do step 3,V,E,F,C,B or X first.\n"); 
+                  { erroutstring("Error: Must do step 3,V,E,F,C,B or X first.\n"); 
                     break; 
                   }
                  prompt("Step size: ",response,sizeof(response));
                  stepsize = atof(response);
+                 hessian_iterate_flag = 1;
                  hessian_move(stepsize,ACTUAL_MOVE,X);
-#ifdef LONGDOUBLE
+                 hessian_iterate_flag = 0;
+#ifdef FLOAT128
+                 sprintf(msg,"1. energy: %*.*Qg \n",DWIDTH,DPREC,web.total_energy);
+#elif defined(LONGDOUBLE)
                  sprintf(msg,"1. energy: %*.*Lg \n",DWIDTH,DPREC,web.total_energy);
 #else
                  sprintf(msg,"1. %s: %17.15f energy: %17.15f \n",
@@ -811,7 +872,7 @@ void hessian_menu()
 
              case '8': 
                        if ( left_flag == 0 )
-                         { outstring("Error: Must do step 1 first.\n"); break; }
+                         { erroutstring("Error: Must do step 1 first.\n"); break; }
                        write_hessian(&S); break;
 
              case '=': 
@@ -838,11 +899,11 @@ void hessian_menu()
                        else outstring("Hessian debug OFF.\n");
                        break;
 
-             case 'K': /* experimdntal multigrid */
+             case 'T': /* experimdntal multigrid */
                  if ( left_flag == 0 )
-                     { outstring("Error: Must do step 1 first.\n"); break; }
+                     { erroutstring("Error: Must do step 1 first.\n"); break; }
                  if ( right_flag == 0 )
-                     { outstring("Error: Must do step 2 first.\n"); break; }
+                     { erroutstring("Error: Must do step 2 first.\n"); break; }
                  do_multigrid(&S);
                  break;
 
@@ -850,11 +911,15 @@ void hessian_menu()
               { 
                  REAL probe;
                  if ( left_flag == 0 )
-                     { outstring("Error: Must do step 1 first.\n"); break; }
+                     { erroutstring("Error: Must do step 1 first.\n"); break; }
                  prompt("Ritz probe value: ",response,sizeof(response));
                  probe = atof(response);
                  prompt("Number of eigenvalues: ",response,sizeof(response));
                  ritzdim = atoi(response);
+                 if ( ritzdim <= 0 )
+                 { erroutstring("Error: Number of eigenvalues must be positive.\n");
+                   break;
+                 }
                  if ( ritzvecs ) free_matrix(ritzvecs);
                  ritzvecs = dmatrix(0,ritzdim-1,0,S.N+S.concount);
                  do_ritz(&S,probe,ritzdim,ritzvecs);
@@ -866,7 +931,7 @@ void hessian_menu()
                 char *spot;
                  int i;
                  if ( ritz_done_flag == 0 )
-                     { outstring("Error: Must do step Z first.\n"); break; }
+                     { erroutstring("Error: Must do step Z first.\n"); break; }
                  sprintf(msg,"Eigenvector number (1 to %d): ",ritzdim);
                  prompt(msg,response,sizeof(response));
                  /* parse response for possible linear combo of vectors */
@@ -887,7 +952,7 @@ void hessian_menu()
                      ritznum = atoi(spot); 
                      while ( isdigit(*spot) ) spot++;
                      if ( (ritznum < 0) || (ritznum > ritzdim) )
-                     { outstring("Error: Invalid eigenvector number.\n"); 
+                     { erroutstring("Error: Invalid eigenvector number.\n"); 
                        break; 
                      }
                      ritznum--;
@@ -899,7 +964,7 @@ void hessian_menu()
                  else
                  { ritznum = atoi(response);
                    if ( (ritznum < 0) || (ritznum > ritzdim) )
-                   { outstring("Error: Invalid eigenvector number.\n"); break; }
+                   { erroutstring("Error: Invalid eigenvector number.\n"); break; }
                    ritznum--;
                    for ( i = 0 ; i < S.N ; i++ ) X[i] = ritzvecs[ritznum][i];
                  }
@@ -910,14 +975,16 @@ void hessian_menu()
              { int nprint,i;
                 REAL evalues[NPRINT];
                  if ( left_flag == 0 )
-                     { outstring("Error: Must do step 1 first.\n"); break; }
-                 if ( !(S.flags & S_FACTORED) ) sp_factor(&S);
+                     { erroutstring("Error: Must do step 1 first.\n"); break; }
+                 if ( !(S.flags & S_FACTORED) ) sp_factor(&S,MKL_INDEF);
                  if ( !(S.flags & S_PROJECTED)) (*sp_hess_project_setup_func)(&S);
                  nprint = lanczos(&S,KRYLOVDIM,evalues,NPRINT);
                  /* list, ones near probe value */
                  for ( i = 0 ; i < nprint ; i++ )
                  {
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+                    sprintf(msg,"%d  %*.*Qf\n",i+1,DWIDTH,DPREC,evalues[i]);
+#elif defined(LONGDOUBLE)
                     sprintf(msg,"%d  %*.*Lf\n",i+1,DWIDTH,DPREC,evalues[i]);
 #else
                     sprintf(msg,"%d  %20.15f\n",i+1,evalues[i]);
@@ -931,14 +998,16 @@ void hessian_menu()
              { int nprint,i;
                 REAL evalues[NPRINT];
                  if ( left_flag == 0 )
-                     { outstring("Error: Must do step 1 first.\n"); break; }
-                 if ( !(S.flags & S_FACTORED) ) sp_factor(&S);
+                     { erroutstring("Error: Must do step 1 first.\n"); break; }
+                 if ( !(S.flags & S_FACTORED) ) sp_factor(&S,MKL_INDEF);
                  if ( !(S.flags & S_PROJECTED)) (*sp_hess_project_setup_func)(&S);
                  nprint = selective_lanczos(&S,KRYLOVDIM,evalues,NPRINT);
                  /* list, ones near probe value */
                  for ( i = 0 ; i < nprint ; i++ )
                  { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+                    sprintf(msg,"%d  %*.*Qf\n",i+1,DWIDTH,DPREC,evalues[i]);
+#elif defined(LONGDOUBLE)
                     sprintf(msg,"%d  %*.*Lf\n",i+1,DWIDTH,DPREC,evalues[i]);
 #else
                     sprintf(msg,"%d  %20.15f\n",i+1,evalues[i]);
@@ -950,27 +1019,27 @@ void hessian_menu()
 
              case 'C': 
                  if ( left_flag == 0 )
-                     { outstring("Error: Must do step 1 first.\n"); break; }
+                     { erroutstring("Error: Must do step 1 first.\n"); break; }
                  chebychev_ev(&S);
                  dir_flag = 1;
                  break;
 
              case 'B': 
                  if ( left_flag == 0 )
-                     { outstring("Error: Must do step 1 first.\n"); break; }
+                     { erroutstring("Error: Must do step 1 first.\n"); break; }
                  chebychev_hess(&S);
                  dir_flag = 1;
                  break;
 
              case 'P':  /* probe for eigenvalues */
                  if ( left_flag == 0 )
-                     { outstring("Error: Must do step 1 first.\n"); break; }
+                     { erroutstring("Error: Must do step 1 first.\n"); break; }
                  bk_eigenprobe(&S);
                  break;
 
              case 'V':  /* probe for eigenvalues, with eigenvector */
                  if ( left_flag == 0 )
-                     { outstring("Error: Must do step 1 first.\n"); break; }
+                     { erroutstring("Error: Must do step 1 first.\n"); break; }
                  bk_inverse_it(&S,X);
                  dir_flag = 1;
                  break;
@@ -978,9 +1047,11 @@ void hessian_menu()
              case 'E':  /* lowest eigenvalue */ 
               { REAL low;
                  if ( left_flag == 0 )
-                     { outstring("Error: Must do step 1 first.\n"); break; }
+                     { erroutstring("Error: Must do step 1 first.\n"); break; }
                  low = lowest_eigenpair(&S,X); 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+                 sprintf(msg,"Lowest eigenvalue %2.*Qg\n",DPREC,low);
+#elif defined(LONGDOUBLE)
                  sprintf(msg,"Lowest eigenvalue %2.*Lg\n",DPREC,low);
 #else
                  sprintf(msg,"Lowest eigenvalue %2.15g\n",low);
@@ -992,9 +1063,11 @@ void hessian_menu()
              case 'd':  /* lowest eigenvalue, by old conjugate gradient */ 
               { REAL low;
                  if ( left_flag == 0 )
-                     { outstring("Error: Must do step 1 first.\n"); break; }
+                     { erroutstring("Error: Must do step 1 first.\n"); break; }
                  low = old_cg_lowest_eigenpair(&S,X); 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+                 sprintf(msg,"Lowest eigenvalue %2.*Qg\n",DPREC,low);
+#elif defined(LONGDOUBLE)
                  sprintf(msg,"Lowest eigenvalue %2.*Lg\n",DPREC,low);
 #else
                  sprintf(msg,"Lowest eigenvalue %2.15g\n",low);
@@ -1006,9 +1079,11 @@ void hessian_menu()
              case 'F':  /* lowest eigenvalue, by conjugate gradient */ 
               { REAL low;
                  if ( left_flag == 0 )
-                     { outstring("Error: Must do step 1 first.\n"); break; }
+                     { erroutstring("Error: Must do step 1 first.\n"); break; }
                  low = cg_lowest_eigenpair(&S,X); 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+                 sprintf(msg,"Lowest eigenvalue %2.*Qg\n",DPREC,low);
+#elif defined(LONGDOUBLE)
                  sprintf(msg,"Lowest eigenvalue %2.*Lg\n",DPREC,low);
 #else
                  sprintf(msg,"Lowest eigenvalue %2.15g\n",low);
@@ -1019,11 +1094,13 @@ void hessian_menu()
               }
              case 'S':
                  if ( dir_flag == 0 )
-                     { outstring("Error: Must get direction first.\n"); break; }
+                     { erroutstring("Error: Must get direction first.\n"); break; }
                  stepsize = hessian_line_seek(&S,10.0,X);
                  sprintf(msg,"stepsize %g\n",(DOUBLE)stepsize);
                  outstring(msg);
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+                 sprintf(msg,"1.  energy: %*.*Qg \n",DWIDTH,DPREC,web.total_energy);
+#elif defined(LONGDOUBLE)
                  sprintf(msg,"1.  energy: %*.*Lg \n",DWIDTH,DPREC,web.total_energy);
 #else
                  sprintf(msg,"1. %s: %17.15g energy: %17.15g \n",
@@ -1086,16 +1163,24 @@ void hessian_menu()
                  else
                     outstring("Minimizing regular energy in seek.\n");
                  break;
-             case 'D': /* dump Hessian, 1-based indexing */
+
+             case 'D': /* dump Hessian, 1-based indexing, matlab format. */
                  { FILE *fd;
-                   char hname[200];
+                   char hname[200],mname[200];
                    size_t baselength;
                    int i,j,k;
+
+                   if ( S.N == 0 )
+                   { outstring("Need to do step 1 first before dumping Hessian.\n");
+                     break;
+                   }
+
 gethname:
                    outstring("Hessian dump. Note indexing is 1-based.\n");
                    prompt("Enter path and base name of Hessian dump files: ",
                       hname,200);
                    if ( hname[0] == 0 ) break;
+                   strcpy(mname,hname);
                    baselength = strlen(hname);
                    strcat(hname,"_H.dat");
                    fd = fopen(hname,"w");
@@ -1107,13 +1192,46 @@ gethname:
                    outstring(msg);
                    for ( i = 0 ; i < S.N ; i++ )
                      for ( j = S.IA[i]-A_OFF ; j < S.IA[i+1]-A_OFF ; j++ )
-                     { fprintf(fd,"%6d %6d %20.15f\n",i+1,S.JA[j]-A_OFF+1,S.A[j]);
+                     { fprintf(fd,"%6d %6d %20.15f\n",i+1,S.JA[j]-A_OFF+1,
+                             (DOUBLE)S.A[j]);
                      }
                    fclose(fd);
+
+                   if ( hessian_linear_metric_flag )
+                   {
+                     strcat(mname,"_M.dat");
+                     fd = fopen(mname,"w");
+                     if ( fd == NULL )
+                     { perror(mname); goto gethname; }
+                     sprintf(msg, "Dumping Hessian metric upper triangle in row col value format to %s.\n", mname);
+                     outstring(msg);
+                     for ( i = 0 ; i < Met.N ; i++ )
+                       for ( j = Met.IA[i]-A_OFF ; j < Met.IA[i+1]-A_OFF ; j++ )
+                       { fprintf(fd,"%6d %6d %20.15f\n",i+1,Met.JA[j]-A_OFF+1,
+                            (DOUBLE)Met.A[j]);
+                       }
+                     fclose(fd);
+                   }
+
+                   if ( right_flag )
+                   { strcpy(hname+baselength,"_rhs.dat");
+                     sprintf(msg,"Dumping right hand side to %s.\n",hname);
+                     outstring(msg);
+                     fd = fopen(hname,"w");
+                     if ( fd == NULL )
+                     { perror(hname);
+                       break;
+                     }
+                     for ( i = 0 ; i < S.N ; i++ )
+                       fprintf(fd,"%20.15f\n",(DOUBLE)(rhs[i]));
+                     fclose(fd);
+                   }
+
                    if ( ysmp_flag != MINDEG_FACTORING )
                    { outstring("Further dumping of factors in minimal degree mode (ysmp off) only.\n");
                      break;
                    }
+
                    if ( !S.LA )
                    { outstring("Need to do step 3, P, V, or Z before dumping factors.\n");
                      break;
@@ -1130,10 +1248,11 @@ gethname:
                    { fprintf(fd,"%6d %6d %20.15f\n",i+1,i+1,1.0);
                      for ( j = S.LIA[i]+S.psize[i], k = S.LIJA[i]+S.psize[i] ;
                         j < S.LIA[i+1] ; j++,k++ )
-                     { fprintf(fd,"%6d %6d %20.15f\n",i+1,S.LJA[k]+1,S.LA[j]);
+                     { fprintf(fd,"%6d %6d %20.15f\n",i+1,S.LJA[k]+1,(DOUBLE)(S.LA[j]));
                      }
                    }
                    fclose(fd);
+
                    strcpy(hname+baselength,"_D.dat");
                    sprintf(msg,
             "Dumping diagonal factor in row col value format to %s.\n",hname);
@@ -1145,15 +1264,20 @@ gethname:
                    for ( i = 0 ; i < S.N ; i++ )
                    { j = S.LIA[i]; k = S.LIJA[i]; 
                      if ( S.psize[i] == 1 )
-                     { fprintf(fd,"%6d %6d %20.15f\n",i+1,S.LJA[k]+1,S.LA[j]);
+                     { fprintf(fd,"%6d %6d %20.15f\n",i+1,S.LJA[k]+1,
+                          (DOUBLE)S.LA[j]);
                      }
                      else
-                     { fprintf(fd,"%6d %6d %20.15f\n",i+1,S.LJA[k]+1,S.LA[j]);
-                       fprintf(fd,"%6d %6d %20.15f\n",i+1,S.LJA[k+1]+1,S.LA[j+1]);
-                       fprintf(fd,"%6d %6d %20.15f\n",S.LJA[k+1]+1,i+1,S.LA[j+1]);
+                     { fprintf(fd,"%6d %6d %20.15f\n",i+1,S.LJA[k]+1,
+                          (DOUBLE)S.LA[j]);
+                       fprintf(fd,"%6d %6d %20.15f\n",i+1,S.LJA[k+1]+1,
+                          (DOUBLE)S.LA[j+1]);
+                       fprintf(fd,"%6d %6d %20.15f\n",S.LJA[k+1]+1,i+1,
+                          (DOUBLE)S.LA[j+1]);
                        i++;
                        j = S.LIA[i]; k = S.LIJA[i]; 
-                       fprintf(fd,"%6d %6d %20.15f\n",i+1,S.LJA[k]+1,S.LA[j]);
+                       fprintf(fd,"%6d %6d %20.15f\n",i+1,S.LJA[k]+1,
+                          (DOUBLE)S.LA[j]);
                      }
                    }
                    fclose(fd);
@@ -1168,12 +1292,14 @@ gethname:
                      for ( i = 0 ; i < S.CN ; i++ )
                      { if ( S.CIA )
                        for ( j = S.CIA[i] ; j < S.CIA[i+1] ; j++ )
-                       { fprintf(fd,"%6d %6d %20.15f\n",i+1,S.CJA[j]+1,S.CA[j]);
+                       { fprintf(fd,"%6d %6d %20.15f\n",i+1,S.CJA[j]+1,
+                          (DOUBLE)S.CA[j]);
                        }
                        else /* dense */
                        for ( j = 0 ; j < S.N ; j++ )
                          if ( S.C[i][j] )
-                           fprintf(fd,"%6d %6d %20.15f\n",i+1,j+1,S.C[i][j]);
+                           fprintf(fd,"%6d %6d %20.15f\n",i+1,j+1,
+                          (DOUBLE)S.C[i][j]);
                      }
                      fclose(fd);
                    }
@@ -1189,8 +1315,238 @@ gethname:
                    }
                    fprintf(fd,"\n");
                    fclose(fd);
+
+                   if ( dir_flag )
+                   { strcpy(hname+baselength,"_solution.dat");
+                     sprintf(msg,"Dumping solution vector to %s.\n",hname);
+                     outstring(msg);
+                     fd = fopen(hname,"w");
+                     if ( fd == NULL )
+                     { perror(hname);
+                       break;
+                     }
+                     for ( i = 0 ; i < S.N ; i++ )
+                       fprintf(fd,"%20.15f\n",(DOUBLE)(X[i]));
+                     fclose(fd);
+                   }
+
                  }
                break;
+
+
+             case 'K': /* dump Hessian, 1-based indexing, mathematica format. */
+                 { FILE *fd;
+                   char hname[200],bname[200];
+                   int i,j,k,comma_flag;
+                   bname[0] = 0;
+
+                   if ( S.N == 0 )
+                   { outstring("Need to do step 1 first before dumping Hessian.\n");
+                     break;
+                   }
+
+                   outstring("Hessian dump in Mathematica sparse format.\n");
+getkname:
+                   prompt("Enter filename: ", hname,200);
+                   if ( hname[0] == 0 ) break;
+
+                   while ( bname[0] == 0 )
+                   { char *cp;
+                     prompt("Enter base name for arrays: ",bname,200);
+                     if ( bname[0] == 0 ) break;
+                     if ( !isalpha(bname[0]) )
+                     { outstring("Mathematica names must start with letter.\n");
+                       bname[0] = 0;
+                     }
+                     for( cp = bname+1 ; *cp ; cp++ )
+                       if ( !isalnum(*cp) )
+                       { outstring("Mathematica names must have only letters and digits.\n");
+                         bname[0] = 0;
+                     }
+                   }
+
+                   fd = fopen(hname,"w");
+                   if ( fd == NULL )
+                   { perror(hname); goto getkname; }
+
+                   sprintf(msg,
+                     "Dumping Hessian upper triangle to array %sH.\n",bname);
+                   outstring(msg);
+                   fprintf(fd,"%sH = SparseArray[{",bname);
+                   comma_flag = 0; 
+                   for ( i = 0 ; i < S.N ; i++ )
+                     for ( j = S.IA[i]-A_OFF ; j < S.IA[i+1]-A_OFF ; j++ )
+                     { if ( comma_flag )
+                         fprintf(fd,",");
+                       else comma_flag = 1;
+                       fprintf(fd,"\n{%d,%d}->%17.15f",i+1,S.JA[j]-A_OFF+1,
+                          (DOUBLE)S.A[j]);
+                     }
+                     fprintf(fd,"},{%d,%d}];\n",S.N,S.N);
+
+                   if ( hessian_linear_metric_flag )
+                   {
+                     sprintf(msg, "Dumping Hessian metric upper triangle to array %sM.\n", bname);
+                     outstring(msg);
+                     fprintf(fd,"\n %sM = SparseArray[{",bname);
+                     comma_flag = 0; 
+                     for ( i = 0 ; i < Met.N ; i++ )
+                       for ( j = Met.IA[i]-A_OFF ; j < Met.IA[i+1]-A_OFF ; j++ )
+                       { if ( comma_flag )
+                           fprintf(fd,",");
+                         else comma_flag = 1;
+                         fprintf(fd,"\n{%d,%d}->%17.15f",i+1,Met.JA[j]-A_OFF+1,
+                          (DOUBLE)Met.A[j]);
+                       }
+                     fprintf(fd,"},{%d,%d}];\n",Met.N,Met.N);
+                   }
+
+                   if ( right_flag )
+                   { 
+                     sprintf(msg,"Dumping right hand side to vector %sRHS.\n",bname);
+                     outstring(msg);
+                     comma_flag = 0; 
+                     fprintf(fd,"\n %sRHS = {",bname);
+                     for ( i = 0 ; i < S.N ; i++ )
+                     { if ( comma_flag )
+                         fprintf(fd,",");
+                       else comma_flag = 1;                      
+                       fprintf(fd,"\n%17.15f",(DOUBLE)(rhs[i]));
+                     }
+                     fprintf(fd,"};\n");
+                   }
+
+                   if ( ysmp_flag != MINDEG_FACTORING )
+                   { outstring("Further dumping of factors in minimal degree mode (ysmp off) only.\n");
+                     fclose(fd);
+                     break;
+                   }
+
+                   if ( !S.LA )
+                   { outstring("Need to do step 3, P, V, or Z before dumping factors.\n");
+                     fclose(fd);
+                     break;
+                   }
+                   sprintf(msg, "Dumping L factor to array %sL.\n",bname);
+                   outstring(msg);
+                   fprintf(fd,"\n%sL = SparseArray[{",bname);
+                   comma_flag = 0; 
+                   for ( i = 0 ; i < S.N ; i++ )
+                   { if ( comma_flag )
+                         fprintf(fd,",");
+                     else comma_flag = 1;
+                     fprintf(fd,"\n{%d,%d}->%17.15f",i+1,i+1,1.0);
+                     for ( j = S.LIA[i]+S.psize[i], k = S.LIJA[i]+S.psize[i] ;
+                        j < S.LIA[i+1] ; j++,k++ )
+                     { 
+                       fprintf(fd,",\n{%d,%d}->%17.15f",i+1,S.LJA[k]+1,(DOUBLE)(S.LA[j]));
+                     }
+                   }
+                   fprintf(fd,"},{%d,%d}];\n",S.N,S.N);
+
+                   sprintf(msg,"Dumping diagonal factor to array %sD.\n",bname);
+                   outstring(msg);
+                   fprintf(fd,"\n%sD = SparseArray[{",bname);
+                   comma_flag = 0; 
+                   for ( i = 0 ; i < S.N ; i++ )
+                   { if ( comma_flag )
+                       fprintf(fd,",");
+                     else comma_flag = 1;
+                     j = S.LIA[i]; k = S.LIJA[i]; 
+                     if ( S.psize[i] == 1 )
+                     { fprintf(fd,"\n{%d,%d}->%17.15f",i+1,S.LJA[k]+1,
+                          (DOUBLE)S.LA[j]);
+                     }
+                     else
+                     { fprintf(fd,"\n{%d,%d}->%17.15f,\n",i+1,S.LJA[k]+1,
+                          (DOUBLE)S.LA[j]);
+                       fprintf(fd,"{%d,%d}->%17.15f,\n",i+1,S.LJA[k+1]+1,
+                          (DOUBLE)S.LA[j+1]);
+                       fprintf(fd,"{%d,%d}->%17.15f,\n",S.LJA[k+1]+1,i+1,
+                          (DOUBLE)S.LA[j+1]);
+                       i++;
+                       j = S.LIA[i]; k = S.LIJA[i]; 
+                       fprintf(fd,"{%d,%d}->%17.15f",i+1,S.LJA[k]+1,
+                          (DOUBLE)S.LA[j]);
+                     }
+                   }
+                   fprintf(fd,"},{%d,%d}];\n",S.N,S.N);
+
+                   if ( !augmented_hessian_mode && S.CN )
+                   { 
+                     sprintf(msg, "Dumping constraint matrix to array %s.\n",bname);
+                     outstring(msg);
+                     fprintf(fd,"\n%sC = SparseArray[{",bname);
+                     comma_flag = 0; 
+                     for ( i = 0 ; i < S.CN ; i++ )
+                     { if ( S.CIA )
+                       for ( j = S.CIA[i] ; j < S.CIA[i+1] ; j++ )
+                       { if ( comma_flag )
+                           fprintf(fd,",");
+                         else comma_flag = 1;
+                         fprintf(fd,"\n{%d,%d}->%17.15f",i+1,S.CJA[j]+1,
+                          (DOUBLE)S.CA[j]);
+                       }
+                       else /* dense */
+                       for ( j = 0 ; j < S.N ; j++ )
+                         if ( S.C[i][j] )
+                         { if ( comma_flag )
+                             fprintf(fd,",");
+                           else comma_flag = 1;
+                           fprintf(fd,"\n{%d,%d}->%17.15f",i+1,j+1,
+                             (DOUBLE)S.C[i][j]);
+                         }
+                     }
+                     fprintf(fd,"},{%d,%d}];\n",S.CN,S.N);
+                   }
+
+                   sprintf(msg, "Dumping permutation to vector %sP.\n",bname);
+                   outstring(msg);
+                   fprintf(fd,"\n%sP = {",bname);
+                   comma_flag = 0; 
+                   for ( i = 0 ; i < S.N ; i++ )
+                   { if ( comma_flag )
+                       fprintf(fd,",");
+                     else comma_flag = 1;
+                     fprintf(fd,"\n%d",S.P[i]+1);
+                   }
+                   fprintf(fd,"};\n");
+
+                   if ( dir_flag )
+                   { 
+                     sprintf(msg,"Dumping solution to vector %sS.\n",bname);
+                     outstring(msg);
+                     fprintf(fd,"\n%sS = {",bname);
+                     comma_flag = 0; 
+                     for ( i = 0 ; i < S.N ; i++ )
+                     { if ( comma_flag )
+                        fprintf(fd,",");
+                       else comma_flag = 1;                    
+                       fprintf(fd,"\n%17.15f",(DOUBLE)(X[i]));
+                     }
+                     fprintf(fd,"};\n");
+                   }
+
+                   
+                   fprintf(fd,"(* Solving constrained Hessian *)\n");
+                   fprintf(fd,"\n");
+                   fprintf(fd,"(* get both halves of H *)\n");
+                   fprintf(fd,"h = %sH + Transpose[%sH];\n",bname,bname);
+                   fprintf(fd,"For[n=1,n<=Length[%sH],n++,h[[n,n]] /= 2;];\n",bname);
+                   fprintf(fd,"\n");
+                   fprintf(fd,"invH = Inverse[h];\n");
+                   fprintf(fd,"If[Length[%sC] > 0,\n",bname);
+                   fprintf(fd,"   cthinv = %sC . invH;\n",bname);
+                   fprintf(fd,"   cthinvc = cthinv . Transpose[%sC];\n",bname);
+                   fprintf(fd,"   cthinvcinv = Inverse[cthinvc];\n");
+                   fprintf(fd,"   gamma = cthinvcinv . cthinv . %sRHS;\n",bname);
+                   fprintf(fd,"   %sx = ( invH . %sRHS) - (Transpose[cthinv] . gamma);,\n",bname,bname);
+                   fprintf(fd,"   (* else *)\n");
+                   fprintf(fd,"   %sx = invH . %sRHS;\n];\n",bname,bname);
+                   fclose(fd);
+                 }
+               break;
+
 #ifdef MPI_EVOLVER
              case 'A' : 
    				 mpi_hessian_fill_distrib(Mpi_RHS_MOVE); 
@@ -1256,11 +1612,12 @@ void hessian_legal()
      }
  
     if ( web.symmetry_flag )
-    FOR_ALL_BODIES(b_id)
-    { if ( get_battr(b_id) & FIXEDVOL )
-      { if ( auto_convert_flag ) { convert_to_quantities(); break; }
-         else 
+    { FOR_ALL_BODIES(b_id)
+      { if ( get_battr(b_id) & FIXEDVOL )
+        { if ( auto_convert_flag ) { convert_to_quantities(); break; }
+          else 
             kb_error(1844,"Cannot do torus body volumes with hessian. Do convert_to_quantities.\n",RECOVERABLE);
+        }
       }
     }
 
@@ -1304,7 +1661,7 @@ void hessian_legal()
       kb_error(1606,"Pressures invalid. Do regular iteration before Hessian to set pressures.\n",
         RECOVERABLE);
 
-}
+} // end hessian_legal()
 
 /*****************************************************************************
 *
@@ -1313,9 +1670,10 @@ void hessian_legal()
 * purpose: Allocate Hessian
 */
 
-void hessian_init(S,rhs)
-struct linsys *S;
-REAL **rhs;  /* right side, allocated by hessian_init */
+void hessian_init(
+  struct linsys *S,
+  REAL **rhs  /* right side, allocated by hessian_init */
+)
 {
   vertex_id v_id;
   int j,i,gam,a,b,m,n;
@@ -1346,7 +1704,7 @@ REAL **rhs;  /* right side, allocated by hessian_init */
   if ( vhead_attr < 0 )
   { int one = 1;
     vhead_attr = add_attribute(VERTEX,VHEAD_ATTR_NAME,INTEGER_TYPE,
-                    0,&one,0,NULL);
+                    0,&one,0,NULL,MPI_PROPAGATE);
   }
 
   vhead_count = web.skel[VERTEX].max_ord+1;
@@ -1358,7 +1716,7 @@ REAL **rhs;  /* right side, allocated by hessian_init */
     if ( bhead_attr < 0 )
     { int one = 1;
       bhead_attr = add_attribute(BODY,BHEAD_ATTR_NAME,INTEGER_TYPE,
-                      0,&one,0,NULL);
+                      0,&one,0,NULL,MPI_PROPAGATE);
     }
   }
 
@@ -1377,16 +1735,17 @@ REAL **rhs;  /* right side, allocated by hessian_init */
   { conmap_t * conmap;
     int oncount;
     int kk;
+    ATTR attr = get_vattr(v_id);
 
     set_vertex_vhead(v_id,vcount); /* new way */
     vcount++;
-    if ( get_vattr(v_id) & FIXED ) continue;
+    if ( attr & FIXED ) continue;
     v = get_vertex_vhead(v_id);   /* old way */
     v->v_id = v_id;
 
     if ( hmode == SINGLE_DEGREE )
         v->freedom = 1;
-    else if ( get_vattr(v_id) & BOUNDARY )
+    else if ( attr & BOUNDARY )
     { struct boundary *bdry = get_boundary(v_id);
       v->freedom = bdry->pcount;
       total_proj += v->freedom;
@@ -1395,8 +1754,9 @@ REAL **rhs;  /* right side, allocated by hessian_init */
     }
     else /* possible level set constraints */
     { 
-      if ( hmode == NORMAL_MOTION ) 
-      { REAL **norm = get_vertex_v_normal(v_id);
+      if ( (hmode == NORMAL_MOTION) && !( attr & NO_HESSIAN_NORMAL_ATTR) ) 
+      { REAL **norm;
+        norm = get_vertex_v_normal(v_id);
         kk = new_calc_vertex_normal(v_id,norm);
         kk = project_vertex_normals(v_id,norm,kk);
         if ( kk < SDIM )
@@ -1488,7 +1848,7 @@ REAL **rhs;  /* right side, allocated by hessian_init */
            /* constraint value and derivs and hessian */
           oncount++;
         }
-        oncount = gram_schmidt(grad,oncount,SDIM);
+//        oncount = gram_schmidt(grad,oncount,SDIM);   // meant to get rid of redundant gradients, but messes up grad for conhess
         if ( (v->freedom < SDIM) && (oncount > 0) ) /* normal or something */
         { 
           /* project basis to constraints */
@@ -1623,11 +1983,13 @@ REAL **rhs;  /* right side, allocated by hessian_init */
     for ( i = LOW_INST ; i < meth_inst_count ; i++ )
     { struct method_instance *mi = METH_INSTANCE(i);
       if ( mi->flags & Q_COMPOUND )
-        if ( GEN_QUANT(mi->quant)->flags & (Q_ENERGY|Q_FIXED|Q_CONSERVED) )
-        {
-          mi->global_low_rank = S->low_rank;
-          S->low_rank++;
-        }
+         for ( j = 0 ; j < MMAXQUANTS ; j++ )
+          if ( (mi->quants[j] >= 0) && (GEN_QUANT(mi->quants[j])->flags & (Q_ENERGY|Q_FIXED|Q_CONSERVED)) )
+          {
+            mi->global_low_rank = S->low_rank;
+            S->low_rank++;
+            break;
+          }
     }
     S->low_rank_vecsize = currow;
     S->low_rank_vectors = dmatrix(0,S->low_rank,0,currow);
@@ -1678,12 +2040,13 @@ REAL **rhs;  /* right side, allocated by hessian_init */
   /* figure out which bodies and quantities are constraints */
   S->concount = web.skel[BODY].max_ord+1 + gen_quant_count;
   S->coninx = (int*)temp_calloc(S->concount,sizeof(int));
+  for ( i = 0 ; i < S->concount ; i++ ) S->coninx[i] = -1;  // indicate unused index
   S->coninxinv = (int*)temp_calloc(S->concount,sizeof(int));
   S->CN = 0;
   { if ( !everything_quantities_flag )
     { body_id b_id;
       FOR_ALL_BODIES(b_id)
-      { int a = get_battr(b_id);
+      { ATTR a = get_battr(b_id);
       
         set_body_vhead(b_id,web.skel[VERTEX].max_ord+1 + loc_ordinal(b_id));
         v = get_body_vhead(b_id);
@@ -1706,12 +2069,13 @@ REAL **rhs;  /* right side, allocated by hessian_init */
     else  S->concount = gen_quant_count;
     for ( n = 0 ; n < gen_quant_count ; n++,v++ )
     { int nn = everything_quantities_flag ? n : web.skel[BODY].max_ord+1 + n ;
-      GEN_QUANT(n)->vhead_index = web.skel[VERTEX].max_ord+1+optparamcount+nn;
-      v = vhead + GEN_QUANT(n)->vhead_index;
+      struct gen_quant *q = GEN_QUANT(n);
+      q->vhead_index = web.skel[VERTEX].max_ord+1+optparamcount+nn;
+      v = vhead + q->vhead_index;
       v->rownum = currow;
       v->v_id = n;
-      if ( (GEN_QUANT(n)->flags & (Q_FIXED|Q_CONSERVED) ) &&
-         !(GEN_QUANT(n)->flags & Q_REDUNDANT)  )
+      if ( (q->flags & (Q_FIXED|Q_CONSERVED) ) &&
+         !(q->flags & (Q_REDUNDANT|Q_DELETED))  )
       { 
         v->freedom = 1;
         currow++;
@@ -1745,6 +2109,7 @@ REAL **rhs;  /* right side, allocated by hessian_init */
 
   /* tell solvers element data is appropriate */
   S->flags |= S_USE_ELEMENTS;
+
 } /* end hessian_init */
 
 /*************************************************************************
@@ -1753,9 +2118,10 @@ REAL **rhs;  /* right side, allocated by hessian_init */
 *
 * purpose: call routines that calculate hessian.
 */
-void hessian_fill(S,rhsptr)
-struct linsys *S;
-REAL **rhsptr;
+void hessian_fill(
+  struct linsys *S,
+  REAL **rhsptr
+)
 { int k;
   body_id b_id;
   REAL *rhs = rhsptr ? *rhsptr : NULL;
@@ -1825,16 +2191,18 @@ rhs_constraints:
 
   /* rhs for body constraint rows */
   if ( rhs && !everything_quantities_flag )
-  FOR_ALL_BODIES(b_id)
-  { REAL *current = rhs + S->bodyrowstart + loc_ordinal(b_id);
-    if ( get_battr(b_id) & FIXEDVOL )
+  { FOR_ALL_BODIES(b_id)
+    { REAL *current = rhs + S->bodyrowstart + loc_ordinal(b_id);
+      if ( get_battr(b_id) & FIXEDVOL )
          *current = -(get_body_fixvol(b_id) - get_body_volume(b_id));
+    }
   }
 
   /* rhs for quantity constraint rows */
   if ( rhs )
   for ( k = 0 ; k < gen_quant_count ; k++ )
   { struct gen_quant *q = GEN_QUANT(k);
+    if ( q->flags & (Q_DELETED|Q_REDUNDANT) ) continue;
     if ( q->flags & Q_FIXED )
       rhs[S->quanrowstart + k] = -(q->target - q->value);
   }
@@ -1849,10 +2217,11 @@ rhs_constraints:
 * purpose: move vertices by given stepsize times current vector
 */
 
-void hessian_move(stepsize,mode,X)
-REAL stepsize;
-int mode; /* ACTUAL_MOVE or TEST_MOVE or SET_VELOCITY */
-REAL *X;  /* direction */
+void hessian_move(
+  REAL stepsize,
+  int mode, /* ACTUAL_MOVE or TEST_MOVE or SET_VELOCITY */
+  REAL *X  /* direction */
+)
 {
   int i,j;
   struct hess_verlist *vc;              /* current  vertex */
@@ -1864,7 +2233,13 @@ REAL *X;  /* direction */
   for ( i = 0 ; i < optparamcount ; i++ )
   { optparam[i].velocity = X[optparam[i].rownum];
     if ( mode != SET_VELOCITY )
-      globals(optparam[i].pnum)->value.real += stepsize*X[optparam[i].rownum];
+    { struct global *g = globals(optparam[i].pnum);
+      g->value.real += stepsize*X[optparam[i].rownum];
+      if ( g->attr.varstuff.on_assign_call )
+      { struct  global *gg = globals(g->attr.varstuff.on_assign_call);
+        eval(&gg->value.proc,NULL,NULLID,NULL);
+      }
+    }
   }
   /* move vertices */
   #ifdef MPI_EVOLVER
@@ -1937,8 +2312,7 @@ REAL *X;  /* direction */
 * purpose: clean up after hessian stuff.
 */
 
-void hessian_exit(X)
-REAL *X; /* direction, if any */
+void hessian_exit(REAL *X /* direction, if any */)
 { int j;
   struct hess_verlist *vc;              /* current  vertex */
   vertex_id v_id;
@@ -1947,7 +2321,7 @@ REAL *X; /* direction, if any */
   
   /* store move in vertex force */
   if ( X && vhead )
-    FOR_ALL_VERTICES(v_id)
+  { FOR_ALL_VERTICES(v_id)
     {
       REAL *f;
       vc = get_vertex_vhead(v_id);
@@ -1968,8 +2342,10 @@ REAL *X; /* direction, if any */
         f[j] = X[vc->rownum + j];
       }
     }
-  hessian_cleanup();
-}
+  }
+  hessian_cleanup(); 
+
+} // end hessian_exit()
 
 /************************************************************************
 *
@@ -1978,12 +2354,12 @@ REAL *X; /* direction, if any */
 * purpose: multiply Hessian times vector
 */
 
-void sp_hessian_mult(S,B,C)
-struct linsys *S;
-REAL *B; /* incoming vector */
-REAL *C; /* product */
+void sp_hessian_mult(
+  struct linsys *S,
+  REAL *B, /* incoming vector */
+  REAL *C /* product */
+)
 { int i,j;
-
 
   if ( S->lambda != 0.0 )
   {
@@ -2032,7 +2408,7 @@ REAL *C; /* product */
     temp_free((char*)W);
     temp_free((char*)Z);
   }
-}
+} // end sp_hessian_mult()
 
 /*********************************************************************
 *
@@ -2060,7 +2436,7 @@ void hessian_cleanup()
   if ( ritzvecs ) free_matrix(ritzvecs); ritz_done_flag = 0; ritzvecs = NULL;
   return;
 
-}
+} // end hessian_cleanup()
 
 /********************************************************************
 *
@@ -2070,8 +2446,7 @@ void hessian_cleanup()
 *             wet cone investigations.
 */
 
-void write_hessian(S)
-struct linsys *S;
+void write_hessian(struct linsys *S)
 {
   FILE *fd;
   char name[100];
@@ -2131,8 +2506,8 @@ struct linsys *S;
   }
   /* the metric */
   if (hessian_linear_metric_flag)
-   FOR_ALL_VERTICES(v_id)
-   { 
+  { FOR_ALL_VERTICES(v_id)
+    { 
      v = get_vertex_vhead(v_id);
      if ( v->freedom == 0 ) continue;
      for ( row = v->rownum ; row < v->rownum + v->freedom ; row++ )
@@ -2141,14 +2516,16 @@ struct linsys *S;
         for ( j = start ; j < end ; j++ )
           fprintf(fd,"%d %d %21.15e\n",row,Met.JA[j]-A_OFF,(DOUBLE)Met.A[j]);
      }
-   }
+    }
+  }
 
   /* constraints */
   for ( i = 0 ; i < S->CN ; i++ )
      for ( j = 0 ; j < S->N ; j++ )
         fprintf(fd,"%d %d %21.15e\n",i,j,(DOUBLE)S->C[i][j]);
   fclose(fd);
-}
+
+} // end write_hessian()
 
 /**********************************************************************
 *
@@ -2159,14 +2536,16 @@ struct linsys *S;
 * method: finite differences
 */
 
-void optparamhess(S,rhs)
-struct linsys *S;
-REAL *rhs;  /* right side */
+void optparamhess(
+  struct linsys *S,
+  REAL *rhs  /* right side */
+)
 { int i,j,m;
   struct oldcoord csaved;
   REAL *fake_rhs;    /* for grad differences */
   REAL *temprow;     /* for accumulating row values */
   struct gen_quant *q;
+  int old_rhs_flag = rhs_flag;
 
   if ( optparamcount <= 0 ) return;
   if ( !everything_quantities_flag ) 
@@ -2175,6 +2554,7 @@ REAL *rhs;  /* right side */
 
   fake_rhs = (REAL*)temp_calloc(S->total_rows,sizeof(REAL));
   temprow  = (REAL*)temp_calloc(S->total_rows,sizeof(REAL));
+  rhs_flag = 1;
 
   csaved.coord = NULL;
   save_coords(&csaved,SAVE_SEPARATE);
@@ -2182,12 +2562,13 @@ REAL *rhs;  /* right side */
   { REAL dp;
     REAL emid = web.total_energy;
     REAL eleft,eright;
+    struct global *g = globals(optparam[i].pnum);
 
     restore_coords(&csaved,SAVE_SEPARATE);
     calc_energy(); calc_content(Q_FIXED);
     emid = web.total_energy;
 
-    dp = globals(optparam[i].pnum)->attr.varstuff.delta;
+    dp = g->attr.varstuff.delta;
 
     memset((char*)fake_rhs,0,S->total_rows*sizeof(REAL));
     memset((char*)temprow ,0,S->total_rows*sizeof(REAL));
@@ -2195,6 +2576,7 @@ REAL *rhs;  /* right side */
     /* for optimizing parameter self hessian */
     for ( m = 0 ; m < gen_quant_count ; m++ )
     { q = GEN_QUANT(m);
+      if ( q->flags & Q_DELETED ) continue;
       if ( q->flags & Q_FIXED )
       { sp_hash_search(S,optparam[i].rownum,optparam[i].rownum,
             -q->pressure*( - 2*q->value )/dp/dp);
@@ -2202,7 +2584,11 @@ REAL *rhs;  /* right side */
     }
 
     /* right difference */
-    globals(optparam[i].pnum)->value.real += dp;
+    g->value.real += dp;
+    if ( g->attr.varstuff.on_assign_call )
+    { struct  global *gg = globals(g->attr.varstuff.on_assign_call);
+      eval(&gg->value.proc,NULL,NULLID,NULL);
+    }
     project_all(0, TEST_MOVE);
     if ( fixed_constraint_flag || web.pressure_flag || web.pressflag )
         calc_content(Q_FIXED);
@@ -2214,6 +2600,7 @@ REAL *rhs;  /* right side */
     /* for global constraints */
     for ( m = 0 ; m < gen_quant_count ; m++ )
     { q = GEN_QUANT(m);
+      if ( q->flags & Q_DELETED ) continue;
       if ( q->flags & Q_FIXED )
       { sp_hash_search(S,optparam[i].rownum,optparam[i].rownum,
             -q->pressure*( q->value )/dp/dp);
@@ -2225,7 +2612,11 @@ REAL *rhs;  /* right side */
     restore_coords(&csaved,SAVE_SEPARATE);  /* also restores opt params */
 
     /* left difference */
-    globals(optparam[i].pnum)->value.real -= dp;
+    g->value.real -= dp;
+    if ( g->attr.varstuff.on_assign_call )
+    { struct  global *gg = globals(g->attr.varstuff.on_assign_call);
+      eval(&gg->value.proc,NULL,NULLID,NULL);
+    }
     project_all(0, TEST_MOVE);
     if ( fixed_constraint_flag || web.pressure_flag || web.pressflag )
         calc_content(Q_FIXED);
@@ -2237,6 +2628,7 @@ REAL *rhs;  /* right side */
     /* for global constraints */
     for ( m = 0 ; m < gen_quant_count ; m++ )
     { q = GEN_QUANT(m);
+      if ( q->flags & Q_DELETED ) continue;
       if ( q->flags & Q_FIXED )
       { sp_hash_search(S,optparam[i].rownum,optparam[i].rownum,
             -q->pressure*( q->value )/dp/dp);
@@ -2261,6 +2653,7 @@ REAL *rhs;  /* right side */
   }
   temp_free((char*)fake_rhs);
   temp_free((char*)temprow);
+  rhs_flag = old_rhs_flag;
 
   /* optimizing parameter mixed terms */
   for ( i = 0 ; i < optparamcount ; i++ )
@@ -2269,13 +2662,23 @@ REAL *rhs;  /* right side */
         REAL vmid = globals(optparam[i].pnum)->value.real;
         REAL emid = web.total_energy;
         REAL ehihi,ehilo,elohi,elolo;
+        struct global *gi = globals(optparam[i].pnum);
+        struct global *gj = globals(optparam[j].pnum);
 
         if ( fabs(vmid) > 1. ) dp = fabs(vmid)*1e-3;
         else dp = 1e-3;
 
         /* + + difference */
-        globals(optparam[i].pnum)->value.real += dp;
-        globals(optparam[j].pnum)->value.real += dp;
+        gi->value.real += dp;
+        if ( gi->attr.varstuff.on_assign_call )
+        { struct  global *gg = globals(gi->attr.varstuff.on_assign_call);
+          eval(&gg->value.proc,NULL,NULLID,NULL);
+        }
+        gj->value.real += dp;
+        if ( gj->attr.varstuff.on_assign_call )
+        { struct  global *gg = globals(gj->attr.varstuff.on_assign_call);
+          eval(&gg->value.proc,NULL,NULLID,NULL);
+        }
         project_all(0, TEST_MOVE);
         if ( fixed_constraint_flag || web.pressure_flag || web.pressflag )
             calc_content(Q_FIXED);
@@ -2283,6 +2686,7 @@ REAL *rhs;  /* right side */
         ehihi = web.total_energy;
         for ( m = 0 ; m < gen_quant_count ; m++ )
         { q = GEN_QUANT(m);
+          if ( q->flags & Q_DELETED ) continue;
           if ( q->flags & Q_FIXED )
              sp_hash_search(S,optparam[j].rownum,optparam[i].rownum,
                 -q->pressure*( q->value )/dp/dp/4);
@@ -2290,8 +2694,16 @@ REAL *rhs;  /* right side */
         restore_coords(&csaved,SAVE_SEPARATE);  /* also restores opt params */
 
         /* + - difference */
-        globals(optparam[i].pnum)->value.real += dp;
-        globals(optparam[j].pnum)->value.real -= dp;
+        gi->value.real += dp;
+        if ( gi->attr.varstuff.on_assign_call )
+        { struct  global *gg = globals(gi->attr.varstuff.on_assign_call);
+          eval(&gg->value.proc,NULL,NULLID,NULL);
+        }
+        gj->value.real -= dp;
+        if ( gj->attr.varstuff.on_assign_call )
+        { struct  global *gg = globals(gj->attr.varstuff.on_assign_call);
+          eval(&gg->value.proc,NULL,NULLID,NULL);
+        }
         project_all(0, TEST_MOVE);
         if ( fixed_constraint_flag || web.pressure_flag || web.pressflag )
             calc_content(Q_FIXED);
@@ -2299,6 +2711,7 @@ REAL *rhs;  /* right side */
         ehilo = web.total_energy;
         for ( m = 0 ; m < gen_quant_count ; m++ )
         { q = GEN_QUANT(m);
+          if ( q->flags & Q_DELETED ) continue;
           if ( q->flags & Q_FIXED )
              sp_hash_search(S,optparam[j].rownum,optparam[i].rownum,
                 -q->pressure*(-q->value )/dp/dp/4);
@@ -2306,8 +2719,16 @@ REAL *rhs;  /* right side */
         restore_coords(&csaved,SAVE_SEPARATE);  /* also restores opt params */
 
         /* - + difference */
-        globals(optparam[i].pnum)->value.real -= dp;
-        globals(optparam[j].pnum)->value.real += dp;
+        gi->value.real -= dp;
+        if ( gi->attr.varstuff.on_assign_call )
+        { struct  global *gg = globals(gi->attr.varstuff.on_assign_call);
+          eval(&gg->value.proc,NULL,NULLID,NULL);
+        }
+        gj->value.real += dp;
+        if ( gj->attr.varstuff.on_assign_call )
+        { struct  global *gg = globals(gj->attr.varstuff.on_assign_call);
+          eval(&gg->value.proc,NULL,NULLID,NULL);
+        }
         project_all(0, TEST_MOVE);
         if ( fixed_constraint_flag || web.pressure_flag || web.pressflag )
             calc_content(Q_FIXED);
@@ -2315,6 +2736,7 @@ REAL *rhs;  /* right side */
         elohi = web.total_energy;
         for ( m = 0 ; m < gen_quant_count ; m++ )
         { q = GEN_QUANT(m);
+          if ( q->flags & Q_DELETED ) continue;
           if ( q->flags & Q_FIXED )
              sp_hash_search(S,optparam[j].rownum,optparam[i].rownum,
                 -q->pressure*(-q->value )/dp/dp/4);
@@ -2323,7 +2745,15 @@ REAL *rhs;  /* right side */
 
         /* - - difference */
         globals(optparam[i].pnum)->value.real -= dp;
+        if ( gi->attr.varstuff.on_assign_call )
+        { struct  global *gg = globals(gi->attr.varstuff.on_assign_call);
+          eval(&gg->value.proc,NULL,NULLID,NULL);
+        }
         globals(optparam[j].pnum)->value.real -= dp;
+        if ( gj->attr.varstuff.on_assign_call )
+        { struct  global *gg = globals(gj->attr.varstuff.on_assign_call);
+          eval(&gg->value.proc,NULL,NULLID,NULL);
+        }
         project_all(0, TEST_MOVE);
         if ( fixed_constraint_flag || web.pressure_flag || web.pressflag )
             calc_content(Q_FIXED);
@@ -2331,6 +2761,7 @@ REAL *rhs;  /* right side */
         elolo = web.total_energy;
         for ( m = 0 ; m < gen_quant_count ; m++ )
         { q = GEN_QUANT(m);
+          if ( q->flags & Q_DELETED ) continue;
           if ( q->flags & Q_FIXED )
              sp_hash_search(S,optparam[j].rownum,optparam[i].rownum,
                 -q->pressure*( q->value )/dp/dp/4);

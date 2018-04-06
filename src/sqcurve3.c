@@ -34,7 +34,7 @@
 /* local storage max */
 #define MAXV 20
 
-REAL star_sqcurve_method_all ARGS((struct qinfo*,int));
+REAL star_sqcurve_method_all (struct qinfo*,int);
 static int h0_flag; /* set to use (H - H_0)^2 */
 static REAL h0_value;  /* value of H_0 */
 
@@ -46,9 +46,10 @@ static REAL h0_value;  /* value of H_0 */
 *  Purpose: Initializes data structures for square curvature.
 */
 
-void star_sqcurve_method_init(mode,mi)
-int mode; /* METHOD_VALUE or METHOD_GRADIENT */
-struct method_instance *mi;
+void star_sqcurve_method_init(
+  int mode, /* METHOD_VALUE or METHOD_GRADIENT */
+  struct method_instance *mi
+)
 { int k,n;
   struct gen_quant_method *gm;
   int eltype;
@@ -91,16 +92,16 @@ struct method_instance *mi;
      }
   }
   if ( mi->gen_method == star_eff_area_sq_mean_curvature_mi )
-      if ( SDIM != 3 )
+      if ( SDIM < 3 )
              kb_error(1612,"star_eff_area_sq_mean_curvature method only for 3D space.\n",
                 RECOVERABLE);
   if ( mi->gen_method == star_normal_sq_mean_curvature_mi )
-   if ( SDIM != 3 )
+   if ( SDIM < 3 )
      kb_error(1613,"star_normal_sq_mean_curvature method only for 3D space.\n",
                 RECOVERABLE);
 
   if ( mi->gen_method == star_perp_sq_mean_curvature_mi )
-   if ( SDIM != 3 )
+   if ( SDIM < 3 )
      kb_error(2810,"star_perp_sq_mean_curvature method only for 3D space.\n",
                 RECOVERABLE);
 
@@ -116,7 +117,7 @@ struct method_instance *mi;
     }
     if ( h0_flag == 0 ) { h0_flag = H0_IN_GLOBAL; h0_value = 0.0; }
   }
-}
+} // end star_sqcurve_method_init()
 
 /***********************************************************************
 *
@@ -126,9 +127,10 @@ struct method_instance *mi;
 *
 */
 
-REAL star_sqcurve_method_all(v_info,mode)
-struct qinfo *v_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL star_sqcurve_method_all(
+  struct qinfo *v_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 {
   int variety; /* PLAIN_SQ, EFF_SQ, NORMAL_SQ, PERP_SQ */
   int pairs;
@@ -159,15 +161,13 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
   int final_edge; /* of pairs; wrap to first for complete star */
   MAT2D(proj,MAXCOORD,MAXCOORD);
   struct method_instance *mi = METH_INSTANCE(v_info->method);
+  int eff_dim = (mi->flags2 & CALC_IN_3D) ? 3 : SDIM;
 
-  if ( mi->gen_method 
-                 == star_normal_sq_mean_curvature_mi )
+  if ( mi->gen_method == star_normal_sq_mean_curvature_mi )
      variety = NORMAL_SQ;
-  else if ( mi->gen_method 
-                 == star_perp_sq_mean_curvature_mi )
+  else if ( mi->gen_method == star_perp_sq_mean_curvature_mi )
      variety = PERP_SQ;
-  else if ( mi->gen_method 
-                 == star_eff_area_sq_mean_curvature_mi )
+  else if ( mi->gen_method == star_eff_area_sq_mean_curvature_mi )
      variety = EFF_SQ;
   else variety = PLAIN_SQ;
 
@@ -199,13 +199,13 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
   for ( j = 0 ; j < SDIM ; j++ ) dAdv[j] = vnorm[j] = 0.0;
   for ( k = 0 ; k < pairs ; k++ )
   { s1 = s[k]; s2 = s[(k+1==pairs)?final_edge:k+1];
-    s1s1[k] = SDIM_dot(s1,s1);
-    s1s2[k] = SDIM_dot(s1,s2);
-    s2s2[k] = SDIM_dot(s2,s2);
+    s1s1[k] = dot(s1,s1,eff_dim);
+    s1s2[k] = dot(s1,s2,eff_dim);
+    s2s2[k] = dot(s2,s2,eff_dim);
     d[k] = s1s1[k]*s2s2[k] - s1s2[k]*s1s2[k];
     a[k] = 0.5*sqrt(d[k]);
     area += a[k];
-    for ( j = 0 ; j < SDIM ; j++ )
+    for ( j = 0 ; j < eff_dim ; j++ )
     { ds1[k][j] = 2*(s2s2[k]*s1[j] - s1s2[k]*s2[j]);
       ds2[k][j] = 2*(s1s1[k]*s2[j] - s1s2[k]*s1[j]);
       dAdv1[k][j] = 0.125/a[k]*ds1[k][j];
@@ -214,7 +214,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
     }
     if ( variety != PLAIN_SQ )
     { cross_prod(s1,s2,temp);
-      for ( j = 0 ; j < SDIM ; j++ )
+      for ( j = 0 ; j < eff_dim ; j++ )
         vnorm[j] += 0.5*temp[j];
     }
   }
@@ -228,30 +228,30 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
        dot products.
        */
     int i;
-    for ( i = 0 ; i < SDIM ; i++ )
+    for ( i = 0 ; i < eff_dim ; i++ )
        temp[i] = dAdv[i];
-    matvec_mul(proj,temp,dAdv,SDIM,SDIM);
-    for ( i = 0 ; i < SDIM ; i++ )
+    matvec_mul(proj,temp,dAdv,eff_dim,eff_dim);
+    for ( i = 0 ; i < eff_dim ; i++ )
         temp[i] = vnorm[i];
-    matvec_mul(proj,temp,vnorm,SDIM,SDIM);
+    matvec_mul(proj,temp,vnorm,eff_dim,eff_dim);
   }
 
   /* energy */
-  ff = SDIM_dot(dAdv,dAdv);
+  ff = dot(dAdv,dAdv,eff_dim);
   switch ( variety )
   { case TEST_SQ:
-        nn = SDIM_dot(vnorm,vnorm);
+        nn = dot(vnorm,vnorm,eff_dim);
         energy = nn; break; 
      case PLAIN_SQ: 
         energy = 0.75/area*ff;
         break;
      case EFF_SQ:
-        nn = SDIM_dot(vnorm,vnorm);
+        nn = dot(vnorm,vnorm,eff_dim);
         if  ( nn <= 0.0 ) return 0.0;
         energy = 0.75*area*ff/nn;
         break;
      case NORMAL_SQ:
-        fn = SDIM_dot(dAdv,vnorm);
+        fn = dot(dAdv,vnorm,eff_dim);
         if ( fn == 0.0 ) 
         { ff = 0.0; fn = 1e-6; }
         switch ( h0_flag )
@@ -263,8 +263,8 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
         energy = 0.75*area*hh0*hh0;
         break;
      case PERP_SQ:
-        fn = SDIM_dot(dAdv,vnorm);
-        nn = SDIM_dot(vnorm,vnorm);
+        fn = dot(dAdv,vnorm,eff_dim);
+        nn = dot(vnorm,vnorm,eff_dim);
         switch ( h0_flag )
           { case H0_IN_GLOBAL: vertex_h0 = h0_value; break;
             case H0_IN_ATTR:   vertex_h0 = (*VREAL(v_info->id,h0_attr));
@@ -290,7 +290,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
     /* Gradient */
 
     if ( v_info->vcount > MAXV )
-      ddss11 = dmatrix3(16*pairs,SDIM,SDIM);
+      ddss11 = dmatrix3(16*pairs,eff_dim,eff_dim);
     else memset((char*)ddss11[0][0],0,sizeof(REAL)*16*pairs*MAXCOORD*MAXCOORD);
     ddss12 = ddss11 + pairs; ddss21 = ddss12 + pairs; ddss22 = ddss21 + pairs;
     ddAdv1dv1 = ddss22 + pairs; ddAdv1dv2 = ddAdv1dv1 + pairs;
@@ -301,12 +301,12 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
     /* first, some more common terms */
     for ( k = 0 ; k < pairs ; k++ )
     { s1 = s[k]; s2 = s[(k+1==pairs)?final_edge:k+1];
-      for ( i = 0 ; i < SDIM ; i++ )
+      for ( i = 0 ; i < eff_dim ; i++ )
       { ddss11[k][i][i] = 2*s2s2[k];
         ddss12[k][i][i] = -2*s1s2[k];
         ddss21[k][i][i] = -2*s1s2[k];
         ddss22[k][i][i] = 2*s1s1[k];
-        for ( j = 0 ; j < SDIM ; j++ )
+        for ( j = 0 ; j < eff_dim ; j++ )
         { ddss11[k][i][j] -= 2*s2[i]*s2[j];
           ddss12[k][i][j] += 4*s1[i]*s2[j] - 2*s2[i]*s1[j];
           ddss21[k][i][j] += 4*s2[i]*s1[j] - 2*s1[i]*s2[j];
@@ -323,17 +323,17 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                       + 0.125/a[k]*ddss22[k][i][j];
           dfdv2[k][i][j] = -ddAdv2dv1[k][i][j] - ddAdv2dv2[k][i][j];
         }
-        if ( concount )
+        if ( concount  && (v_info->flags & INCOMPLETE_STAR))
         { /* project force and normal to constraints.  */
-          for ( j = 0 ; j < SDIM ; j++ )
+          for ( j = 0 ; j < eff_dim ; j++ )
             temp[j] = dfdv1[k][i][j];
-          matvec_mul(proj,temp,dfdv1[k][i],SDIM,SDIM);
-          for ( j = 0 ; j < SDIM ; j++ )
+          matvec_mul(proj,temp,dfdv1[k][i],eff_dim,eff_dim);
+          for ( j = 0 ; j < eff_dim ; j++ )
             temp[j] = dfdv2[k][i][j];
-          matvec_mul(proj,temp,dfdv2[k][i],SDIM,SDIM);
+          matvec_mul(proj,temp,dfdv2[k][i],eff_dim,eff_dim);
         }
-        dffdv1[k][i] = 2*SDIM_dot(dfdv1[k][i],dAdv);
-        dffdv2[k][i] = 2*SDIM_dot(dfdv2[k][i],dAdv);
+        dffdv1[k][i] = 2*dot(dfdv1[k][i],dAdv,eff_dim);
+        dffdv2[k][i] = 2*dot(dfdv2[k][i],dAdv,eff_dim);
       }
 
       if ( variety == PLAIN_SQ ) continue;
@@ -349,36 +349,36 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
       dvnorm2[k][1][2] =  0.5*s1[0];
       dvnorm2[k][2][0] =  0.5*s1[1];
       dvnorm2[k][2][1] = -0.5*s1[0];
-      if ( concount )
-        for ( i = 0 ; i < SDIM ; i++ )
+      if ( concount  && (v_info->flags & INCOMPLETE_STAR) )
+        for ( i = 0 ; i < eff_dim ; i++ )
         { /* project force and normal to constraints.  */
-          for ( j = 0 ; j < SDIM ; j++ )
+          for ( j = 0 ; j < eff_dim ; j++ )
             temp[j] = dvnorm1[k][i][j];
-          matvec_mul(proj,temp,dvnorm1[k][i],SDIM,SDIM);
-          for ( j = 0 ; j < SDIM ; j++ )
+          matvec_mul(proj,temp,dvnorm1[k][i],eff_dim,eff_dim);
+          for ( j = 0 ; j < eff_dim ; j++ )
             temp[j] = dvnorm2[k][i][j];
-          matvec_mul(proj,temp,dvnorm2[k][i],SDIM,SDIM);
+          matvec_mul(proj,temp,dvnorm2[k][i],eff_dim,eff_dim);
         }
       for ( i = 0 ; i < SDIM ; i++ )
-      { dfndv1[k][i] = SDIM_dot(dfdv1[k][i],vnorm);
-        dfndv1[k][i] += SDIM_dot(dAdv,dvnorm1[k][i]);
-        dfndv2[k][i] = SDIM_dot(dfdv2[k][i],vnorm);
-        dfndv2[k][i] += SDIM_dot(dAdv,dvnorm2[k][i]);
-        dnndv1[k][i] = 2*SDIM_dot(vnorm,dvnorm1[k][i]);
-        dnndv2[k][i] = 2*SDIM_dot(vnorm,dvnorm2[k][i]);
+      { dfndv1[k][i] = dot(dfdv1[k][i],vnorm,eff_dim);
+        dfndv1[k][i] += dot(dAdv,dvnorm1[k][i],eff_dim);
+        dfndv2[k][i] = dot(dfdv2[k][i],vnorm,eff_dim);
+        dfndv2[k][i] += dot(dAdv,dvnorm2[k][i],eff_dim);
+        dnndv1[k][i] = 2*dot(vnorm,dvnorm1[k][i],eff_dim);
+        dnndv2[k][i] = 2*dot(vnorm,dvnorm2[k][i],eff_dim);
       }
     }
 
   /* now, the actual gradients */
   for ( k = 0 ; k < v_info->vcount ; k++ )
-     for ( i = 0 ; i < SDIM ; i++ )
+     for ( i = 0 ; i < eff_dim ; i++ )
         v_info->grad[k][i] = 0.0;
 
   switch ( variety )
   { case TEST_SQ:
         for ( k = 0 ; k < pairs ; k++ )
         { REAL *grad2 = (k+1==pairs)?v_info->grad[final_edge+1]:v_info->grad[k+2];
-          for ( i = 0 ; i < SDIM ; i++ )
+          for ( i = 0 ; i < eff_dim ; i++ )
           { g = dnndv1[k][i];
             v_info->grad[k+1][i] += g;
             v_info->grad[0][i] -= g;
@@ -392,7 +392,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
      case PLAIN_SQ: 
         for ( k = 0 ; k < pairs ; k++ )
         { REAL *grad2 = (k+1==pairs)?v_info->grad[final_edge+1]:v_info->grad[k+2];
-          for ( i = 0 ; i < SDIM ; i++ )
+          for ( i = 0 ; i < eff_dim ; i++ )
           { g = -0.75*ff/area/area*dAdv1[k][i] + 0.75/area*dffdv1[k][i];
             v_info->grad[k+1][i] += g;
             v_info->grad[0][i] -= g;
@@ -406,7 +406,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
      case EFF_SQ:
         for ( k = 0 ; k < pairs ; k++ )
         { REAL *grad2 = (k+1==pairs)?v_info->grad[final_edge+1]:v_info->grad[k+2];
-          for ( i = 0 ; i < SDIM ; i++ )
+          for ( i = 0 ; i < eff_dim ; i++ )
           { g = 0.75*ff/nn*dAdv1[k][i] 
                     + 0.75*area/nn*dffdv1[k][i]
                       - 0.75*area/nn/nn*ff*dnndv1[k][i];
@@ -446,7 +446,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
      case PERP_SQ:
         for ( k = 0 ; k < pairs ; k++ )
         { REAL *grad2 = (k+1==pairs)?v_info->grad[final_edge+1]:v_info->grad[k+2];
-          for ( i = 0 ; i < SDIM ; i++ )
+          for ( i = 0 ; i < eff_dim ; i++ )
           { g = 0.75*hh0*hh0*dAdv1[k][i] 
                     + 1.5*area/nn*hh0*dfndv1[k][i]
                     - 1.5*area*fn*hh0/nn/nn*dnndv1[k][i]; 
@@ -467,23 +467,23 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
       if ( sym_flags & DOUBLE_AXIAL ) fudge *= 2;
       fudge *= rotorder/v_info->axial_order;
       for ( i = 0 ; i < v_info->vcount ; i++ )
-         for ( j = 0 ; j < SDIM ; j++ )
+         for ( j = 0 ; j < eff_dim ; j++ )
           v_info->grad[i][j] *= fudge;
     }
     if ( mode == METHOD_GRADIENT ) goto all_exit;
 
     /* Hessian */
     if ( (variety == EFF_SQ) || (variety==PERP_SQ) || (variety == TEST_SQ) )
-    { for ( i = 0 ; i < SDIM ; i++ )
-      { antisymnorm[i][(i+1)%SDIM] = vnorm[(i+2)%SDIM]/2;
-        antisymnorm[(i+1)%SDIM][i] = -vnorm[(i+2)%SDIM]/2;
+    { for ( i = 0 ; i < eff_dim ; i++ )
+      { antisymnorm[i][(i+1)%eff_dim] = vnorm[(i+2)%eff_dim]/2;
+        antisymnorm[(i+1)%eff_dim][i] = -vnorm[(i+2)%eff_dim]/2;
         antisymnorm[i][i] = 0.0;
       }
     }
     if ( (variety == NORMAL_SQ) || (variety==PERP_SQ) || (variety == TEST_SQ) )
     { for ( i = 0 ; i < SDIM ; i++ )
-      { antisymf[i][(i+1)%SDIM] = dAdv[(i+2)%SDIM]/2;
-        antisymf[(i+1)%SDIM][i] = -dAdv[(i+2)%SDIM]/2;
+      { antisymf[i][(i+1)%eff_dim] = dAdv[(i+2)%eff_dim]/2;
+        antisymf[(i+1)%eff_dim][i] = -dAdv[(i+2)%eff_dim]/2;
         antisymf[i][i] = 0.0;
       }
     }
@@ -528,20 +528,20 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
     { REAL co1 = 0.25/a[k]/a[k]/a[k];
       REAL co2 = 0.125/a[k]/a[k];
       REAL co3 = 0.125/a[k];
-      REAL dssf = (SDIM_dot(ds1[k],dAdv)+SDIM_dot(ds2[k],dAdv));
+      REAL dssf = (dot(ds1[k],dAdv,eff_dim)+dot(ds2[k],dAdv,eff_dim));
       REAL s1f,s2f;
       REAL ddssf1[MAXCOORD],ddssf2[MAXCOORD];
 
 
-      for ( i = 0 ; i < SDIM ; i++ )
+      for ( i = 0 ; i < eff_dim ; i++ )
       { ddssf1[i] = 
-            (SDIM_dot(ddss11[k][i],dAdv)+SDIM_dot(ddss12[k][i],dAdv));
+            (dot(ddss11[k][i],dAdv,eff_dim)+dot(ddss12[k][i],dAdv,eff_dim));
         ddssf2[i] =
-            (SDIM_dot(ddss21[k][i],dAdv)+SDIM_dot(ddss22[k][i],dAdv));
+            (dot(ddss21[k][i],dAdv,eff_dim)+dot(ddss22[k][i],dAdv,eff_dim));
       }
       s1 = s[k]; s2 = s[(k+1==pairs)?final_edge:k+1];
-      s1f = SDIM_dot(s1,dAdv);
-      s2f = SDIM_dot(s2,dAdv);
+      s1f = dot(s1,dAdv,eff_dim);
+      s2f = dot(s2,dAdv,eff_dim);
 
       for ( kk = 0 ; kk < pairs ; kk++ )
       { int nextk = (k+1==pairs) ? final_edge : k+1 ; 
@@ -557,10 +557,10 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
         REAL **h01 = v_info->hess[0][kk+1];
         REAL ddff,dddsf,ddnn,ddfn;
 
-        for ( i = 0 ; i < SDIM ; i++ )
-          for ( ii = 0 ; ii < SDIM ; ii++ )
+        for ( i = 0 ; i < eff_dim ; i++ )
+          for ( ii = 0 ; ii < eff_dim ; ii++ )
           { /* 11 term */
-            ddff = SDIM_dot(dfdv1[k][i],dfdv1[kk][ii]);
+            ddff = dot(dfdv1[k][i],dfdv1[kk][ii],eff_dim);
             if ( k == kk )
             {
               ddff += (-co1*dAdv1[k][i]*dAdv1[k][ii] + co2*ddAdv1dv1[k][i][ii])
@@ -574,7 +574,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
             ddff *= 2;
             switch ( variety )
               { case TEST_SQ:
-                      h = ddnn = 2*SDIM_dot(dvnorm1[k][i],dvnorm1[kk][ii]);
+                      h = ddnn = 2*dot(dvnorm1[k][i],dvnorm1[kk][ii],eff_dim);
                      break;
                  case PLAIN_SQ:
                      h = -aa75*(dffdv1[k][i]*dAdv1[kk][ii]
@@ -585,7 +585,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                         h -= ffaa*ddAdv1dv1[k][i][ii];
                      break;
                  case EFF_SQ:
-                      ddnn = 2*SDIM_dot(dvnorm1[k][i],dvnorm1[kk][ii]);
+                      ddnn = 2*dot(dvnorm1[k][i],dvnorm1[kk][ii],eff_dim);
                       h = an75*ddff
                          - ann75*dffdv1[k][i]*dnndv1[kk][ii]
                          - ann75*dffdv1[kk][ii]*dnndv1[k][i]
@@ -599,20 +599,20 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                          h += ffn75*ddAdv1dv1[k][i][ii];
                       break;
                  case NORMAL_SQ:
-                      ddfn = SDIM_dot(dfdv1[k][i],dvnorm1[kk][ii])
-                              + SDIM_dot(dvnorm1[k][i],dfdv1[kk][ii]);
+                      ddfn = dot(dfdv1[k][i],dvnorm1[kk][ii],eff_dim)
+                              + dot(dvnorm1[k][i],dfdv1[kk][ii],eff_dim);
                       if ( k == kk )
                       {
                          ddfn += (-co1*dAdv1[k][i]*dAdv1[k][ii]
                                      + co2*ddAdv1dv1[k][i][ii])
-                            *(SDIM_dot(ds1[k],vnorm)+SDIM_dot(ds2[k],vnorm));
+                            *(dot(ds1[k],vnorm,eff_dim)+dot(ds2[k],vnorm,eff_dim));
                          ddfn += co2*dAdv1[k][i]*
-                          (SDIM_dot(ddss11[kk][ii],vnorm)
-                              +SDIM_dot(ddss12[kk][ii],vnorm));
+                          (dot(ddss11[kk][ii],vnorm,eff_dim)
+                              +dot(ddss12[kk][ii],vnorm,eff_dim));
                          ddfn += co2*dAdv1[kk][ii]*
-                            (SDIM_dot(ddss11[k][i],vnorm)
-                              +SDIM_dot(ddss12[k][i],vnorm));
-                         dddsf = ((i==ii) ? 4*SDIM_dot(s2,vnorm) : 0. )
+                            (dot(ddss11[k][i],vnorm,eff_dim)
+                              +dot(ddss12[k][i],vnorm,eff_dim));
+                         dddsf = ((i==ii) ? 4*dot(s2,vnorm,eff_dim) : 0. )
                                     - 2*s2[i]*vnorm[ii] - 2*s2[ii]*vnorm[i];
                          ddfn -= co3*dddsf;
                       }
@@ -630,21 +630,21 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                          h += fffffnfn*ddAdv1dv1[k][i][ii];
                       break;
                   case PERP_SQ:
-                      ddnn = 2*SDIM_dot(dvnorm1[k][i],dvnorm1[kk][ii]);
-                      ddfn = SDIM_dot(dfdv1[k][i],dvnorm1[kk][ii])
-                              + SDIM_dot(dvnorm1[k][i],dfdv1[kk][ii]);
+                      ddnn = 2*dot(dvnorm1[k][i],dvnorm1[kk][ii],eff_dim);
+                      ddfn = dot(dfdv1[k][i],dvnorm1[kk][ii],eff_dim)
+                              + dot(dvnorm1[k][i],dfdv1[kk][ii],eff_dim);
                       if ( k == kk )
                       {
                          ddfn += (-co1*dAdv1[k][i]*dAdv1[k][ii]
                                      + co2*ddAdv1dv1[k][i][ii])
-                            *(SDIM_dot(ds1[k],vnorm)+SDIM_dot(ds2[k],vnorm));
+                            *(dot(ds1[k],vnorm,eff_dim)+dot(ds2[k],vnorm,eff_dim));
                          ddfn += co2*dAdv1[k][i]*
-                          (SDIM_dot(ddss11[kk][ii],vnorm)
-                              +SDIM_dot(ddss12[kk][ii],vnorm));
+                          (dot(ddss11[kk][ii],vnorm,eff_dim)
+                              +dot(ddss12[kk][ii],vnorm,eff_dim));
                          ddfn += co2*dAdv1[kk][ii]*
-                            (SDIM_dot(ddss11[k][i],vnorm)
-                              +SDIM_dot(ddss12[k][i],vnorm));
-                         dddsf = ((i==ii) ? 4*SDIM_dot(s2,vnorm) : 0. )
+                            (dot(ddss11[k][i],vnorm,eff_dim)
+                              +dot(ddss12[k][i],vnorm,eff_dim));
+                         dddsf = ((i==ii) ? 4*dot(s2,vnorm,eff_dim) : 0. )
                                     - 2*s2[i]*vnorm[ii] - 2*s2[ii]*vnorm[i];
                          ddfn -= co3*dddsf;
                       }
@@ -672,7 +672,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                 h00[i][ii] += h;
 
                 /* 12 term */
-                ddff = SDIM_dot(dfdv1[k][i],dfdv2[kk][ii]);
+                ddff = dot(dfdv1[k][i],dfdv2[kk][ii],eff_dim);
                 if ( k == kk )
                 { ddff += (-co1*dAdv1[k][i]*dAdv2[k][ii] + co2*ddAdv1dv2[k][i][ii])
                               *dssf;
@@ -687,7 +687,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
               ddff *= 2;
               switch ( variety )
               { case TEST_SQ:
-                      ddnn = 2*SDIM_dot(dvnorm1[k][i],dvnorm2[kk][ii]);
+                      ddnn = 2*dot(dvnorm1[k][i],dvnorm2[kk][ii],eff_dim);
                       if ( k == kk ) ddnn += 2*antisymnorm[i][ii];
                       h = ddnn;
                      break;
@@ -700,7 +700,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                         h -= ffaa*ddAdv1dv2[k][i][ii];
                       break;
                  case EFF_SQ:
-                      ddnn = 2*SDIM_dot(dvnorm1[k][i],dvnorm2[kk][ii]);
+                      ddnn = 2*dot(dvnorm1[k][i],dvnorm2[kk][ii],eff_dim);
                       if ( k == kk ) ddnn += 2*antisymnorm[i][ii];
                       h = an75*ddff
                          - ann75*dffdv1[k][i]*dnndv2[kk][ii]
@@ -715,24 +715,24 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                          h += ffn75*ddAdv1dv2[k][i][ii];
                       break;
                  case NORMAL_SQ:
-                      ddfn = SDIM_dot(dfdv1[k][i],dvnorm2[kk][ii])
-                              + SDIM_dot(dvnorm1[k][i],dfdv2[kk][ii]);
+                      ddfn = dot(dfdv1[k][i],dvnorm2[kk][ii],eff_dim)
+                              + dot(dvnorm1[k][i],dfdv2[kk][ii],eff_dim);
                       if ( k == kk ) ddfn += antisymf[i][ii];
                       if ( k == kk )
                       {
                          ddfn += (-co1*dAdv1[k][i]*dAdv2[k][ii]
                                      + co2*ddAdv1dv2[k][i][ii])
-                                     *(SDIM_dot(ds1[k],vnorm)+SDIM_dot(ds2[k],vnorm));
+                                     *(dot(ds1[k],vnorm,eff_dim)+dot(ds2[k],vnorm,eff_dim));
                          ddfn += co2*dAdv1[k][i]*
-                          (SDIM_dot(ddss21[kk][ii],vnorm)
-                              +SDIM_dot(ddss22[kk][ii],vnorm));
+                          (dot(ddss21[kk][ii],vnorm,eff_dim)
+                              +dot(ddss22[kk][ii],vnorm,eff_dim));
                          ddfn += co2*dAdv2[kk][ii]*
-                            (SDIM_dot(ddss11[k][i],vnorm)
-                              +SDIM_dot(ddss12[k][i],vnorm));
+                            (dot(ddss11[k][i],vnorm,eff_dim)
+                              +dot(ddss12[k][i],vnorm,eff_dim));
                          dddsf = 4*vnorm[i]*s2[ii] -2*vnorm[ii]*s2[i] 
-                                     - 2*((i==ii) ? SDIM_dot(s2,vnorm) : 0.0)
+                                     - 2*((i==ii) ? dot(s2,vnorm,eff_dim) : 0.0)
                                  + 4*vnorm[ii]*s1[i] - 2*vnorm[i]*s1[ii]
-                                     - 2*((i==ii) ? SDIM_dot(s1,vnorm) : 0.0);
+                                     - 2*((i==ii) ? dot(s1,vnorm,eff_dim) : 0.0);
                          ddfn -= co3*dddsf;
                       }
                       h  = afnfn*dffdv1[k][i]*dffdv2[kk][ii]
@@ -749,26 +749,26 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                          h += fffffnfn*ddAdv1dv2[k][i][ii];
                       break;
                case PERP_SQ:
-                      ddnn = 2*SDIM_dot(dvnorm1[k][i],dvnorm2[kk][ii]);
+                      ddnn = 2*dot(dvnorm1[k][i],dvnorm2[kk][ii],eff_dim);
                       if ( k == kk ) ddnn += 2*antisymnorm[i][ii];
-                      ddfn = SDIM_dot(dfdv1[k][i],dvnorm2[kk][ii])
-                              + SDIM_dot(dvnorm1[k][i],dfdv2[kk][ii]);
+                      ddfn = dot(dfdv1[k][i],dvnorm2[kk][ii],eff_dim)
+                              + dot(dvnorm1[k][i],dfdv2[kk][ii],eff_dim);
                       if ( k == kk ) ddfn += antisymf[i][ii];
                       if ( k == kk )
                       {
                          ddfn += (-co1*dAdv1[k][i]*dAdv2[k][ii]
                                      + co2*ddAdv1dv2[k][i][ii])
-                                     *(SDIM_dot(ds1[k],vnorm)+SDIM_dot(ds2[k],vnorm));
+                                     *(dot(ds1[k],vnorm,eff_dim)+dot(ds2[k],vnorm,eff_dim));
                          ddfn += co2*dAdv1[k][i]*
-                          (SDIM_dot(ddss21[kk][ii],vnorm)
-                              +SDIM_dot(ddss22[kk][ii],vnorm));
+                          (dot(ddss21[kk][ii],vnorm,eff_dim)
+                              +dot(ddss22[kk][ii],vnorm,eff_dim));
                          ddfn += co2*dAdv2[kk][ii]*
-                            (SDIM_dot(ddss11[k][i],vnorm)
-                              +SDIM_dot(ddss12[k][i],vnorm));
+                            (dot(ddss11[k][i],vnorm,eff_dim)
+                              +dot(ddss12[k][i],vnorm,eff_dim));
                          dddsf = 4*vnorm[i]*s2[ii] -2*vnorm[ii]*s2[i] 
-                                     - 2*((i==ii) ? SDIM_dot(s2,vnorm) : 0.0)
+                                     - 2*((i==ii) ? dot(s2,vnorm,eff_dim) : 0.0)
                                  + 4*vnorm[ii]*s1[i] - 2*vnorm[i]*s1[ii]
-                                     - 2*((i==ii) ? SDIM_dot(s1,vnorm) : 0.0);
+                                     - 2*((i==ii) ? dot(s1,vnorm,eff_dim) : 0.0);
                          ddfn -= co3*dddsf;
                       }
            h = 1.5*hh0*dAdv1[k][i]*(dfndv2[kk][ii]/nn-fn/nn/nn*dnndv2[kk][ii])
@@ -795,7 +795,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                 h00[i][ii] += h;
 
                 /* 21 term */
-                ddff = SDIM_dot(dfdv2[k][i],dfdv1[kk][ii]);
+                ddff = dot(dfdv2[k][i],dfdv1[kk][ii],eff_dim);
                 if ( k == kk )
                 { ddff += (-co1*dAdv2[k][i]*dAdv1[k][ii] + co2*ddAdv2dv1[k][i][ii])
                               *dssf;
@@ -810,7 +810,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
               ddff *= 2;
               switch ( variety )
               { case TEST_SQ:
-                      ddnn = 2*SDIM_dot(dvnorm2[k][i],dvnorm1[kk][ii]);
+                      ddnn = 2*dot(dvnorm2[k][i],dvnorm1[kk][ii],eff_dim);
                       if ( k == kk ) ddnn += 2*antisymnorm[ii][i];
                       h = ddnn;
                      break;
@@ -823,7 +823,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                         h -= ffaa*ddAdv2dv1[k][i][ii];
                       break;
                  case EFF_SQ:
-                      ddnn = 2*SDIM_dot(dvnorm2[k][i],dvnorm1[kk][ii]);
+                      ddnn = 2*dot(dvnorm2[k][i],dvnorm1[kk][ii],eff_dim);
                       if ( k == kk ) ddnn += 2*antisymnorm[ii][i];
                       h = an75*ddff
                          - ann75*dffdv2[k][i]*dnndv1[kk][ii]
@@ -838,24 +838,24 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                          h += ffn75*ddAdv2dv1[k][i][ii];
                       break;
                  case NORMAL_SQ:
-                      ddfn = SDIM_dot(dfdv2[k][i],dvnorm1[kk][ii])
-                              + SDIM_dot(dvnorm2[k][i],dfdv1[kk][ii]);
+                      ddfn = dot(dfdv2[k][i],dvnorm1[kk][ii],eff_dim)
+                              + dot(dvnorm2[k][i],dfdv1[kk][ii],eff_dim);
                       if ( k == kk ) ddfn += antisymf[ii][i];
                       if ( k == kk )
                       {
                          ddfn += (-co1*dAdv2[k][i]*dAdv1[k][ii]
                                      + co2*ddAdv2dv1[k][i][ii])
-                                     *(SDIM_dot(ds1[k],vnorm)+SDIM_dot(ds2[k],vnorm));
+                                     *(dot(ds1[k],vnorm,eff_dim)+dot(ds2[k],vnorm,eff_dim));
                          ddfn += co2*dAdv2[k][i]*
-                          (SDIM_dot(ddss11[kk][ii],vnorm)
-                              +SDIM_dot(ddss12[kk][ii],vnorm));
+                          (dot(ddss11[kk][ii],vnorm,eff_dim)
+                              +dot(ddss12[kk][ii],vnorm,eff_dim));
                          ddfn += co2*dAdv1[kk][ii]*
-                            (SDIM_dot(ddss21[k][i],vnorm)
-                              +SDIM_dot(ddss22[k][i],vnorm));
+                            (dot(ddss21[k][i],vnorm,eff_dim)
+                              +dot(ddss22[k][i],vnorm,eff_dim));
                          dddsf = 4*vnorm[i]*s1[ii] -2*vnorm[ii]*s1[i] 
-                                     - 2*((i==ii) ? SDIM_dot(s1,vnorm) : 0.0)
+                                     - 2*((i==ii) ? dot(s1,vnorm,eff_dim) : 0.0)
                                  + 4*vnorm[ii]*s2[i] - 2*vnorm[i]*s2[ii]
-                                     - 2*((i==ii) ? SDIM_dot(s2,vnorm) : 0.0);
+                                     - 2*((i==ii) ? dot(s2,vnorm,eff_dim) : 0.0);
                          ddfn -= co3*dddsf;
                       }
                       h  = afnfn*dffdv2[k][i]*dffdv1[kk][ii]
@@ -872,26 +872,26 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                          h += fffffnfn*ddAdv2dv1[k][i][ii];
                       break;
                  case PERP_SQ:
-                      ddnn = 2*SDIM_dot(dvnorm2[k][i],dvnorm1[kk][ii]);
+                      ddnn = 2*dot(dvnorm2[k][i],dvnorm1[kk][ii],eff_dim);
                       if ( k == kk ) ddnn += 2*antisymnorm[ii][i];
-                      ddfn = SDIM_dot(dfdv2[k][i],dvnorm1[kk][ii])
-                              + SDIM_dot(dvnorm2[k][i],dfdv1[kk][ii]);
+                      ddfn = dot(dfdv2[k][i],dvnorm1[kk][ii],eff_dim)
+                              + dot(dvnorm2[k][i],dfdv1[kk][ii],eff_dim);
                       if ( k == kk ) ddfn += antisymf[ii][i];
                       if ( k == kk )
                       {
                          ddfn += (-co1*dAdv2[k][i]*dAdv1[k][ii]
                                      + co2*ddAdv2dv1[k][i][ii])
-                                     *(SDIM_dot(ds1[k],vnorm)+SDIM_dot(ds2[k],vnorm));
+                                     *(dot(ds1[k],vnorm,eff_dim)+dot(ds2[k],vnorm,eff_dim));
                          ddfn += co2*dAdv2[k][i]*
-                          (SDIM_dot(ddss11[kk][ii],vnorm)
-                              +SDIM_dot(ddss12[kk][ii],vnorm));
+                          (dot(ddss11[kk][ii],vnorm,eff_dim)
+                              +dot(ddss12[kk][ii],vnorm,eff_dim));
                          ddfn += co2*dAdv1[kk][ii]*
-                            (SDIM_dot(ddss21[k][i],vnorm)
-                              +SDIM_dot(ddss22[k][i],vnorm));
+                            (dot(ddss21[k][i],vnorm,eff_dim)
+                              +dot(ddss22[k][i],vnorm,eff_dim));
                          dddsf = 4*vnorm[i]*s1[ii] -2*vnorm[ii]*s1[i] 
-                                     - 2*((i==ii) ? SDIM_dot(s1,vnorm) : 0.0)
+                                     - 2*((i==ii) ? dot(s1,vnorm,eff_dim) : 0.0)
                                  + 4*vnorm[ii]*s2[i] - 2*vnorm[i]*s2[ii]
-                                     - 2*((i==ii) ? SDIM_dot(s2,vnorm) : 0.0);
+                                     - 2*((i==ii) ? dot(s2,vnorm,eff_dim) : 0.0);
                          ddfn -= co3*dddsf;
                       }
            h = 1.5*hh0*dAdv2[k][i]*(dfndv1[kk][ii]/nn-fn/nn/nn*dnndv1[kk][ii])
@@ -918,7 +918,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                 h00[i][ii] += h;
 
                 /* 22 term */
-                ddff = SDIM_dot(dfdv2[k][i],dfdv2[kk][ii]);
+                ddff = dot(dfdv2[k][i],dfdv2[kk][ii],eff_dim);
                 if ( k == kk )
                 { ddff += (-co1*dAdv2[k][i]*dAdv2[k][ii] + co2*ddAdv2dv2[k][i][ii])
                               *dssf;
@@ -931,7 +931,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
               ddff *= 2;
               switch ( variety )
               { case TEST_SQ:
-                      ddnn = 2*SDIM_dot(dvnorm2[k][i],dvnorm2[kk][ii]);
+                      ddnn = 2*dot(dvnorm2[k][i],dvnorm2[kk][ii],eff_dim);
                       h = ddnn;
                      break;
                  case PLAIN_SQ:
@@ -943,7 +943,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                         h -= ffaa*ddAdv2dv2[k][i][ii];
                       break;
                  case EFF_SQ:
-                      ddnn = 2*SDIM_dot(dvnorm2[k][i],dvnorm2[kk][ii]);
+                      ddnn = 2*dot(dvnorm2[k][i],dvnorm2[kk][ii],eff_dim);
                       h = an75*ddff
                          - ann75*dffdv2[k][i]*dnndv2[kk][ii]
                          - ann75*dffdv2[kk][ii]*dnndv2[k][i]
@@ -957,20 +957,20 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                          h += ffn75*ddAdv2dv2[k][i][ii];
                       break;
                  case NORMAL_SQ:
-                      ddfn = SDIM_dot(dfdv2[k][i],dvnorm2[kk][ii])
-                              + SDIM_dot(dvnorm2[k][i],dfdv2[kk][ii]);
+                      ddfn = dot(dfdv2[k][i],dvnorm2[kk][ii],eff_dim)
+                              + dot(dvnorm2[k][i],dfdv2[kk][ii],eff_dim);
                       if ( k == kk )
                       {
                          ddfn += (-co1*dAdv2[k][i]*dAdv2[k][ii]
                                      + co2*ddAdv2dv2[k][i][ii])
-                                     *(SDIM_dot(ds1[k],vnorm)+SDIM_dot(ds2[k],vnorm));
+                                     *(dot(ds1[k],vnorm,eff_dim)+dot(ds2[k],vnorm,eff_dim));
                          ddfn += co2*dAdv2[k][i]*
-                          (SDIM_dot(ddss21[kk][ii],vnorm)
-                              +SDIM_dot(ddss22[kk][ii],vnorm));
+                          (dot(ddss21[kk][ii],vnorm,eff_dim)
+                              +dot(ddss22[kk][ii],vnorm,eff_dim));
                          ddfn += co2*dAdv2[kk][ii]*
-                            (SDIM_dot(ddss21[k][i],vnorm)
-                              +SDIM_dot(ddss22[k][i],vnorm));
-                         dddsf = ((i==ii) ? 4*SDIM_dot(s1,vnorm) : 0. )
+                            (dot(ddss21[k][i],vnorm,eff_dim)
+                              +dot(ddss22[k][i],vnorm,eff_dim));
+                         dddsf = ((i==ii) ? 4*dot(s1,vnorm,eff_dim) : 0. )
                                     - 2*s1[i]*vnorm[ii] - 2*s1[ii]*vnorm[i];
                          ddfn -= co3*dddsf;
                       }
@@ -988,21 +988,21 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
                          h += fffffnfn*ddAdv2dv2[k][i][ii];
                       break;
                    case PERP_SQ:
-                      ddnn = 2*SDIM_dot(dvnorm2[k][i],dvnorm2[kk][ii]);
-                      ddfn = SDIM_dot(dfdv2[k][i],dvnorm2[kk][ii])
-                              + SDIM_dot(dvnorm2[k][i],dfdv2[kk][ii]);
+                      ddnn = 2*dot(dvnorm2[k][i],dvnorm2[kk][ii],eff_dim);
+                      ddfn = dot(dfdv2[k][i],dvnorm2[kk][ii],eff_dim)
+                              + dot(dvnorm2[k][i],dfdv2[kk][ii],eff_dim);
                       if ( k == kk )
                       {
                          ddfn += (-co1*dAdv2[k][i]*dAdv2[k][ii]
                                      + co2*ddAdv2dv2[k][i][ii])
-                                     *(SDIM_dot(ds1[k],vnorm)+SDIM_dot(ds2[k],vnorm));
+                                     *(dot(ds1[k],vnorm,eff_dim)+dot(ds2[k],vnorm,eff_dim));
                          ddfn += co2*dAdv2[k][i]*
-                          (SDIM_dot(ddss21[kk][ii],vnorm)
-                              +SDIM_dot(ddss22[kk][ii],vnorm));
+                          (dot(ddss21[kk][ii],vnorm,eff_dim)
+                              +dot(ddss22[kk][ii],vnorm,eff_dim));
                          ddfn += co2*dAdv2[kk][ii]*
-                            (SDIM_dot(ddss21[k][i],vnorm)
-                              +SDIM_dot(ddss22[k][i],vnorm));
-                         dddsf = ((i==ii) ? 4*SDIM_dot(s1,vnorm) : 0. )
+                            (dot(ddss21[k][i],vnorm,eff_dim)
+                              +dot(ddss22[k][i],vnorm,eff_dim));
+                         dddsf = ((i==ii) ? 4*dot(s1,vnorm,eff_dim) : 0. )
                                     - 2*s1[i]*vnorm[ii] - 2*s1[ii]*vnorm[i];
                          ddfn -= co3*dddsf;
                       }
@@ -1039,8 +1039,8 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
       fudge *= rotorder/v_info->axial_order;
       for ( i = 0 ; i < v_info->vcount ; i++ )
         for ( ii = 0 ; ii < v_info->vcount ; ii++ )
-         for ( k = 0 ; k < SDIM ; k++ )
-          for ( kk = 0 ; kk < SDIM ; kk++ )
+         for ( k = 0 ; k < eff_dim ; k++ )
+          for ( kk = 0 ; kk < eff_dim ; kk++ )
              v_info->hess[i][ii][k][kk] *= fudge;
     }
 
@@ -1063,126 +1063,10 @@ all_exit:
 *
 */
 
-REAL star_sqcurve_method_value(v_info)
-struct qinfo *v_info;
+REAL star_sqcurve_method_value(struct qinfo *v_info)
 {
-#define USE_ALL
-#ifdef USE_ALL
   return star_sqcurve_method_all(v_info,METHOD_VALUE);  
-#else
-
-  /* following is streamlined for just energy */
-
-  int variety; /* PLAIN_SQ, EFF_SQ, NORMAL_SQ */
-  int pairs;
-  int j,k;
-  REAL energy,ff,fn,nn,area;
-  REAL dAdv[MAXCOORD], a, d, s1s1, s1s2, s2s2;
-  REAL vnorm[MAXCOORD];
-  REAL ds1,ds2,coeff;
-  REAL *s1,*s2;
-  REAL **s = v_info->sides[0];
-  REAL temp[MAXCOORD];
-  MAT2D(proj,MAXCOORD,MAXCOORD); /* for constraint projection */
-  int concount; /* number of constraints vertex is on */
-  int final_edge; /* of pairs; wrap to first for complete star */
-  
-  if ( METH_INSTANCE(v_info->method)->gen_method 
-           == star_normal_sq_mean_curvature_mi )
-     variety = NORMAL_SQ;
-  else 
-  { if ( h0_flag ) 
-     kb_error(1617,"Can only use star_normal_sq_mean_curvature with h_zero.\n",
-                RECOVERABLE);
-     if ( METH_INSTANCE(v_info->method)->gen_method 
-             == star_eff_area_sq_mean_curvature_mi )
-        variety = EFF_SQ;
-     else variety = PLAIN_SQ;
-  }
-  pairs = (v_info->vcount - 1);
-  if ( pairs <= 0 ) return 0.0;
-  if ( v_info->flags & INCOMPLETE_STAR )
-  { pairs--;
-    final_edge = pairs;
-  }
-  else 
-    final_edge = 0;
-
-  /* constraint projection */
-  concount = constr_proj_matrix(v_info->id,proj);
-
-  /* basic dot products */
-  area = 0.0;
-  for ( j = 0 ; j < SDIM ; j++ ) dAdv[j] = vnorm[j] = 0.0;
-  for ( k = 0 ; k < pairs ; k++ )
-  { s1 = s[k]; s2 = s[(k+1==pairs)?final_edge:k+1];
-    s1s1 = SDIM_dot(s1,s1);
-    s1s2 = SDIM_dot(s1,s2);
-    s2s2 = SDIM_dot(s2,s2);
-    d = s1s1*s2s2 - s1s2*s1s2;
-    a = sqrt(d);
-    area += a;
-    coeff = 0.5/a;
-    for ( j = 0 ; j < SDIM ; j++ )
-    { ds1 = (s2s2*s1[j] - s1s2*s2[j]);
-      ds2 = (s1s1*s2[j] - s1s2*s1[j]);
-      dAdv[j] -= coeff*(ds1 + ds2);
-    }
-    if ( variety != PLAIN_SQ )
-    { cross_prod(s1,s2,temp);
-      for ( j = 0 ; j < SDIM ; j++ )
-        vnorm[j] += 0.5*temp[j];
-    }
-  }
-  area *= 0.5;
-
-  if ( concount )
-  { /* project force and normal to constraints. This is enough to take
-       care of energy and gradient, since force and energy occur only in
-       dot products.
-       */
-    int i;
-    for ( i = 0 ; i < SDIM ; i++ )
-       temp[i] = dAdv[i];
-    matvec_mul(proj,temp,dAdv,SDIM,SDIM);
-    for ( i = 0 ; i < SDIM ; i++ )
-       temp[i] = vnorm[i];
-    matvec_mul(proj,temp,vnorm,SDIM,SDIM);
-  }
-
-  /* energy */
-  ff = SDIM_dot(dAdv,dAdv);
-  switch ( variety )
-  { case PLAIN_SQ: 
-        energy = 0.75/area*ff;
-        break;
-     case EFF_SQ:
-        nn = SDIM_dot(vnorm,vnorm);
-        energy = 0.75*area*ff/nn;
-        break;
-     case NORMAL_SQ:
-     { REAL h0_val;
-       switch ( h0_flag )
-       { case H0_IN_GLOBAL: h0_val = h0_value; break;
-         case H0_IN_ATTR:   h0_val = *VREAL(v_info->id,h0_attr); break;
-         default: h0_val = 0;
-       }
-       fn = SDIM_dot(dAdv,vnorm);
-       if ( fn == 0.0 ) energy = 0.0;
-       else energy = 0.75*area*(ff/fn-2*h0_val/3)*(ff/fn-2*h0_val/3);
-       break;
-     }
-   }
-
-  if ( get_vattr(v_info->id) & AXIAL_POINT )
-  { energy /= rotorder;
-     if ( sym_flags & DOUBLE_AXIAL ) energy *= 2;
-     energy *= rotorder/v_info->axial_order;
-  }
-
-  return energy;
-#endif
-}
+} // end star_sqcurve_method_value()
 
 /*************************************************************************
 *
@@ -1192,225 +1076,22 @@ struct qinfo *v_info;
 *
 */
 
-REAL star_sqcurve_method_grad(v_info)
-struct qinfo *v_info;
+REAL star_sqcurve_method_grad(struct qinfo *v_info)
 {
-#ifdef USE_ALL
   return star_sqcurve_method_all(v_info,METHOD_GRADIENT); 
-#else 
-
-
- /* version optimized for gradient */
- 
-  int variety; /* PLAIN_SQ, EFF_SQ, NORMAL_SQ */
-  int pairs;
-  int i,j,k;
-  REAL energy,ff,fn,nn,area,g;
-  REAL dAdv[MAXCOORD], *a=NULL, *d, *s1s1, *s1s2, *s2s2;
-  REAL vnorm[MAXCOORD];
-  REAL **dAdv1,**dAdv2,dvnorm1[MAXCOORD][MAXCOORD]
-      ,dvnorm2[MAXCOORD][MAXCOORD],**ds2;
-  REAL *s1,*s2;
-  REAL **s = v_info->sides[0];
-  REAL temp[MAXCOORD],ea,a15,ef1,ef2,ns1,ns2;
-  REAL aa[MAXV*5];
-  MAT2D(ds1,12*MAXV,MAXCOORD);
-  REAL h0adj;
-  
-  switch ( h0_flag )
-  { case H0_IN_GLOBAL: h0adj = 2./3*h0_value; break;
-    case H0_IN_ATTR:   h0adj = 2./3*(*VREAL(v_info->id,h0_attr)); break;
-    default: h0adj = 0.0; break;
-  }
-
-  for ( i = 0 ; i < SDIM ; i++ )
-    dvnorm1[i][i] = dvnorm2[i][i] = 0.0;
-
-  if ( METH_INSTANCE(v_info->method)->gen_method 
-              == star_normal_sq_mean_curvature_mi )
-     variety = NORMAL_SQ;
-  else if ( METH_INSTANCE(v_info->method)->gen_method 
-              == star_eff_area_sq_mean_curvature_mi )
-     variety = EFF_SQ;
-  else variety = PLAIN_SQ;
-
-  pairs = (v_info->vcount - 1);
-  if ( pairs <= 0 ) return 0.0;
-
-  if ( v_info->vcount > MAXV )
-  { a = (REAL*)mycalloc(5*pairs,sizeof(REAL));
-    ds1 = dmatrix(0,12*v_info->vcount,0,SDIM-1);
-  } else
-  { memset((char*)aa,0,sizeof(REAL)*5*pairs);
-    a = aa;
-    memset((char*)ds1[0],0,sizeof(REAL)*12*v_info->vcount*MAXCOORD);
-  }
-  d = a+pairs; s1s1 = d + pairs; s1s2 = s1s1 + pairs; s2s2 = s1s2 + pairs;
-  ds2 = ds1 + pairs; dAdv1 = ds2 + pairs; dAdv2 = dAdv1 + pairs;
-
-  /* basic dot products */
-  area = 0.0;
-  for ( j = 0 ; j < SDIM ; j++ ) dAdv[j] = vnorm[j] = 0.0;
-  for ( k = 0 ; k < pairs ; k++ )
-  { s1 = s[k]; s2 = s[(k+1==pairs)?0:k+1];
-    s1s1[k] = SDIM_dot(s1,s1);
-    s1s2[k] = SDIM_dot(s1,s2);
-    s2s2[k] = SDIM_dot(s2,s2);
-    d[k] = s1s1[k]*s2s2[k] - s1s2[k]*s1s2[k];
-    a[k] = 0.5*sqrt(d[k]);
-    area += a[k];
-    for ( j = 0 ; j < SDIM ; j++ )
-    { ds1[k][j] = 2*(s2s2[k]*s1[j] - s1s2[k]*s2[j]);
-      ds2[k][j] = 2*(s1s1[k]*s2[j] - s1s2[k]*s1[j]);
-      dAdv1[k][j] = 0.125/a[k]*ds1[k][j];
-      dAdv2[k][j] = 0.125/a[k]*ds2[k][j];
-      dAdv[j] -= dAdv1[k][j] + dAdv2[k][j];
-    }
-    if ( variety != PLAIN_SQ )
-    { cross_prod(s1,s2,temp);
-      for ( j = 0 ; j < SDIM ; j++ )
-        vnorm[j] += 0.5*temp[j];
-    }
-  }
-
-  /* energy */
-  ff = SDIM_dot(dAdv,dAdv);
-  switch ( variety )
-  { case PLAIN_SQ: 
-        energy = 0.75/area*ff;
-        a15 = 1.5/area;  /* coefficient for later */
-        break;
-     case EFF_SQ:
-        nn = SDIM_dot(vnorm,vnorm);
-        energy = 0.75*area*ff/nn;
-        ef1 = 1.5*area/nn;    /* coefficients for later */
-        ef2 = 1.5*area/nn/nn*ff;
-        break;
-     case NORMAL_SQ:
-        fn = SDIM_dot(dAdv,vnorm);
-        if ( fn == 0.0 ) energy = 0.0;
-        else
-        { energy = 0.75*area*(ff/fn-h0adj)*(ff/fn-h0adj);
-          ns1 = 3*area/fn*(ff/fn-h0adj); /* coefficients for later */
-          ns2 = 1.5*area*(ff/fn-h0adj)*ff/fn/fn;
-        }
-        break;
-    }
-
-    /* gradient */
-    ea = energy/area;
-    for ( k = 0 ; k < pairs ; k++ )
-    { REAL co = 0.25/a[k];
-      REAL coco = 0.5*co/a[k];
-      REAL *grad2 = (k+1==pairs)?v_info->grad[1]:v_info->grad[k+2];
-      s1 = s[k]; s2 = s[(k+1==pairs)?0:k+1];
-      if ( variety != PLAIN_SQ ) 
-      { dvnorm1[0][1] = -0.5*s2[2];
-        dvnorm1[0][2] =  0.5*s2[1];
-        dvnorm1[1][0] =  0.5*s2[2];
-        dvnorm1[1][2] = -0.5*s2[0];
-        dvnorm1[2][0] = -0.5*s2[1];
-        dvnorm1[2][1] =  0.5*s2[0];
-        dvnorm2[0][1] =  0.5*s1[2];
-        dvnorm2[0][2] = -0.5*s1[1];
-        dvnorm2[1][0] = -0.5*s1[2];
-        dvnorm2[1][2] =  0.5*s1[0];
-        dvnorm2[2][0] =  0.5*s1[1];
-        dvnorm2[2][1] = -0.5*s1[0];
-      }
-      for ( i = 0 ; i < SDIM ; i++ )
-      { REAL coeff1 = coco*dAdv1[k][i];
-        REAL coeff2 = coco*dAdv2[k][i];
-        REAL dAdn1,dAdn2;
-        REAL ddAdv1dv,ddAdv2dv;
-        dAdn1 = dAdn2 = ddAdv1dv = ddAdv2dv = 0.0;
-        for ( j = 0 ; j < SDIM ; j++ )
-        { 
-          REAL ddss11,ddss12,ddss21,ddss22;
-          REAL t1,t2;
-          ddss11 = -s2[i]*s2[j];
-          ddss12 = 2*s1[i]*s2[j] - s2[i]*s1[j];
-          ddss21 = 2*s2[i]*s1[j] - s1[i]*s2[j];
-          ddss22 = -s1[i]*s1[j];
-          if ( i == j )
-          { ddss11 += s2s2[k];
-            ddss12 -= s1s2[k];
-            ddss21 -= s1s2[k];
-            ddss22 += s1s1[k];
-          }
-          t1 = (coeff1*(ds1[k][j]+ds2[k][j]) - co*(ddss11 + ddss12));
-          ddAdv1dv += dAdv[j]*t1;
-          t2 = (coeff2*(ds1[k][j]+ds2[k][j]) - co*(ddss21 + ddss22));
-          ddAdv2dv += dAdv[j]*t2;
-          if ( variety == NORMAL_SQ )
-          { dAdn1 += vnorm[j]*t1; dAdn2 += vnorm[j]*t2; }
-        }
-
-         switch ( variety )
-         { case PLAIN_SQ: 
-             g = a15*ddAdv1dv - ea*dAdv1[k][i] ;
-             v_info->grad[k+1][i] += g;
-             v_info->grad[0][i] -= g;
-             g = a15*ddAdv2dv - ea*dAdv2[k][i];
-             grad2[i] += g;
-             v_info->grad[0][i] -= g;
-             break;
-           case EFF_SQ:
-             g = ea*dAdv1[k][i] + ef1*ddAdv1dv
-                      - ef2*SDIM_dot(dvnorm1[i],vnorm);
-             v_info->grad[k+1][i] += g;
-             v_info->grad[0][i] -= g;
-             g = ea*dAdv2[k][i] + ef1*ddAdv2dv
-                      - ef2*SDIM_dot(dvnorm2[i],vnorm);
-             grad2[i] += g;
-             v_info->grad[0][i] -= g;
-             break;
-            case NORMAL_SQ:
-             if ( fn != 0.0 )
-              { g = ea*dAdv1[k][i] + ns1*ddAdv1dv
-                    - ns2*(dAdn1 + SDIM_dot(dvnorm1[i],dAdv)); 
-                 v_info->grad[k+1][i] += g;
-                 v_info->grad[0][i] -= g;
-                 g = ea*dAdv2[k][i] + ns1*ddAdv2dv
-                    - ns2*(dAdn2 + SDIM_dot(dvnorm2[i],dAdv)); 
-                 grad2[i] += g;
-                 v_info->grad[0][i] -= g;
-                }
-             break;
-         }
-      }
-    }
-
-  if ( get_vattr(v_info->id) & AXIAL_POINT )
-  { REAL fudge = 1./rotorder;
-    if ( sym_flags & DOUBLE_AXIAL ) fudge *= 2;
-    fudge *= rotorder/v_info->axial_order;
-    energy *= fudge;
-    for ( i = 0 ; i < v_info->vcount ; i++ )
-       for ( j = 0 ; j < SDIM ; j++ )
-          v_info->grad[i][j] *= fudge;
-  }
-
-  if ( v_info->vcount > MAXV )
-  { myfree((char*)a);
-    free_matrix(ds1);
-  }
-  return energy;
-#endif
-}
+} // end star_sqcurve_method_grad()
 
 /*************************************************************************
 *
 *  function: star_sqcurve_method_hess()
 *
-*
+*  purpose: Hessian for star_sqcurve methods
 */
 
-REAL star_sqcurve_method_hess(v_info)
-struct qinfo *v_info;
+REAL star_sqcurve_method_hess(struct qinfo *v_info)
 {
    return star_sqcurve_method_all(v_info,METHOD_HESSIAN);  
-}
+} // end star_sqcurve_method_hess()
 
 /*************************************************************************
 **************************************************************************
@@ -1453,9 +1134,10 @@ struct method_instance *mi;
   binary_tree_add(mi->value_addends,vertex_adjust);
 }
 
-REAL circle_willmore_all(e_info,mode)
-struct qinfo *e_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL circle_willmore_all(
+  struct qinfo *e_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 { REAL *q = e_info->sides[0][0];
   REAL *p = e_info->sides[0][1];
   REAL *r = e_info->sides[0][2];
@@ -1517,7 +1199,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 
     return value;
   
-}
+} // end circle_willmore_all()
 
 REAL circle_willmore_value(e_info)
 struct qinfo *e_info;

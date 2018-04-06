@@ -11,3 +11,6 @@ dodump := { list topinfo;
 	    list bottominfo }
 compdump := { print dumpcmd;  dodump | dumpcmd }
 
+
+
+

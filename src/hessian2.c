@@ -12,9 +12,9 @@
 
 #include "include.h"
 
-REAL difference_lagrangian ARGS((void));
-int sturm ARGS((int,REAL*,REAL*,REAL));
-REAL ev_bisect ARGS((REAL,REAL,int,int,int,REAL*,REAL*));
+REAL difference_lagrangian(void);
+int sturm(int,REAL*,REAL*,REAL);
+REAL ev_bisect(REAL,REAL,int,int,int,REAL*,REAL*);
 
 /***************************************************************************
 *
@@ -38,11 +38,13 @@ REAL difference_lagrangian()
       sum -= get_body_pressure(b_id)*get_body_volume(b_id);
   for ( k = 0 ; k < gen_quant_count ; k++ )
   { q = GEN_QUANT(k);
+    if ( q->flags & Q_DELETED ) continue;
     if ( q->flags & Q_FIXED )
       sum -= q->pressure*q->value;
   }
   return sum;
-}
+
+} // end difference_lagrangian()
 
 
 /**************************************************************************
@@ -54,10 +56,11 @@ REAL difference_lagrangian()
 *
 */
 
-void difference_hessian(S,verhead,rhs)
-struct linsys *S;
-struct hess_verlist *verhead;  /* main vertex list */
-REAL *rhs;
+void difference_hessian(
+  struct linsys *S,
+  struct hess_verlist *verhead,  /* main vertex list */
+  REAL *rhs
+)
 { REAL dx = 0.00001;  /* wiggle size */
   REAL first[MAXCOORD];
   MAT2D(second,MAXCOORD,MAXCOORD);
@@ -99,40 +102,41 @@ REAL *rhs;
 
   /* second derivatives, go through all pairs of vertices */
   if ( hess_flag )
-  FOR_ALL_VERTICES(v_id)
-  {
-     int ord = loc_ordinal(v_id);
-     struct hess_verlist *v = verhead+ord;
-     REAL *x = get_coord(v_id);
-
-     if ( v->freedom == 0 ) continue;
-     
-     FOR_ALL_VERTICES(vv_id)
-     {
-        int ordd = loc_ordinal(vv_id);
-        struct hess_verlist *vv = verhead+ordd;
-        REAL *xx = get_coord(vv_id);
-
-        if ( vv->freedom == 0 ) continue;
-        if ( ord <= ordd ) continue; /* hessian is lower triangular */ 
-      
-        for ( i = 0 ; i < SDIM ; i++ )
-          for ( j = 0 ; j < SDIM ; j++ )
-             {
-                x[i] += dx; 
-                xx[j] += dx; global_timestamp++; calc_energy(); calc_content(Q_FIXED);
-                e1 = difference_lagrangian();
-                x[i] -= 2*dx; global_timestamp++; calc_energy(); calc_content(Q_FIXED);
-                e2 = difference_lagrangian();
-                xx[j] -= 2*dx; global_timestamp++; calc_energy(); calc_content(Q_FIXED);
-                e3 = difference_lagrangian();
-                x[i] += 2*dx; global_timestamp++; calc_energy(); calc_content(Q_FIXED);
-                e4 = difference_lagrangian();
-                second[i][j] = (e1 - e2 + e3 - e4)/4/dx/dx;
-                x[i] -= dx; xx[j] += dx;
-             }
-        fill_mixed_entry(S,v_id,vv_id,second);
-     }
+  { FOR_ALL_VERTICES(v_id)
+    {
+       int ord = loc_ordinal(v_id);
+       struct hess_verlist *v = verhead+ord;
+       REAL *x = get_coord(v_id);
+  
+       if ( v->freedom == 0 ) continue;
+       
+       FOR_ALL_VERTICES(vv_id)
+       {
+          int ordd = loc_ordinal(vv_id);
+          struct hess_verlist *vv = verhead+ordd;
+          REAL *xx = get_coord(vv_id);
+  
+          if ( vv->freedom == 0 ) continue;
+          if ( ord <= ordd ) continue; /* hessian is lower triangular */ 
+        
+          for ( i = 0 ; i < SDIM ; i++ )
+            for ( j = 0 ; j < SDIM ; j++ )
+               {
+                  x[i] += dx; 
+                  xx[j] += dx; global_timestamp++; calc_energy(); calc_content(Q_FIXED);
+                  e1 = difference_lagrangian();
+                  x[i] -= 2*dx; global_timestamp++; calc_energy(); calc_content(Q_FIXED);
+                  e2 = difference_lagrangian();
+                  xx[j] -= 2*dx; global_timestamp++; calc_energy(); calc_content(Q_FIXED);
+                  e3 = difference_lagrangian();
+                  x[i] += 2*dx; global_timestamp++; calc_energy(); calc_content(Q_FIXED);
+                  e4 = difference_lagrangian();
+                  second[i][j] = (e1 - e2 + e3 - e4)/4/dx/dx;
+                  x[i] -= dx; xx[j] += dx;
+               }
+          fill_mixed_entry(S,v_id,vv_id,second);
+       }
+    }
   }
   calc_energy(); calc_content(Q_FIXED); /* cleanup */
 } /* end difference_hessian */
@@ -162,8 +166,9 @@ REAL *rhs;
     Numerical solution uses mechanisms of hessian minimization.
 */
 
-REAL dirichlet(seekmode)
-int seekmode; /* 1 if want to search in direction of min */
+REAL dirichlet(
+  int seekmode /* 1 if want to search in direction of min */
+)
 {
   REAL side[FACET_EDGES][MAXCOORD];
   REAL *x,*y;
@@ -261,7 +266,7 @@ int seekmode; /* 1 if want to search in direction of min */
   (*sp_constraint_setup_func)
             (web.skel[BODY].max_ord+1 + gen_quant_count,&S);
   if ( sp_ordering_func ) (*sp_ordering_func)(&S);
-  sp_factor(&S);
+  sp_factor(&S,MKL_POS_DEF);
   (*sp_hess_project_setup_func)(&S);
   for ( i = 0 ; i < SDIM ; i++ )
       sp_hessian_solve(&S,rs[i],xx[i],NO_SET_PRESSURE);
@@ -290,7 +295,9 @@ int seekmode; /* 1 if want to search in direction of min */
         global_timestamp++;
         calc_energy();  /* energy after motion */
         if ( hess_debug || itdebug )
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+          printf("scale %f energy %*.*Qf\n",(DOUBLE)scale,DWIDTH,DPREC,web.total_energy);
+#elif defined(LONGDOUBLE)
           printf("scale %f energy %*.*Lf\n",(DOUBLE)scale,DWIDTH,DPREC,web.total_energy);
 #else
           printf("scale %f energy %20.15f\n",(DOUBLE)scale,web.total_energy);
@@ -343,8 +350,9 @@ int seekmode; /* 1 if want to search in direction of min */
     Numerical solution uses mechanisms of hessian minimization.
 */
 
-REAL sobolev(seekmode)
-int seekmode;  /* 1 if seek for best stepsize */
+REAL sobolev(
+  int seekmode  /* 1 if seek for best stepsize */
+)
 {
   REAL side[FACET_EDGES][MAXCOORD];
   int r;
@@ -452,7 +460,7 @@ if ( hess_debug )
   (*sp_constraint_setup_func)
             (web.skel[BODY].max_ord+1 + gen_quant_count,&S);
   if ( sp_ordering_func ) (*sp_ordering_func)(&S);
-  sp_factor(&S);
+  sp_factor(&S,MKL_POS_DEF);
   (*sp_hess_project_setup_func)(&S);
   sp_hessian_solve(&S,rs,rstmp,NO_SET_PRESSURE);
   for ( j = 0 ; j < S.N ; j++ ) rs[j] = rstmp[j];
@@ -488,7 +496,9 @@ if ( hess_debug )
        global_timestamp++;
        calc_energy();  /* energy after motion */
        if ( hess_debug || itdebug )
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+          printf("scale %f energy %*.*Qf\n",(DOUBLE)scale,DWIDTH,DPREC,web.total_energy);
+#elif defined(LONGDOUBLE)
           printf("scale %f energy %*.*Lf\n",(DOUBLE)scale,DWIDTH,DPREC,web.total_energy);
 #else
           printf("scale %f energy %20.15f\n",(DOUBLE)scale,web.total_energy);
@@ -518,7 +528,7 @@ if ( hess_debug )
   hessian_exit(NULL);
 
   return best_scale;
-}
+} // end sobolev()
 
 /***************************************************************************
 
@@ -535,12 +545,11 @@ if ( hess_debug )
 *          returns b so (I-bvv^T)x = 0 mostly 
 */
 
-REAL householder ARGS((REAL*,REAL*,int));
-
-REAL householder(x,v,n)  
-REAL *x;  /* vector to be zeroed, except first element */
-REAL *v;  /* vector used to generate transformation */
-int  n;    /* size of x,v */
+REAL householder( 
+  REAL *x,  /* vector to be zeroed, except first element */
+  REAL *v,  /* vector used to generate transformation */
+  int  n    /* size of x,v */
+)
 { REAL maxx;
   REAL a = 0.0,b;
   int i;
@@ -555,7 +564,7 @@ int  n;    /* size of x,v */
   b = 1/a/(a+fabs(v[0]));
   v[0] += v[0]<0.0 ? -a : a;
   return b;
-}
+}  // end householder()
 
 /******************************************************************
 *
@@ -565,11 +574,12 @@ int  n;    /* size of x,v */
 *           for tridiagonal matrix 
 */
 
-int sturm(n,alpha,beta,x) 
-int n; /* size of matrix */
-REAL *alpha; /* main diagonal, size n */
-REAL *beta;  /* subdiagonal, size n-1 */
-REAL x;     /* test eigenvalue */
+int sturm( 
+  int n, /* size of matrix */
+  REAL *alpha, /* main diagonal, size n */
+  REAL *beta,  /* subdiagonal, size n-1 */
+  REAL x     /* test eigenvalue */
+)
 { int i;
   int changes;
   REAL p,pp,t;
@@ -584,7 +594,7 @@ REAL x;     /* test eigenvalue */
      pp = p; p = t;
   }
   return changes;
-}
+} // end sturm()
 
 /*****************************************************************
 *
@@ -594,14 +604,15 @@ REAL x;     /* test eigenvalue */
 *
 */
 
-REAL ev_bisect(left,right,cleft,cright,n,alpha,beta)
-REAL left;  /* left endpoint of interval */
-REAL right; /* right endpoint of interval */
-int cleft;  /* sturm changes at left endpoint of interval */
-int cright; /* sturm changes at right endpoint of interval */
-int n; /* size of matrix */
-REAL *alpha; /* main diagonal, size n */
-REAL *beta;  /* subdiagonal, size n-1 */
+REAL ev_bisect(
+  REAL left,  /* left endpoint of interval */
+  REAL right, /* right endpoint of interval */
+  int cleft,  /* sturm changes at left endpoint of interval */
+  int cright, /* sturm changes at right endpoint of interval */
+  int n, /* size of matrix */
+  REAL *alpha, /* main diagonal, size n */
+  REAL *beta  /* subdiagonal, size n-1 */
+)
 { int cmid;
   REAL mid;
   REAL lowev = 0.0;
@@ -609,7 +620,9 @@ REAL *beta;  /* subdiagonal, size n-1 */
   mid = (left+right)/2;
   if ( right-left < 3*machine_eps )
   { 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     sprintf(msg,"%d at %2.*Qg\n",DPREC,cright-cleft,mid);
+#elif defined(LONGDOUBLE)
      sprintf(msg,"%d at %2.*Lg\n",DPREC,cright-cleft,mid);
 #else
      sprintf(msg,"%d at %2.15g\n",cright-cleft,mid);
@@ -623,7 +636,7 @@ REAL *beta;  /* subdiagonal, size n-1 */
   if ( cleft < cmid )
      lowev = ev_bisect(left,mid,cleft,cmid,n,alpha,beta);
   return lowev; 
-}
+} // end ev_bisect()
 
 /**************************************************************************
 *
@@ -634,8 +647,7 @@ REAL *beta;  /* subdiagonal, size n-1 */
 *
 */
 
-void chebychev_ev(S)
-struct linsys *S;
+void chebychev_ev(struct linsys *S)
 {
   REAL *v,*w;    /* working vectors  */
   REAL *r;
@@ -725,8 +737,7 @@ struct linsys *S;
 *
 */
 
-void chebychev_hess(S)
-struct linsys *S;
+void chebychev_hess(struct linsys *S)
 {
   REAL *v,*w;    /* working vectors  */
   REAL *r;
@@ -805,9 +816,10 @@ struct linsys *S;
 *
 */
 
-void eigenprobe_command(lambda,iters)
-REAL lambda;
-int iters;  /* iteration bound */
+void eigenprobe_command(
+  REAL lambda,
+  int iters  /* iteration bound */
+)
 { struct linsys S;
   int i,k;
   REAL t,oldt;
@@ -833,7 +845,7 @@ int iters;  /* iteration bound */
     star_metric_setup(&S,&Met);
   }
 
- sp_factor(&S);
+ sp_factor(&S,MKL_INDEF);
 
  (*sp_hess_project_setup_func)(&S);
 
@@ -865,7 +877,9 @@ int iters;  /* iteration bound */
         t = 1/sqrt(sparse_metric_dot(X,X,&Met));
      else t = 1/sqrt(dot(X,X,S.N));
      if ( X[oldvi]*oldv0 < 0. ) t = -t;  /* get sign right */
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     if ( k % 10 == 0 ) printf("%d  ev = %*.*Qf\n",k,DWIDTH,DPREC,S.lambda+t);
+#elif defined(LONGDOUBLE)
      if ( k % 10 == 0 ) printf("%d  ev = %*.*Lf\n",k,DWIDTH,DPREC,S.lambda+t);
 #else
      if ( k % 10 == 0 ) printf("%d  ev = %20.15f\n",k,S.lambda+t);
@@ -877,7 +891,9 @@ int iters;  /* iteration bound */
       }
      oldt = t;
   }
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+  printf("%d  ev = %*.*Qf\n",k,DWIDTH,DPREC,S.lambda+t);
+#elif defined(LONGDOUBLE)
   printf("%d  ev = %*.*Lf\n",k,DWIDTH,DPREC,S.lambda+t);
 #else
   printf("%d  ev = %20.15f\n",k,S.lambda+t);
@@ -902,9 +918,10 @@ ep_exit:
 * purpose: handle "lanczos lambda" command from command line
 *
 */
-void lanczos_command(lambda,krydim)
-REAL lambda;
-int krydim;  /* dimension of Krylov subspace */
+void lanczos_command(
+  REAL lambda,
+  int krydim  /* dimension of Krylov subspace */
+)
 { struct linsys S;
   REAL evalues[NPRINT];
   int i,nprint;
@@ -926,7 +943,7 @@ int krydim;  /* dimension of Krylov subspace */
   {
     star_metric_setup(&S,&Met);
   }
-  sp_factor(&S);
+  sp_factor(&S,MKL_INDEF);
   (*sp_hess_project_setup_func)(&S);
   sprintf(msg,"Eigencounts:    %d <,  %d ==,  %d > \n",S.neg,S.zero,S.pos);
   outstring(msg);
@@ -934,7 +951,9 @@ int krydim;  /* dimension of Krylov subspace */
   /* list, ones near probe value */
   for ( i = 0 ; i < nprint ; i++ )
   {
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     sprintf(msg,"%d  %*.*Qf\n",i+1,DWIDTH,DPREC,evalues[i]);
+#elif defined(LONGDOUBLE)
      sprintf(msg,"%d  %*.*Lf\n",i+1,DWIDTH,DPREC,evalues[i]);
 #else
      sprintf(msg,"%d  %20.15f\n",i+1,evalues[i]);
@@ -955,17 +974,15 @@ int krydim;  /* dimension of Krylov subspace */
 *
 */
 
-int realabs_comp ARGS((REAL*,REAL*));
-
-int realabs_comp(a,b)
-REAL *a,*b;
+int realabs_comp(REAL *a, REAL *b)
 {if(fabs(*a)<fabs(*b))return-1;else if (fabs(*a)>fabs(*b))return 1;return 0;}
 
-int lanczos(S,krydim,evalues,nprint)
-struct linsys *S;
-int krydim;  /* dimension of krylov space to use */
-REAL *evalues; /* for return of eigenvalues */
-int nprint;  /* number to return */
+int lanczos(
+  struct linsys *S,
+  int krydim,  /* dimension of krylov space to use */
+  REAL *evalues, /* for return of eigenvalues */
+  int nprint  /* number to return */
+)
 { REAL *diag;  /* main diagonal of tridiagonal */
   REAL *subdiag;    /* subdiagonal */
   REAL *v,*w,*mw;    /* working vectors; w is Lanczos vector  */
@@ -1065,11 +1082,12 @@ int nprint;  /* number to return */
 *
 */
 
-int selective_lanczos(S,krydim,evalues,nprint)
-struct linsys *S;
-int krydim;  /* dimension of krylov space to use */
-REAL *evalues; /* for return of eigenvalues */
-int nprint;  /* number to return */
+int selective_lanczos(
+  struct linsys *S,
+  int krydim,  /* dimension of krylov space to use */
+  REAL *evalues, /* for return of eigenvalues */
+  int nprint  /* number to return */
+)
 { REAL *diag;  /* main diagonal of tridiagonal */
   REAL *subdiag;    /* subdiagonal */
   REAL *v,*w,*mw;    /* working vectors; w is Lanczos vector  */
@@ -1192,10 +1210,11 @@ int nprint;  /* number to return */
 
 #define SIGN(a,b)  ((b)<0.0 ? -fabs(a) : fabs(a))
 
-void tridiag_QL(d,e,n)
-REAL *d;  /* n diagonal elements, d[0] in a[0][0] */
-REAL *e;  /* n-1 subdiagonal, e[0] in a[1][0], plus an extra! */
-int n;  /* size */
+void tridiag_QL(
+  REAL *d,  /* n diagonal elements, d[0] in a[0][0] */
+  REAL *e,  /* n-1 subdiagonal, e[0] in a[1][0], plus an extra! */
+  int n  /* size */
+)
 { int m,l,iter,i;
   REAL s,r,p,g,f,dd,c,b;
 
@@ -1254,13 +1273,14 @@ int n;  /* size */
 *             return factorizion into A = LQ where L is lower
 *             triangular and Q is orthonormal, Q M Q^T = I.
 */
-void  LQ_decomp(A,rows,cols,Q,L,M)
-REAL **A; /* input */
-int rows; /* number of rows in A */
-int cols; /* number of columns in A */
-REAL **Q; /* orthonormal rows, size rows * cols */
-REAL **L; /* factor, size rows * rows */
-struct linsys *M;  /* metric to use; NULL if Euclidean */
+void  LQ_decomp(
+  REAL **A, /* input */
+  int rows, /* number of rows in A */
+  int cols, /* number of columns in A */
+  REAL **Q, /* orthonormal rows, size rows * cols */
+  REAL **L, /* factor, size rows * rows */
+  struct linsys *M  /* metric to use; NULL if Euclidean */
+)
 { int i,j,k;
   REAL t;
 
@@ -1293,13 +1313,13 @@ struct linsys *M;  /* metric to use; NULL if Euclidean */
 *              multiple eigenvalues.
 *
 */
-void QR_full ARGS((REAL **,REAL *,int, struct linsys *));
 
-void QR_full(A,evalues,n,M)
-REAL **A; /* input, destroyed */
-REAL *evalues; /* for reporting eigenvalues */
-int n; /* size of system */
-struct linsys *M; /* metric, NULL for Euclidean */
+void QR_full(
+  REAL **A, /* input, destroyed */
+  REAL *evalues, /* for reporting eigenvalues */
+  int n, /* size of system */
+  struct linsys *M /* metric, NULL for Euclidean */
+)
 { REAL **Q,**L;
   int i,j;
   REAL resid;
@@ -1313,7 +1333,9 @@ struct linsys *M; /* metric, NULL for Euclidean */
      for ( i = 0, resid = 0.0 ; i < n ; i++ )
       for ( j = 0 ; j < i ; j++ )
          resid += fabs(A[i][j]);
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     sprintf(msg,"QR residual %*.*Qf\n",DWIDTH,DPREC,resid);
+#elif defined(LONGDOUBLE)
      sprintf(msg,"QR residual %*.*Lf\n",DWIDTH,DPREC,resid);
 #else
      sprintf(msg,"QR residual %20.15f\n",resid);
@@ -1331,9 +1353,10 @@ struct linsys *M; /* metric, NULL for Euclidean */
 *
 */
 
-void ritz_command(lambda,ritzdim)
-REAL lambda; /* probe value */
-int ritzdim;  /* dimension of Rayleigh-Ritz subspace */
+void ritz_command(
+  REAL lambda, /* probe value */
+  int ritzdim  /* dimension of Rayleigh-Ritz subspace */
+)
 { struct linsys S;
   REAL *rhs;
   memset((char*)&S,0,sizeof(struct linsys)); 
@@ -1379,11 +1402,12 @@ int ritzdim;  /* dimension of Rayleigh-Ritz subspace */
 */
   REAL *evalues;
 
-void do_ritz(S,lambda,ritzdim,ritzvec)
-struct linsys *S;  /* Hessian */
-REAL lambda;    /* shift value */
-int ritzdim;     /* dimension of subspace */
-REAL **ritzvec; /* non-null if want eigenvectors returned */
+void do_ritz(
+  struct linsys *S,  /* Hessian */
+  REAL lambda,    /* shift value */
+  int ritzdim,     /* dimension of subspace */
+  REAL **ritzvec /* non-null if want eigenvectors returned */
+)
 {
   int i,j;
   REAL **Lmat,**rbasis,**Arbasis;
@@ -1400,6 +1424,8 @@ REAL **ritzvec; /* non-null if want eigenvectors returned */
   int ritzwanted;
   int maxritz;
   int old_breakflag;
+  REAL maxrr;
+  vertex_id v_id;
 
   /* see if user wants extra ritz vectors */
   ritzwanted = ritzdim % 1000;
@@ -1408,7 +1434,7 @@ REAL **ritzvec; /* non-null if want eigenvectors returned */
   if ( ritzdim < 0 ) 
     { outstring("Ritz dimension cannot be negative.\n"); return; }
   S->lambda = lambda;
-  sp_factor(S);
+  sp_factor(S,MKL_INDEF);
   (*sp_hess_project_setup_func)(S);
   sprintf(msg,"Eigencounts:    %d <,  %d ==,  %d > \n",S->neg,S->zero,S->pos);
   outstring(msg);
@@ -1494,7 +1520,9 @@ REAL **ritzvec; /* non-null if want eigenvectors returned */
     for ( i = converged ; i < ritzdim ; i++ )
       if ( evalues[i] == oldevalues[i] )
       { converged++;
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+        sprintf(msg,"%3d. %*.*Qf\n",converged,DWIDTH,DPREC,1/evalues[i]+lambda);
+#elif defined(LONGDOUBLE)
         sprintf(msg,"%3d. %*.*Lf\n",converged,DWIDTH,DPREC,1/evalues[i]+lambda);
 #else
         sprintf(msg,"%3d. %20.15f\n",converged,1/evalues[i]+lambda);
@@ -1512,11 +1540,21 @@ REAL **ritzvec; /* non-null if want eigenvectors returned */
        && (diff > 100*machine_eps) && !breakflag );
   breakflag = old_breakflag;
 
-  /* normalize eigenvectors */
+  /* normalize eigenvectors so largest component is 1/10 size of surface */
+  maxrr = 0.0; 
+  FOR_ALL_VERTICES(v_id)
+  { REAL *x = get_coord(v_id);
+    REAL rr = SDIM_dot(x,x);
+    if ( rr > maxrr ) maxrr = rr;
+  }
+  maxrr = sqrt(maxrr)/10;
   for ( i = 0 ; i < ritzdim ; i++ )
   { REAL mag;
-     if ( M ) mag = 1/sqrt(sparse_metric_dot(rbasis[i],rbasis[i],M));
-     else mag = 1/sqrt(dot(rbasis[i],rbasis[i],S->A_rows));
+    REAL big = 0.0;
+    for ( j = 0 ; j < S->A_rows ; j++ )
+      if ( fabs(rbasis[i][j]) > big )
+        big = fabs(rbasis[i][j]);
+     mag = maxrr/big;
      for ( j = 0 ; j < S->A_rows ; j++ ) rbasis[i][j] *= mag;
   }
 
@@ -1540,7 +1578,9 @@ REAL **ritzvec; /* non-null if want eigenvectors returned */
 
   for ( i = converged ; i < ritzwanted ; i++ )
   { if ( evalues[i] > 1e29 ) sprintf(msg,"%3d. Singular??\n",i+1);
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+     else sprintf(msg,"%3d. %*.*Qf\n",i+1,DWIDTH,DPREC,evalues[i]);
+#elif defined(LONGDOUBLE)
      else sprintf(msg,"%3d. %*.*Lf\n",i+1,DWIDTH,DPREC,evalues[i]);
 #else
      else sprintf(msg,"%3d. %18.13f\n",i+1,evalues[i]);
@@ -1551,7 +1591,7 @@ REAL **ritzvec; /* non-null if want eigenvectors returned */
      "Iterations: %d. Total eigenvalue changes in last iteration: %10.8g\n",
         iter,(DOUBLE)diff);
   outstring(msg);
-  if ( S->zero != 0 ) last_eigenvalue = S->lambda;
+  if ( (S->zero != 0) && (S->neg == 0)) last_eigenvalue = S->lambda;
   else
   last_eigenvalue = evalues[0];
   set_eigenvalue_list_global(evalues,ritzdim);

@@ -10,11 +10,11 @@
 // Usage: Set plane coefficients, then do "slice".
 // Results: Intersection length printed out, left in variable lensum.
 
-aa := 0; bb := 0; cc := 1; dd := .1;  // set these for desired plane
+slice_aa := 0; slice_bb := 0; slice_cc := 1; slice_dd := .1;  // set these for desired plane
 slice := { 
        local any,xx1,yy1,zz1,xx2,yy2,zz2;
        local denom,lambda,zaa,zbb,darea;
-       local xa,ya,za,xb,yb,zb;
+       local xa,ya,za,xb,yb,zb,dx,dy,dz;
 
        lensum := 0; areasum := 0;
        foreach facet ff do 
@@ -27,10 +27,10 @@ slice := {
            xx2 := ee.vertex[2].x; 
            yy2 := ee.vertex[2].y; 
            zz2 := ee.vertex[2].z;
-           denom := aa*(xx1-xx2)+bb*(yy1-yy2)+cc*(zz1-zz2);
+           denom := slice_aa*(xx1-xx2)+slice_bb*(yy1-yy2)+slice_cc*(zz1-zz2);
            if ( denom != 0.0 ) then 
            { 
-             lambda := (dd-aa*xx2-bb*yy2-cc*zz2)/denom; 
+             lambda := (slice_dd-slice_aa*xx2-slice_bb*yy2-slice_cc*zz2)/denom; 
              if ( (lambda >= 0) and (lambda <= 1) ) then 
              { 
                xa := xb; ya := yb; za := zb;
@@ -45,11 +45,20 @@ slice := {
         { 
           dx := xa-xb; dy := ya-yb; dz := za - zb;
           lensum := lensum + sqrt(dx^2+dy^2+dz^2);
-          zaa := za - dd/cc; zbb := zb - dd/cc;
+          zaa := za - slice_dd/slice_cc; zbb := zb - slice_dd/slice_cc;
           darea := sqrt((ya*zbb-yb*zaa)^2+(zaa*xb-zbb*xa)^2+(xa*yb-ya*xb)^2);
           areasum := areasum + darea/2;
         }
       };
       printf "Circumference: %18.15g  Area: %18.15g\n",lensum,areasum;
     } // end slice
+
+// end slice.cmd
+
+/* Usage:
+   set  slice_aa, slice_bb, slice_cc, slice_dd
+   call slice
+*/
+
+
 

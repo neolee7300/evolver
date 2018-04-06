@@ -18,6 +18,12 @@ int toknum;
 
 #ifndef NO_YACC_DEBUG
 #ifdef YYBISON
+  if ( YYTRANSLATE(toknum) == 2 ) /* undefined token */
+  { sprintf(errmsg,"Internal error: Token number %d does not have token name in yytname.\n",
+       toknum);
+    erroutstring(errmsg);
+  }
+
   name = yytname[YYTRANSLATE(toknum)];
 
   return name;

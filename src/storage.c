@@ -31,6 +31,9 @@ INDIRECT_TYPE *fibase;
 INDIRECT_TYPE *bibase;
 INDIRECT_TYPE *feibase;
 
+// For datafile prediction of storage needs
+size_t elements_predicted[NUMELEMENTS];
+
 /* The web structure */
 struct webstruct web; 
 
@@ -54,16 +57,16 @@ element_id id;
 }
 #endif
 
-int oid(id)
-element_id id;
+int oid(element_id id)
 { return inverted(id) ? -(ordinal(id)+1) : (ordinal(id) +1) ;
 }
+
 /* handy for debugging */
-struct vertex * Vptr ARGS((element_id)); 
-struct edge * Eptr ARGS((element_id));
-struct facet * Fptr ARGS((element_id));
-struct body * Bptr ARGS((element_id)); 
-struct facetedge * Feptr ARGS((element_id));
+struct vertex * Vptr (element_id); 
+struct edge * Eptr (element_id);
+struct facet * Fptr (element_id);
+struct body * Bptr (element_id); 
+struct facetedge * Feptr (element_id);
 
 struct vertex * Vptr(id) vertex_id id; { return vptr(id); }
 struct edge * Eptr(id) edge_id id; { return eptr(id); }
@@ -78,9 +81,10 @@ struct facetedge * Feptr(id) facetedge_id id; { return feptr(id); }
 *  purpose:  Increase size of element structures.  Works only for
 *                indexed or indirect id. Will also decrease size.
 */
-void expand(type,newsize)
-int type;  /* VERTEX, etc. */
-int newsize; /* new size of structure */
+void expand(
+  int type, /* VERTEX, etc. */
+  int newsize /* new size of structure */
+)
 { char *newblock,*oldblock;
   int oldsize = web.sizes[type];
   int count = web.skel[type].maxcount;
@@ -155,7 +159,7 @@ int newsize; /* new size of structure */
   LEAVE_GRAPH_MUTEX;
 
   parallel_update_flag[type] = 1;
-} 
+} // end expand()
 
 /***********************************************************************
 *
@@ -164,22 +168,23 @@ int newsize; /* new size of structure */
 *  purpose: allocate more empty element structures
 */
 
-void extend(type,mode)
-int type;
-int mode; /* EXTEND_BATCH or EXTEND_FOR_REFINE */
+void extend(
+  int type, // element type
+  int mode // EXTEND_BATCH or EXTEND_FOR_REFINE 
+)
 {
 #ifdef HASH_ID
   elhash_extend(type,mode);
 #else
-  int number=0;  /* of new items to allocate */
+  size_t number=0;  /* of new items to allocate */
   char *newblock;
   INDIRECT_TYPE *newiblock;
   element_id id,backid;
   struct element *newptr = NULL;
-  int k;
-  int allocsize;
-  long  oldnum = web.skel[type].maxcount;
-  long  newnum=0;
+  size_t k;
+  size_t allocsize;
+  size_t  oldnum = web.skel[type].maxcount;
+  size_t  newnum=0;
   int neword;
 
 
@@ -193,26 +198,31 @@ int mode; /* EXTEND_BATCH or EXTEND_FOR_REFINE */
      blockmax[type] += BATCHSIZE;
   }
   if ( mode == EXTEND_BATCH )
-  {
-    /* calculate number of structures to fit in block size just under 2^n */
-    allocsize = BATCHSIZE*web.sizes[type];
-    k = 0x100 ; while ( k < allocsize ) k <<= 1 ;
-    number = (k-16)/web.sizes[type]; /* maybe room for block header */
+  {   
+    if ( web.skel[type].maxcount==0 && elements_predicted[type] )
+    { 
+      number = elements_predicted[type];
+    }
+    else
+    { /* calculate number of structures to fit in block size just under 2^n */
+      allocsize = BATCHSIZE*web.sizes[type];
+      k = 0x100 ; while ( k < allocsize ) k <<= 1 ;
+      number = (k-16)/web.sizes[type]; /* maybe room for block header */
+    }
     newnum = web.skel[type].maxcount + number;
   }
-  else if ( mode == EXTEND_FOR_REFINE )
+  else if ( mode == EXTEND_FOR_REFINE ) 
   { /* increase by 2^surface_dimension factor */
     if ( type == BODY ) goto extend_exit;   /* don't need more bodies */
-    number = web.skel[type].count*(1<<web.dimension)
-                - web.skel[type].maxcount + 100;
-    newnum = web.skel[type].maxcount + number;
-    if ( number <= 0 ) { goto extend_exit; }/* don't need any more */
+    newnum = web.skel[type].count*(1<<web.dimension) + 100;
+    if ( newnum <= (size_t)web.skel[type].maxcount ) { goto extend_exit; }/* don't need any more */
+    number = newnum - web.skel[type].maxcount;
   }
   else kb_error(2474,"Internal error: bad mode for extend().\n",RECOVERABLE);
   
   if ( (web.skel[type].maxcount + number) > OFFSETMASK )
-  { sprintf(errmsg, "Trying to allocate more %s than ID format allows, %Ld\n",
-          typenames[type],OFFSETMASK);
+  { sprintf(errmsg, "Trying to allocate more %s than ID format allows, %lld\n",
+          typenames[type],(long long int)OFFSETMASK);
     kb_error(3712,errmsg,RECOVERABLE);
   }
 
@@ -221,7 +231,7 @@ int mode; /* EXTEND_BATCH or EXTEND_FOR_REFINE */
   blocklist[type][blockcount[type]].count = number ;
   blocklist[type][blockcount[type]++].blockptr = (struct element *)newblock;
 
-  while ( newnum > web.skel[type].ialloc )
+  while ( newnum >= (size_t)web.skel[type].ialloc )
   {
     if ( web.skel[type].ibase == NULL )
     { newiblock = (INDIRECT_TYPE*)mycalloc(number,sizeof(INDIRECT_TYPE));
@@ -247,10 +257,26 @@ int mode; /* EXTEND_BATCH or EXTEND_FOR_REFINE */
 
   /* find first empty slot */
   if ( sparse_ibase_flag )
-  { /* search for empty ibase slots from start */
-    for ( neword = 0 ; neword < web.skel[type].ialloc ; neword++ )
-      if ( web.skel[type].ibase[neword] == NULL )
-        break;
+  { int restart_flag = 0;  // whether sparse_spot looped around
+    for ( ;; )
+    {
+      for ( neword = web.skel[type].sparse_spot ; 
+             neword < web.skel[type].ialloc ; neword++ )
+         if ( web.skel[type].ibase[neword] == NULL )
+         { 
+           web.skel[type].sparse_spot = neword;
+           break;
+         }
+       if ( neword == web.skel[type].ialloc )
+       { if ( restart_flag >= 1)
+              kb_error(5693,"INTERNAL ERROR extend(): no sparse spots\n",RECOVERABLE);
+         restart_flag += 1;
+         web.skel[type].sparse_spot = 0;
+         continue;
+       }
+       else
+         break;
+    }
   }
   else /* dense ibase */
     neword = web.skel[type].maxcount;
@@ -276,12 +302,30 @@ int mode; /* EXTEND_BATCH or EXTEND_FOR_REFINE */
     #ifdef MPI_EVOLVER
       newptr->local_id = id;
     #endif
+
     if ( k < number-1 )
     {
       if ( sparse_ibase_flag )
-      { for ( neword = 0 ; neword < web.skel[type].ialloc ; neword++ )
-          if ( web.skel[type].ibase[neword] == NULL )
+      { int restart_flag = 0;  // whether sparse_spot looped around
+        for (;;)
+        {
+          for ( neword = web.skel[type].sparse_spot ; 
+                   neword < web.skel[type].ialloc ; neword++ )
+            if ( web.skel[type].ibase[neword] == NULL )
+            { 
+              web.skel[type].sparse_spot = neword;
+              break;
+            }
+          if ( neword == web.skel[type].ialloc )
+          { if ( restart_flag >= 1)
+              kb_error(5692,"INTERNAL ERROR extend(): no sparse spots\n",RECOVERABLE);
+            restart_flag += 1;
+            web.skel[type].sparse_spot = 0;
+            continue;
+          }
+          else
             break;
+        }
       }
       else 
         neword++;
@@ -306,7 +350,38 @@ extend_exit:
 /* end ifdef HASH_ID */
 #endif
 
+} // end extend()
 
+/************************************************************************
+* function: free_element_lists()
+*
+* purpose: deallocate element lists and free lists, for replace_load()
+*/
+void free_element_lists()
+{
+  int type,i;
+  for ( type = VERTEX ; type <= FACETEDGE ; type++ )
+  { for ( i = 0 ; i < blockcount[type] ; i++ )
+      myfree((char*)blocklist[type][i].blockptr);
+    myfree((char*)web.skel[type].ibase);
+    web.skel[type].alloc = 0;
+    web.skel[type].count = 0;
+    web.skel[type].maxcount = 0;
+    web.skel[type].ibase = NULL;
+    web.skel[type].ialloc = 0;
+    web.skel[type].discard = 0;
+    web.skel[type].discard_count = 0;
+    web.skel[type].free = 0;
+    web.skel[type].freelast = 0;
+    web.skel[type].free_spot = 0;
+    web.skel[type].freehead = NULL;
+    web.skel[type].sparse_spot = 0;
+    web.skel[type].used = NULLID;
+    web.skel[type].last = NULLID;
+    web.skel[type].max_ord = 0;
+    memset(blocklist[type],0,blockmax[type]*sizeof(struct blocklist_struct));
+    blockcount[type] = 0;
+  }
 }
 
 /************************************************************************
@@ -314,13 +389,13 @@ extend_exit:
 * function: new_element()
 *
 * purpose: Allocate new element from freelist
-*
 */
 
-element_id new_element(type,parent,desired_id)
-int type;
-element_id parent; /* for inherited stuff */
-element_id desired_id; /* or NULLID */
+element_id new_element(
+  int type,
+  element_id parent, /* for inherited stuff */
+  element_id desired_id /* or NULLID */
+)
 {
   element_id newid;
   struct element *newptr,*last;
@@ -362,7 +437,7 @@ element_id desired_id; /* or NULLID */
   newptr->original = NULLID;
 
 #ifndef HASH_ID
-  if ( match_id_flag && !addload_flag && datafile_flag )
+  if ( match_id_flag && (!addload_flag || replace_load_flag) && datafile_flag )
   { /* link in numerical order */
     int i;
     struct element *prev,*next;
@@ -472,8 +547,7 @@ element_id desired_id; /* or NULLID */
 * purpose: mark element as unallocated, but leave it in the chain of
 *          used elements.  Moved to freelist later by free_discards.
 */
-void free_element(id)  
-element_id id;
+void free_element(element_id id)
 {
   struct element *ptr;
   int type = id_type(id);
@@ -513,8 +587,17 @@ element_id id;
     /* remove from body facet lists */
     set_facet_body(id,NULLID);
     set_facet_body(inverse_id(id),NULLID);
-
   }
+
+  if ( (type == BODY) && everything_quantities_flag )
+  { // should deallocate body quantity, but don't have that implemented,
+    // so just making sure volume not fixed.
+    struct gen_quant *q = GEN_QUANT(get_body_volquant(id));
+    q->modulus = 1;
+    q->flags &= ~(Q_ENERGY|Q_FIXED|Q_CONSERVED);
+    q->flags |= Q_INFO;
+  }
+
   ptr = elptr(id);
   if ( !(ptr->attr & ALLOCATED) )
   { sprintf(errmsg,
@@ -574,11 +657,15 @@ element_id id;
 
   web.skel[type].count--; 
 
-}
+} // end free_element()
 
-/* reclaim element from discard list */
-void unfree_element(id)
-element_id id;
+/********************************************************************
+*
+* function: unfree_element()
+* 
+* purpose: reclaim element from discard list 
+*/
+void unfree_element(element_id id)
 {
   struct element *ptr;
   int type = id_type(id);
@@ -606,9 +693,16 @@ element_id id;
   web.skel[type].discard_count--;
 
   web.skel[type].count++;  
-}
+} // end unfree_element()
 
-/* index as id */
+/*****************************************************************
+*
+* function: get_ordinal_id()
+*
+* purpose: Convert 0-based element number to internal id form.
+*          Returns NULLID if said element does not exist.
+*/
+
 element_id get_ordinal_id(type,ord)
 int type; /* type of element */
 int ord;  /* ordinal of element, signed */
@@ -629,15 +723,26 @@ int ord;  /* ordinal of element, signed */
   return NULLID;
 }
 
-/* completion of partial id */
+/**************************************************************************
+*
+* function: get_full_id()
+*
+* purpose: turn partial id into full id
+*/
+
 element_id get_full_id(type,partid)
 int type; /* type of element */
 element_id partid;  /* ordinal of element, 0-based, with sign bit and mpi task number */
                     /* partid should also have VALIDMASK if not known bad */
 { element_id id;
   struct element *ep;
+#ifdef MPI_EVOLVER
   int task = id_task(partid);
+#endif
   int ord = (int)(partid & OFFSETMASK);
+
+  if ( partid == NULLID ) 
+    return NULLID;
 
   if ( (type < 0) || (type > NUMELEMENTS) ) return NULLID;
 #ifdef MPI_EVOLVER
@@ -656,10 +761,21 @@ element_id partid;  /* ordinal of element, 0-based, with sign bit and mpi task n
   return NULLID;
 }
 
-int generate_all(type,idptr,sentinel)  /* re-entrant */
-int type;
-element_id *idptr;
-element_id *sentinel; /* to record original end of list */
+/*********************************************************************
+*
+* function: generate_all()
+*
+* purpose: Loop through existing elements of a type; uses sentinel
+*          to mark end of elements existing when first called.
+*          Meant to be used in while() loops.  Reentrant.
+*
+* return: 1 if idptr valid for next element, 0 if at end.
+*/
+int generate_all( 
+  int type, /* of element */
+  element_id *idptr,  /* NULLID to initialize */
+  element_id *sentinel /* to record original end of list */
+)
 {
   struct element *ptr;
 
@@ -689,9 +805,8 @@ element_id *sentinel; /* to record original end of list */
     #endif
      );
 
-
   return 1;
-}
+} // end generate_all()
 
 /***************************************************************************
 * 
@@ -701,39 +816,43 @@ element_id *sentinel; /* to record original end of list */
 */
 void memory_report()
 {
-    long mem;
+    size_t mem;
     int k;
 
     #ifdef MPI_EVOLVER
     if ( this_task == 0 )
     { mpi_count_report();
+      return;
     }
     else
     #endif
     {
-    mem = 0;
-    for ( k = 0 ; k < NUMELEMENTS ; k++ )
-      mem += web.skel[k].count*web.sizes[k];
+      mem = 0;
+      for ( k = 0 ; k < NUMELEMENTS ; k++ )
+        mem += (size_t)web.skel[k].count*web.sizes[k];
 
-    sprintf(errmsg,
-    "Vertices: %ld  Edges: %ld  Facets: %ld  Bodies: %ld  Facetedges: %ld\nElement memory: %ld\n",
+      sprintf(msg,
+        "Vertices: %ld  Edges: %ld  Facets: %ld  Bodies: %ld  Facetedges: %ld\n",
                 web.skel[0].count,web.skel[1].count,web.skel[2].count,
-                web.skel[3].count,web.skel[4].count, mem);
-    outstring(errmsg);
+                web.skel[3].count,web.skel[4].count);
+      outstring(msg);
+      sprintf(msg, "Element memory: %lu KB, or %lu MB\n",
+           (unsigned long)(mem>>10),(unsigned long)(mem>>20));
+      outstring(msg);
     }
 
     if ( verbose_flag )
     { /* report element sizes */
       for ( k = 0 ; k < NUMELEMENTS ; k++ )
-      { sprintf(msg,"%10.10s size: %4d bytes;  number allocated: %d\n",
+      { sprintf(msg,"%10.10s size: %4d bytes;  number allocated: %10ld\n",
           typenames[k],web.sizes[k],web.skel[k].maxcount);
         outstring(msg);
       }
-      sprintf(msg,"quantity size:   %4d bytes;  number allocated: %4d\n",
-          sizeof(struct gen_quant),gen_quant_list_max);
+      sprintf(msg,"  quantity size: %4u bytes;  number allocated: %10d\n",
+          (unsigned int)sizeof(struct gen_quant),gen_quant_list_max);
       outstring(msg);
-      sprintf(msg,"instance size:   %4d bytes;  number allocated: %4d\n",
-          sizeof(struct method_instance),meth_inst_list_max);
+      sprintf(msg,"  instance size: %4d bytes;  number allocated: %10d\n",
+          (int)sizeof(struct method_instance),meth_inst_list_max);
       outstring(msg);
     }
 
@@ -750,16 +869,17 @@ void memory_report()
       size_t mem_use=0,mem_free=0;
       char * heaptop = NULL; 
       char * heapstart = NULL;
-      MEMORYSTATUS memstat;
+      MEMORYSTATUSEX memstat;
+      int retval;
 
       hinfo._pentry = NULL;
-      while ( _heapwalk(&hinfo) == _HEAPOK )
+      while ( (retval = _heapwalk(&hinfo)) == _HEAPOK )
       {   if ( heapstart == NULL )
              heapstart = (char*)hinfo._pentry; 
  
 #ifdef HEAPLIST
          sprintf(errmsg,"%p %10ld %s end %p\n",hinfo._pentry,hinfo._size,
-             hinfo._useflag ? "used" : "free",
+             hinfo._useflag ? "used " : "free ",
                   (char*)hinfo._pentry+hinfo._size);
           outstring(errmsg);
 #endif
@@ -771,23 +891,27 @@ void memory_report()
         if ( (char*)hinfo._pentry + hinfo._size > heaptop )
           heaptop = (char*)hinfo._pentry + hinfo._size;
       }
+      if ( retval != _HEAPEND )
+      { sprintf(msg,"\n Heapwalk ended unsuccessfully!!\n\n");
+        outstring(msg);
+      }
       outstring("\n");
-      sprintf(errmsg,"blocks in use: %d    memory in use: %ld \n",
-                    b_use,mem_use);
+      sprintf(errmsg,"blocks in use: %6d    memory in use: %Iu KB, or %Iu MB \n",
+                    b_use,mem_use>>10,mem_use>>20);
       outstring(errmsg);
-      sprintf(errmsg,"blocks free:    %d    memory free:    %ld \n",
-                 b_free,mem_free);
+      sprintf(errmsg,"  blocks free: %6d    memory free: %Iu KB, or %Iu MB \n",
+                 b_free,mem_free>>10,mem_free>>20);
       outstring(errmsg);
       sprintf(errmsg,"Heap top: %p\n",heaptop);
       outstring(errmsg);
       sprintf(errmsg,"Heap size: %4.2f MB\n",
-             (heaptop-heapstart)/1024./1024.);
+             ((size_t )(heaptop-heapstart))/1024./1024.);
       outstring(errmsg);
 
       memstat.dwLength = sizeof(memstat);
-      GlobalMemoryStatus(&memstat);
-      sprintf(errmsg,"Physical memory size: %d bytes   Virtual memory top: %X\n",
-           memstat.dwTotalPhys,memstat.dwTotalVirtual);
+      GlobalMemoryStatusEx(&memstat);
+      sprintf(errmsg,"Physical memory size: %4.2f GB   Virtual memory top: %llX\n",
+           (double)memstat.ullTotalPhys/1024/1024/1024,memstat.ullTotalVirtual);
       outstring(errmsg);
     }
 #endif
@@ -795,8 +919,8 @@ void memory_report()
 #if defined(_UNISTD_H)
   if ( verbose_flag )
   { /* do this only on unix systems with unistd.h */
-    sprintf(msg,"\nTotal data memory arena %d\n",
-      (char*)sbrk(0)-(char*)&evolver_version);
+    sprintf(msg,"\nTotal data memory arena %Lu\n",
+      (unsigned long long)((char*)sbrk(0)-(char*)&evolver_version));
     outstring(msg); 
   }
 #endif
@@ -829,7 +953,7 @@ void memory_report()
 
   mem_list_summary();
   dy_check();
-}
+} // end memory_report()
 
 /**************************************************************************
 *
@@ -847,7 +971,7 @@ void reset_skeleton()
   int three = FACET_VERTS;
   int permcount = web.perm_global_count;
   int maxperm   = web.max_perm_globals;
-  struct global *perm = perm_globals(0);
+  struct global **perm = dy_perm_globals;
 
   ENTER_GRAPH_MUTEX
 
@@ -893,54 +1017,107 @@ void reset_skeleton()
   /* Be sure the order given here is same as order in skeleton.h */
   /* following each element structure definition. */
   /* vertex */
-  add_attribute(VERTEX,"__x",REAL_TYPE,1,NULL,0,NULL);
+
+
+  add_attribute(VERTEX,"__x",REAL_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
   EXTRAS(VERTEX)[V_COORD_ATTR].flags |= RECALC_ATTR;
-  add_attribute(VERTEX,"__oldx",REAL_TYPE,1,NULL,0,NULL);
-  add_attribute(VERTEX,"__p",REAL_TYPE,1,NULL,0,NULL);
+  EXTRAS(VERTEX)[V_COORD_ATTR].array_spec.flags |= FIXED_SIZE_ARRAY;
+
+  add_attribute(VERTEX,"v_oldx",REAL_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(VERTEX)[V_OLDCOORD_ATTR].array_spec.flags |= FIXED_SIZE_ARRAY;
+
+  add_attribute(VERTEX,"p",REAL_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
   EXTRAS(VERTEX)[V_PARAM_ATTR].flags |= RECALC_ATTR;
-  add_attribute(VERTEX,"__force",REAL_TYPE,1,NULL,0,NULL);
-  add_attribute(VERTEX,"__velocity",REAL_TYPE,1,NULL,0,NULL);
-  add_attribute(VERTEX,"__v_constraint_list",INTEGER_TYPE,1,NULL,0,NULL);
+  EXTRAS(VERTEX)[V_PARAM_ATTR].array_spec.flags |= FIXED_SIZE_ARRAY;
+
+  add_attribute(VERTEX,"v_force",REAL_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(VERTEX)[V_FORCE_ATTR].flags |= READ_ONLY_ATTR;
+  EXTRAS(VERTEX)[V_FORCE_ATTR].array_spec.flags |= FIXED_SIZE_ARRAY;
+
+  add_attribute(VERTEX,"v_velocity",REAL_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(VERTEX)[V_VELOCITY_ATTR].flags |= READ_ONLY_ATTR;
+  EXTRAS(VERTEX)[V_VELOCITY_ATTR].array_spec.flags |= FIXED_SIZE_ARRAY;
+
+  add_attribute(VERTEX,"v_constraint_list",INTEGER_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(VERTEX)[V_CONSTR_LIST_ATTR].flags |= READ_ONLY_ATTR;
+
   web.meth_attr[VERTEX] = 
-        add_attribute(VERTEX,"__v_method_list",INTEGER_TYPE,1,NULL,0,NULL);
-  add_attribute(VERTEX,"__vertex_normal",REAL_TYPE,1,NULL,0,NULL);
+        add_attribute(VERTEX,"v_method_list",INTEGER_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(VERTEX)[web.meth_attr[VERTEX]].flags |= READ_ONLY_ATTR;
+
+  add_attribute(VERTEX,"vertex_normal",REAL_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(VERTEX)[V_NORMAL_ATTR].flags |= READ_ONLY_ATTR|VIRTUAL_ATTR;
+  EXTRAS(VERTEX)[V_NORMAL_ATTR].array_spec.flags |= FIXED_SIZE_ARRAY;
+
+  add_attribute(VERTEX,"constraint[].normal",REAL_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(VERTEX)[V_CONSTRAINT_NORMAL_ATTR].flags |= READ_ONLY_ATTR|VIRTUAL_ATTR;
+  EXTRAS(VERTEX)[V_CONSTRAINT_NORMAL_ATTR].array_spec.flags |= FIXED_SIZE_ARRAY;
+
   /* edge */
-  add_attribute(EDGE,"density",REAL_TYPE,0,NULL,0,NULL);
-  add_attribute(EDGE,"__e_vertices",ELEMENTID_TYPE,1,NULL,0,NULL);
-  add_attribute(EDGE,"__edge_vector",REAL_TYPE,1,NULL,0,NULL);/*dummy*/
-  add_attribute(EDGE,"__wrap_list",INTEGER_TYPE,1,NULL,0,NULL);
-  add_attribute(EDGE,"__e_constraint_list",INTEGER_TYPE,1,NULL,0,NULL);
+  add_attribute(EDGE,"density",REAL_TYPE,0,NULL,0,NULL,MPI_NO_PROPAGATE);
+  add_attribute(EDGE,"e_vertices",ELEMENTID_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(EDGE)[E_VERTICES_ATTR].flags |= READ_ONLY_ATTR;
+
+  add_attribute(EDGE,"edge_vector",REAL_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);/*dummy*/
+  EXTRAS(EDGE)[E_VECTOR_ATTR].flags |= READ_ONLY_ATTR|VIRTUAL_ATTR;
+  EXTRAS(EDGE)[E_VECTOR_ATTR].array_spec.flags |= FIXED_SIZE_ARRAY;
+
+  add_attribute(EDGE,"e_wrap_list",INTEGER_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(EDGE)[E_WRAP_ATTR].array_spec.flags |= FIXED_SIZE_ARRAY;
+
+  add_attribute(EDGE,"e_constraint_list",INTEGER_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(EDGE)[E_CONSTR_LIST_ATTR].flags |= READ_ONLY_ATTR;
+
   web.meth_attr[EDGE] = 
-        add_attribute(EDGE,"__e_method_list",INTEGER_TYPE,1,NULL,0,NULL);
+        add_attribute(EDGE,"e_method_list",INTEGER_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(EDGE)[web.meth_attr[EDGE]].flags |= READ_ONLY_ATTR;
+
   /* facet */
-  add_attribute(FACET,"__f_constraint_list",INTEGER_TYPE,1,NULL,0,NULL);
-  add_attribute(FACET,"__f_vertices",ELEMENTID_TYPE,1,&three,0,NULL);
-  add_attribute(FACET,"__facet_normal",REAL_TYPE,1,NULL,0,NULL);
-  add_attribute(FACET,"__body_list",ELEMENTID_TYPE,1,NULL,0,NULL);
-  add_attribute(FACET,"__next_vfacet_list",ELEMENTID_TYPE,0,NULL,0,NULL);
-  add_attribute(FACET,"__next_bfacet_list",ELEMENTID_TYPE,1,NULL,0,NULL);
+  add_attribute(FACET,"f_constraint_list",INTEGER_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(FACET)[F_CONSTR_LIST_ATTR].flags |= READ_ONLY_ATTR;
+
+  add_attribute(FACET,"f_vertices",ELEMENTID_TYPE,1,&three,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(FACET)[F_VERTICES_ATTR].flags |= READ_ONLY_ATTR;
+
+  add_attribute(FACET,"facet_normal",REAL_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(FACET)[F_NORMAL_ATTR].flags |= READ_ONLY_ATTR|VIRTUAL_ATTR;
+  EXTRAS(FACET)[F_NORMAL_ATTR].array_spec.flags |= FIXED_SIZE_ARRAY;
+
+  add_attribute(FACET,"f_body_list",ELEMENTID_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(FACET)[F_BODY_LIST_ATTR].flags |= READ_ONLY_ATTR;
+
+  add_attribute(FACET,"f_next_vfacet",ELEMENTID_TYPE,0,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(FACET)[F_NEXT_VFACET_ATTR].flags |= READ_ONLY_ATTR;
+
+  add_attribute(FACET,"f_next_bfacet",ELEMENTID_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(FACET)[F_NEXT_BFACET_ATTR].flags |= READ_ONLY_ATTR;
+
   web.meth_attr[FACET] = 
-        add_attribute(FACET,"__f_method_list",INTEGER_TYPE,1,NULL,0,NULL);
+        add_attribute(FACET,"f_method_list",INTEGER_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(FACET)[web.meth_attr[FACET]].flags |= READ_ONLY_ATTR;
+
+
   /* body */
   web.meth_attr[BODY] = 
-        add_attribute(BODY,"__b_method_list",INTEGER_TYPE,1,NULL,0,NULL);
+        add_attribute(BODY,"b_method_list",INTEGER_TYPE,1,NULL,0,NULL,MPI_NO_PROPAGATE);
+  EXTRAS(BODY)[web.meth_attr[BODY]].flags |= READ_ONLY_ATTR;
  
 
-  F_TAG_ATTR = F_PHASE_ATTR = V_BOUNDARY_ATTR = E_BOUNDARY_ATTR = 
+  F_PHASE_ATTR = V_BOUNDARY_ATTR = E_BOUNDARY_ATTR = 
     F_BOUNDARY_ATTR = B_PHASE_ATTR = 0;
 
 #ifdef MPI_EVOLVER
   { int m = MPI_EXPORT_MAX;
     web.mpi_export_attr[VERTEX] = 
-        add_attribute(VERTEX,"__mpi_export_v",USHORT_TYPE,1,&m,0,NULL);
+        add_attribute(VERTEX,"__mpi_export_v",USHORT_TYPE,1,&m,0,NULL,MPI_NO_PROPAGATE);
     web.mpi_export_attr[EDGE] = 
-        add_attribute(EDGE,"__mpi_export_e",USHORT_TYPE,1,&m,0,NULL);
+        add_attribute(EDGE,"__mpi_export_e",USHORT_TYPE,1,&m,0,NULL,MPI_NO_PROPAGATE);
     web.mpi_export_attr[FACET] = 
-        add_attribute(FACET,"__mpi_export_f",USHORT_TYPE,1,&m,0,NULL);
+        add_attribute(FACET,"__mpi_export_f",USHORT_TYPE,1,&m,0,NULL,MPI_NO_PROPAGATE);
     web.mpi_export_attr[BODY] = 
-        add_attribute(BODY,"__mpi_export_b",USHORT_TYPE,1,&m,0,NULL);
+        add_attribute(BODY,"__mpi_export_b",USHORT_TYPE,1,&m,0,NULL,MPI_NO_PROPAGATE);
     web.mpi_export_attr[FACETEDGE] = 
-        add_attribute(FACETEDGE,"__mpi_export_fe",USHORT_TYPE,1,&m,0,NULL);
+        add_attribute(FACETEDGE,"__mpi_export_fe",USHORT_TYPE,1,&m,0,NULL,MPI_NO_PROPAGATE);
     mpi_export_voffset = EXTRAS(VERTEX)[web.mpi_export_attr[VERTEX]].offset;
     mpi_export_eoffset = EXTRAS(EDGE)[web.mpi_export_attr[EDGE]].offset;
     mpi_export_foffset = EXTRAS(FACET)[web.mpi_export_attr[FACET]].offset;
@@ -948,7 +1125,8 @@ void reset_skeleton()
     mpi_export_feoffset = EXTRAS(FACETEDGE)[web.mpi_export_attr[FACETEDGE]].offset;
   }
 #endif
-}
+  
+} // end reset_skeleton()
 
 /***********************************************************************
 *
@@ -957,8 +1135,7 @@ void reset_skeleton()
 * purpose: Totally free up discard list.  To be called only when
 *          no lists are being used.
 */
-void free_discards(mode)
-int mode; /* DISCARDS_ALL or DISCARDS_SOME */
+void free_discards(int mode /* DISCARDS_ALL or DISCARDS_SOME */)
 { int type;
 
   for ( type = 0 ; type < NUMELEMENTS ; type++ )
@@ -1006,7 +1183,7 @@ int mode; /* DISCARDS_ALL or DISCARDS_SOME */
     web.skel[type].discard_count = 0;
   }
 
-}
+} // end free_discards()
 
 /**************************************************************************
 *
@@ -1016,21 +1193,22 @@ int mode; /* DISCARDS_ALL or DISCARDS_SOME */
 *             match datafile number.  Called only during datafile.
 */
 
-void move_to_free_front(type,id)
-int type; /* element type */
-int id;    /* element number    */
+void move_to_free_front(
+  int type, /* element type */
+  int id    /* element number    */
+)
 { int ord = id - 1;
 
 
 #ifdef HASH_ID
- if ( !match_id_flag || addload_flag ) return; /* for old way */
+ if ( !match_id_flag || (addload_flag && !replace_load_flag) ) return; /* for old way */
  web.skel[type].free_spot = ord;
 #else
 
   element_id eid;
   struct element *eptr,*fptr,*bptr;
  
-  if ( !match_id_flag || addload_flag ) return; /* for old way */
+  if ( !match_id_flag || (addload_flag && !replace_load_flag) ) return; /* for old way */
 
   if ( sparse_ibase_flag )
   { /* extend ibase with empty slots far enough */
@@ -1102,7 +1280,7 @@ int id;    /* element number    */
   eptr->forechain = web.skel[type].free; 
   web.skel[type].free = eid;
 #endif
-}
+} // end move_to_free_front()
 
 /*********************************************************************
 * 
@@ -1120,7 +1298,7 @@ static int key_offset; /* offset of key in element structure */
 static char * keynames[NUMELEMENTS] = {"vertex_order_key",
     "edge_order_key","facet_order_key","body_order_key",
     "facetedge_order_key"};
-int esort ARGS((char*,char*));
+int esort (char*,char*);
 
 int esort (a,b)  /* sort routine */
 char *a, *b;
@@ -1228,7 +1406,7 @@ void reorder_storage()
 
   global_timestamp++;
   top_timestamp = global_timestamp;
-}
+} // end reorder_storage()
 
 /*************************************************************************
 *
@@ -1252,6 +1430,8 @@ void renumber_all()
      newibase[type] = 
          (struct element **)mycalloc(web.skel[type].ialloc,
                   sizeof(element_id *)); 
+ 
+  ENTER_GRAPH_MUTEX
 
   for ( type = VERTEX ; type <= FACETEDGE ; type++ )
   { element_id count;
@@ -1331,7 +1511,8 @@ void renumber_all()
 
   FOR_ALL_BODIES(id)    
   { struct body * ep = bptr(id);
-    ep->f_id = copy_sign(elptr(ep->f_id)->self_id,ep->f_id);
+    if ( valid_id(ep->f_id) )
+      ep->f_id = copy_sign(elptr(ep->f_id)->self_id,ep->f_id);
   }
 
   /* now new pointers in newibase */
@@ -1381,9 +1562,9 @@ void renumber_all()
       id = ep->forechain;
       ep->forechain = ++newid;
       ep->backchain = backid;
-      backid = id;
       newibase[type][count] = ep;
       ep->self_id = (ep->self_id & (~OFFSETMASK)) | count;
+      backid = ep->self_id;
       count++;
     } 
     ep->forechain = NULLID;
@@ -1396,6 +1577,36 @@ void renumber_all()
   if ( pickvnum ) pickvnum = loc_ordinal(vibase[pickvnum-1]->self_id)+1;
   if ( pickenum ) pickenum = loc_ordinal(eibase[pickenum-1]->self_id)+1;
   if ( pickfnum ) pickfnum = loc_ordinal(fibase[pickfnum-1]->self_id)+1;
+
+  if ( everything_quantities_flag )
+  { /* fix up names of body quantities and instances */
+    int k,oldbnum,newbnum;
+    char *nametail;
+    char newname[100];
+    /* named quantities */
+    for (  k = 0 ; k < gen_quant_count ; k++ )
+    { struct gen_quant *q = GEN_QUANT(k);
+      if ( q->flags & Q_DELETED ) continue;
+      if ( !(q->flags & DEFAULT_QUANTITY) ) continue;
+      if ( strncmp(q->name,"body_",5) != 0 ) continue;
+      oldbnum = atoi(q->name+5);
+      newbnum = loc_ordinal(bibase[oldbnum-1]->self_id)+1;
+      nametail = strchr(q->name+6,'_');
+      sprintf(newname,"body_%d%s",newbnum,nametail);
+      strcpy(q->name,newname);
+    }
+    for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
+    { struct method_instance *mi = METH_INSTANCE(k);
+      if ( mi->flags & Q_DELETED ) continue;
+      if ( !(mi->flags & DEFAULT_INSTANCE) ) continue;
+      if ( strncmp(mi->name,"body_",5) != 0 ) continue;
+      oldbnum = atoi(mi->name+5);
+      newbnum = loc_ordinal(bibase[oldbnum-1]->self_id)+1;
+      nametail = strchr(mi->name+6,'_');
+      sprintf(newname,"body_%d%s",newbnum,nametail);
+      strcpy(mi->name,newname);
+    }
+  }
 
   /* swap ibase to new */
   for ( type = VERTEX ; type <= FACETEDGE ; type++ )
@@ -1411,7 +1622,8 @@ void renumber_all()
   global_timestamp++;
   top_timestamp = global_timestamp;
   
-}
+  LEAVE_GRAPH_MUTEX
+} // end renumber_all()
 
 /*************************************************************************
 *
@@ -1421,11 +1633,12 @@ void renumber_all()
 *           on an edge.
 */
 
-REAL interp_edge_attribute(eid,ext,inx,ptnum)
-edge_id eid;
-struct extra *ext;  /* extra attribute involved */
-int inx;  /* index within attribute */
-int ptnum;  /* which gauss point */
+REAL interp_edge_attribute(
+  edge_id eid,
+  struct extra *ext,  /* extra attribute involved */
+  int inx, /* index within attribute */
+  int ptnum  /* which gauss point */
+)
 {
   int ctrl = web.skel[EDGE].ctrlpts;
   REAL sum = 0.0;
@@ -1441,7 +1654,7 @@ int ptnum;  /* which gauss point */
   for ( i = 0 ; i < ctrl ; i++ )
     sum += gl->gpoly[ptnum][i]*get_extra_attrib_value(v[i],ext,inx);
   return sum;
-}
+} // end interp_edge_attribute()
 
 
 /*************************************************************************
@@ -1452,11 +1665,12 @@ int ptnum;  /* which gauss point */
 *           on a facet.
 */
 
-REAL interp_facet_attribute(fid,ext,inx,ptnum)
-facet_id fid;
-struct extra *ext;  /* extra attribute involved */
-int inx;  /* index within attribute */
-int ptnum;  /* which gauss point */
+REAL interp_facet_attribute(
+  facet_id fid,
+  struct extra *ext, /* extra attribute involved */
+  int inx,  /* index within attribute */
+  int ptnum  /* which gauss point */
+  )
 {
   int ctrl = web.skel[FACET].ctrlpts;
   REAL sum = 0.0;
@@ -1489,7 +1703,7 @@ int ptnum;  /* which gauss point */
   for ( i = 0 ; i < ctrl ; i++ )
     sum += gl->gpoly[ptnum][i]*get_extra_attrib_value(v[i],ext,inx);
   return sum;
-}
+} // end interp_facet_attribute()
 
 /*************************************************************************
 *
@@ -1499,10 +1713,11 @@ int ptnum;  /* which gauss point */
 *
 */
 
-REAL get_extra_attrib_value(id,ext,inx)
-element_id id;
-struct extra *ext;
-int inx;
+REAL get_extra_attrib_value(
+  element_id id,
+  struct extra *ext,
+  int inx
+)
 {
   if ( inx >= ext->array_spec.datacount )
   { sprintf(errmsg,"Attribute %s total index is %d; maximum is %d.\n",
@@ -1539,7 +1754,7 @@ int inx;
      break;
   }
   return 0.0;  /* shouldn't get here. */
-}
+} // end get_extra_attrib_value()
 
 /***********************************************************************/
 /***********************************************************************
@@ -1558,8 +1773,7 @@ int inx;
 * Purpose: hash 32 bits to 32 bits
 */
 
-unsigned int int32hash(key)
-unsigned int key;
+unsigned int int32hash(unsigned int key)
 {
   key += ~(key << 15);
   key ^=  (key >> 10);
@@ -1568,7 +1782,7 @@ unsigned int key;
   key += ~(key << 11);
   key ^=  (key >> 16);
   return key;
-}
+} // end int32hash()
 
 /************************************************************************
 *
@@ -1580,11 +1794,9 @@ unsigned int key;
 */
 
 #ifdef NOLONGLONG
-unsigned long int64hash(key)
-unsigned long key;
+unsigned long int64hash(unsigned long key)
 #else
-unsigned long long int64hash(key)
-unsigned long long key;
+unsigned long long int64hash(unsigned long long key)
 #endif
 {
   key += ~(key << 32);
@@ -1596,7 +1808,7 @@ unsigned long long key;
   key += ~(key << 27);
   key ^= (key >> 31);
   return key;
-}
+} // end int64hash()
 
 
 /*************************************************************************
@@ -1604,11 +1816,9 @@ unsigned long long key;
 * Function: elhash_lookup()
 *
 * Purpose: Retrieve element structure pointer from hash table
-*
 */
 
-struct element * elhash_lookup(id)
-element_id id;
+struct element * elhash_lookup(element_id id)
 { element_id key;
   int inx;
 
@@ -1624,7 +1834,7 @@ element_id id;
     inx &= web.elhashmask; /* wraparound, maybe */
   }
 
-}
+} // end elhash_lookup()
 
 /*************************************************************************
 *
@@ -1657,7 +1867,7 @@ void elhash_bigger()
   for ( n = 0 ; n < oldsize ; n++ )
     if ( oldtable[n] && (oldtable[n] != ELHASH_FREE) )
       elhash_insert(oldtable[n]->self_id,oldtable[n]);
-}
+} // end elhash_bigger()
 
 
 /***********************************************************************
@@ -1667,9 +1877,9 @@ void elhash_bigger()
 *  purpose: allocate more empty element structures using pointer freelist
 */
 
-void elhash_extend(type,mode)
-int type;
-int mode; /* EXTEND_BATCH or EXTEND_FOR_REFINE */
+void elhash_extend(
+  int type,
+  int mode) /* EXTEND_BATCH or EXTEND_FOR_REFINE */
 {
   int number=0;  /* of new items to allocate */
   char *newblock;
@@ -1708,8 +1918,8 @@ int mode; /* EXTEND_BATCH or EXTEND_FOR_REFINE */
     RECOVERABLE);
   
   if ( (web.skel[type].maxcount + number) > OFFSETMASK )
-  { sprintf(errmsg, "Trying to allocate more %s than ID format allows, %Ld\n",
-          typenames[type],OFFSETMASK);
+  { sprintf(errmsg, "Trying to allocate more %s than ID format allows, %lld\n",
+          typenames[type],(long long int)OFFSETMASK);
     kb_error(3214,errmsg,RECOVERABLE);
   }
 
@@ -1752,8 +1962,7 @@ int mode; /* EXTEND_BATCH or EXTEND_FOR_REFINE */
 elhash_extend_exit:
   LEAVE_GRAPH_MUTEX;
   
-
-}
+} // end elhash_extend()
 
 /*************************************************************************
 *
@@ -1763,9 +1972,9 @@ elhash_extend_exit:
 *          it will allocate that id.
 */
 
-struct element *elhash_new_element(type,desired_id)
-int type; /* of element */
-element_id desired_id;
+struct element *elhash_new_element(
+  int type, /* of element */
+  element_id desired_id)
 { struct element *newptr,*oldptr;
   element_id newid;
   int spot;
@@ -1807,7 +2016,7 @@ element_id desired_id;
   web.skel[type].alloc++;
  
   return newptr;
-} 
+} // end elhash_new_element()
 
 /*************************************************************************
 *
@@ -1817,9 +2026,9 @@ element_id desired_id;
 *          there.
 */
 
-void elhash_insert(id,eptr)
-element_id id;
-struct element * eptr;
+void elhash_insert(
+  element_id id,
+  struct element * eptr)
 { element_id key;
   int inx;
   
@@ -1843,18 +2052,19 @@ struct element * eptr;
     inx &= web.elhashmask; /* wraparound, maybe */
   }
    
-}
+} // end elhash_insert()
+
 /*************************************************************************
 *
-* Function: elhash_insert()
+* Function: elhash_replace()
 *
 * Purpose: Replace pointer for one id to element hash table.  
 *          NOTE: Old pointer must still be valid!
 */
 
-void elhash_replace(id,eptr)
-element_id id;
-struct element * eptr;
+void elhash_replace(
+  element_id id,
+  struct element * eptr)
 { element_id key;
   int inx;
   
@@ -1872,7 +2082,7 @@ struct element * eptr;
     inx &= web.elhashmask; /* wraparound, maybe */
   }
    
-}
+} // end elhash_replace()
 
 /*************************************************************************
 *
@@ -1881,8 +2091,7 @@ struct element * eptr;
 * Purpose: Delete an entry from the element hash table.
 */
 
-void elhash_delete(id)
-element_id id;
+void elhash_delete(element_id id)
 { element_id key;
   int inx;
 
@@ -1903,7 +2112,7 @@ element_id id;
   web.elhashtable[inx] = ELHASH_FREE;
 
   web.elhashcount--;
-}
+} // end elhash_delete()
 
 /* end element id hashing ********************************************/
 
@@ -1915,15 +2124,14 @@ element_id id;
 * purpose: test if a particular remote element id exists locally.
 */
 
-int mpi_remote_present(id)
-element_id id;
+int mpi_remote_present(element_id id)
 { struct element *eptr = mpi_remote_elptr(id);
   if ( eptr == NULL ) 
     return 0;
   if ( eptr->attr & ALLOCATED ) 
     return 1;
   return 0; 
-}
+} // end mpi_remote_present()
 #endif
 
 /************************************************************************
@@ -1934,15 +2142,20 @@ element_id id;
 *          actually present and valid.
 */
 
-int valid_element(id)
-element_id id;
+int valid_element(element_id id)
 { struct element *ep;
+  int type = id_type(id);
+  if ( type > FACETEDGE ) return 0;
   if ( !valid_id(id) ) return 0;
+#ifdef MPI_EVOLVER
+  if ( id_task(id) == this_task )
+#endif
+  if ( ordinal(id) > web.skel[type].max_ord ) return 0;
   ep = elptr(id);
   if ( ep == NULL ) return 0;
   if ( ep->attr & ALLOCATED ) return 1;
   return 0;
-}
+} // end valid_element()
 
 
 /************************************************************************
@@ -1953,14 +2166,15 @@ element_id id;
 *          number of addends.
 */
 
-void binary_tree_add(addends,term)
-REAL *addends;
-REAL term;
+void binary_tree_add(
+  REAL *addends,
+  REAL term
+)
 { int i;
   for ( i = 0 ; addends[i] != 0.0 ; i++ )
   { term += addends[i];
     addends[i] = 0.0;
   }
   addends[i] = term;
-}
+} // end binary_tree_add()
 

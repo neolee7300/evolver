@@ -1,34 +1,81 @@
 // jvx.cmd
-// Create jvx file for JavaView
+// Create jvx file for JavaView.
 
+/*
+   Assumptions: 3D soapfilm model, linear model, not torus or symmetry group
+    (use the "detorus" command if necessary to convert torus or symmetry
+     to unwrapped surface, but remember that detorus alters the surface)
+   Does facets only, not edges. 
+   Does facets satisfying "show" criterion.
+   Facet color is frontcolor on both sides.
+*/
 // Usage:  jvx >>> "filename.jvx"
-
-// Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
 
 define vertex attribute jvx_number integer;    // for implicit vertex order
 define facet attribute fjvxnum integer;    // for implicit facet order
 
-define facetcolorcount integer[16];  // to see which color facets are present
-define edgecolorcount integer[16];  // to see which color edges are present
-define rgb integer[16][3];     // color definitions
-rgb[1][1] := 0; rgb[1][2] := 0; rgb[1][3] := 0;
-rgb[2][1] := 0; rgb[2][2] := 0; rgb[2][3] := 255;
-rgb[3][1] := 0; rgb[3][2] := 255; rgb[3][3] := 0;
-rgb[4][1] := 0; rgb[4][2] := 255; rgb[4][3] := 255;
-rgb[5][1] := 255; rgb[5][2] := 0; rgb[5][3] := 0;
-rgb[6][1] := 255; rgb[6][2] := 0; rgb[6][3] := 255;
-rgb[7][1] := 255; rgb[7][2] := 127; rgb[7][3] := 0;
-rgb[8][1] := 160; rgb[8][2] := 160; rgb[8][3] := 160;
-rgb[9][1] := 80; rgb[9][2] := 80; rgb[9][3] := 80;
-rgb[10][1] := 80; rgb[10][2] := 200; rgb[10][3] := 255;
-rgb[11][1] := 127; rgb[11][2] := 255; rgb[11][3] := 127;
-rgb[12][1] := 127; rgb[12][2] := 255; rgb[12][3] := 255;
-rgb[13][1] := 255; rgb[13][2] := 127; rgb[13][3] := 127;
-rgb[14][1] := 255; rgb[13][2] := 127; rgb[13][3] := 255;
-rgb[15][1] := 255; rgb[15][2] := 255; rgb[15][3] := 0;
-rgb[16][1] := 255; rgb[16][2] := 255; rgb[16][3] := 255;
+define rgb_jvx integer[16][3];     // color definitions
+rgb_jvx[1][1] := 0; rgb_jvx[1][2] := 0; rgb_jvx[1][3] := 0;
+rgb_jvx[2][1] := 0; rgb_jvx[2][2] := 0; rgb_jvx[2][3] := 255;
+rgb_jvx[3][1] := 0; rgb_jvx[3][2] := 255; rgb_jvx[3][3] := 0;
+rgb_jvx[4][1] := 0; rgb_jvx[4][2] := 255; rgb_jvx[4][3] := 255;
+rgb_jvx[5][1] := 255; rgb_jvx[5][2] := 0; rgb_jvx[5][3] := 0;
+rgb_jvx[6][1] := 255; rgb_jvx[6][2] := 0; rgb_jvx[6][3] := 255;
+rgb_jvx[7][1] := 255; rgb_jvx[7][2] := 127; rgb_jvx[7][3] := 0;
+rgb_jvx[8][1] := 160; rgb_jvx[8][2] := 160; rgb_jvx[8][3] := 160;
+rgb_jvx[9][1] := 80; rgb_jvx[9][2] := 80; rgb_jvx[9][3] := 80;
+rgb_jvx[10][1] := 80; rgb_jvx[10][2] := 200; rgb_jvx[10][3] := 255;
+rgb_jvx[11][1] := 127; rgb_jvx[11][2] := 255; rgb_jvx[11][3] := 127;
+rgb_jvx[12][1] := 127; rgb_jvx[12][2] := 255; rgb_jvx[12][3] := 255;
+rgb_jvx[13][1] := 255; rgb_jvx[13][2] := 127; rgb_jvx[13][3] := 127;
+rgb_jvx[14][1] := 255; rgb_jvx[13][2] := 127; rgb_jvx[13][3] := 255;
+rgb_jvx[15][1] := 255; rgb_jvx[15][2] := 255; rgb_jvx[15][3] := 0;
+rgb_jvx[16][1] := 255; rgb_jvx[16][2] := 255; rgb_jvx[16][3] := 255;
 
 jvx := { 
+  local maxx,minx,maxy,miny,maxz,minz,jvxnum,facetnum;
+  local colornum,numcolors;
+  local facetcolorcount,edgecolorcount;
+
+  define facetcolorcount integer[16];  // to see which color facets are present
+  define edgecolorcount integer[16];  // to see which color edges are present
+
+  if torus then
+  { errprintf "Cannot run 'jvx' command in torus mode. Do 'detorus' before 'jvx'.\n";
+    errprintf "  WARNING: 'detorus' alters the surface, so save it first!\n";
+    abort;
+  };
+
+  if symmetry_group then
+  { errprintf "Cannot run 'jvx' command in symmetry group mode. Do 'detorus' before 'jvx'.\n";
+    errprintf "  WARNING: 'detorus' alters the surface, so save it first!\n";
+    abort;
+  };
+
+  if space_dimension != 3 then
+  { errprintf "The 'jvx' command must be run in three-dimensional space.\n";
+    abort;
+  };
+
+  if surface_dimension == 1 then
+  { errprintf "The 'jvx' command is not meant for the string model.\n";
+    abort;
+  };
+
+  if simplex_representation then
+  { errprintf "The 'jvx' command is not meant for the simplex model.\n";
+    abort;
+  };
+
+  if lagrange_order >= 2 then
+  { errprintf "The 'jvx' command is meant for the linear model, not quadratic or Lagrange.\n";
+    abort;
+  };
+
+  if rgb_colors then
+  { errprintf "The 'jvx' command does not do RGB colors; do rgb_colors off.\n";
+    abort;
+  };
   // First, bounding box.
   maxx := max(vertex,x); minx := min(vertex,x);
   maxy := max(vertex,y); miny := min(vertex,y);
@@ -109,8 +156,8 @@ jvx := {
   { colornum := 1; 
     while colornum <= 16 do
     { if facetcolorcount[colornum] > 0 then
-        printf "        <color> %d %d %d </color>\n",rgb[colornum][1],
-          rgb[colornum][2],rgb[colornum][3];
+        printf "        <color> %d %d %d </color>\n",rgb_jvx[colornum][1],
+          rgb_jvx[colornum][2],rgb_jvx[colornum][3];
       colornum += 1;
     };
   };
@@ -119,8 +166,8 @@ jvx := {
   {
     printf "      <colors>\n";
     foreach facet ff where ff.show and color != clear do
-    { printf "        <c> %d %d %d </c>\n",rgb[ff.color+1][1],
-            rgb[ff.color+1][2],rgb[ff.color+1][3];
+    { printf "        <c> %d %d %d </c>\n",rgb_jvx[ff.color+1][1],
+            rgb_jvx[ff.color+1][2],rgb_jvx[ff.color+1][3];
     };
     printf "      </colors>\n";
   };
@@ -187,8 +234,8 @@ jvx := {
   { colornum := 1; 
     while colornum <= 16 do
     { if edgecolorcount[colornum] > 0 then
-        printf "          <color> %d %d %d </color>\n",rgb[colornum][1],
-          rgb[colornum][2],rgb[colornum][3];
+        printf "          <color> %d %d %d </color>\n",rgb_jvx[colornum][1],
+          rgb_jvx[colornum][2],rgb_jvx[colornum][3];
       colornum += 1;
     };
   };
@@ -197,8 +244,8 @@ jvx := {
   {
     printf "      <colors>\n";
     foreach edge ee where ee.show do
-    { printf "        <c> %d %d %d </c>\n", rgb[ee.color+1][1],
-         rgb[ee.color+1][2],rgb[ee.color+1][3];
+    { printf "        <c> %d %d %d </c>\n", rgb_jvx[ee.color+1][1],
+         rgb_jvx[ee.color+1][2],rgb_jvx[ee.color+1][3];
     };
     printf "      </colors>\n";
   };
@@ -217,4 +264,9 @@ jvx := {
 }
 
   
+// End jvx.cmd
+
+/*  Usage: Set "show" criterion for edges and facets, if you want, and do
+     jvx >>> "filename.jvx"
+*/
 

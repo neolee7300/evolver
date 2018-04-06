@@ -1,5 +1,5 @@
 // quadbbox.cmd
-// Finds bounding box for each facet in quadratic model.
+// Finds bounding box for each facet or edge in quadratic model.
 // Not suitable for torus model.
 
 // Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
@@ -7,91 +7,66 @@
 // Usage: Run eboxes or fboxes.  Results left in the arrays ebox or fbox
 // attributes.
 
-define edge attribute ebox real [6]   // xmin,xmax,ymin,ymax,zmin,zmax     
-define facet attribute fbox real [6]
+// xmin,xmax,ymin,ymax,zmin,zmax     
+define edge attribute ebox real [space_dimension][2]   
+define facet attribute fbox real [space_dimension][2]
 
 eboxes := { 
             local ii,v0,v1,v2,v4,uopt,denom;
-            if ( !quadratic ) then print "eboxes: Must be in quadratic mode.\n"
-            else foreach edge ee do 
-             { ii := 1;
-               while ( ii <= 3 ) do
+            if ( !quadratic ) then 
+            { print "eboxes: Must be in quadratic mode.\n";
+              abort;
+            };
+            foreach edge ee do 
+             { 
+               for ( ii := 1; ii <= space_dimension ; ii++ )
                {
-                if ( ii == 1 ) then 
-                { v0 := ee.vertex[1].x;
-                  v2 := ee.vertex[2].x;
-                  v1 := ee.vertex[3].x;
-                } else if ( ii == 2 ) then
-                { v0 := ee.vertex[1].y;
-                  v2 := ee.vertex[2].y;
-                  v1 := ee.vertex[3].y;
-                } else
-                { v0 := ee.vertex[1].z;
-                  v2 := ee.vertex[2].z;
-                  v1 := ee.vertex[3].z;
-                } ;
+                 v0 := ee.vertex[1].__x[ii];
+                 v2 := ee.vertex[2].__x[ii];
+                 v1 := ee.vertex[3].__x[ii];
                  if ( v0 > v1 ) 
-                   then { set ee ebox[2*ii-1]  v1; set ee ebox[2*ii] v0; }
-                   else { set ee ebox[2*ii-1] v0; set ee ebox[2*ii] v1; };
-                 if ( v2 < ee.ebox[2*ii-1] ) then set ee ebox[2*ii-1] v2; 
-                 if ( v2 > ee.ebox[2*ii] ) then set ee ebox[2*ii] v2; 
+                   then { ee.ebox[ii][1] := v1; ee.ebox[ii][2] := v0; }
+                   else { ee.ebox[ii][1] := v0; ee.ebox[ii][2] := v1; };
+                 if ( v2 < ee.ebox[ii][1] ) then ee.ebox[ii][1] := v2; 
+                 if ( v2 > ee.ebox[ii][2] ) then ee.ebox[ii][2] := v2; 
                  denom := v0 - 2*v1 + v2;
-                 if ( denom == 0.0 ) then { ii := ii+1; continue; };
+                 if ( denom == 0.0 ) then continue; 
                  uopt := (-1.5*v0 + 2*v1 - .5*v2)/denom;
                  if ( uopt <= 0.0 or uopt >= 1.0 )
-                    then { ii := ii+1;continue; };
+                    then continue; 
                  v4 := 0.5*(1-uopt)*(2-uopt)*v0 + uopt*(2-uopt)*v1
                           + 0.5*uopt*(uopt-1)*v2;
-                 if ( v4 < ee.ebox[2*ii-1] ) then set ee ebox[2*ii-1] v4; 
-                 if ( v4 > ee.ebox[2*ii] ) then set ee ebox[2*ii] v4; 
-                 ii := ii + 1;
+                 if ( v4 < ee.ebox[ii][1] ) then ee.ebox[ii][1] := v4; 
+                 if ( v4 > ee.ebox[ii][2] ) then ee.ebox[ii][2] := v4; 
                }
-          }
-      }
+            }
+      } // end eboxes
 
 fboxes := {
-            local ii,v0,v1,v2,v3,v4,v5,uopt,denom;
+            local ii,jj,v0,v1,v2,v3,v4,v5,uopt,denom;
             local a11,a12,b1,a21,a22,b2,vopt,vcrit;
+
             eboxes;
+
             if ( ! quadratic ) then print "fboxes: Must be in quadratic mode.\n"
             else foreach facet ff do
             { 
-              ii := 0;  /* which coordinate */ 
-              while ( ii < 3 ) do
-              { ii := ii + 1;   // so can use continue
+              for ( ii := 1; ii < space_dimension ; ii++ )
+              { 
                 /* first, edge boxes */
-                set ff fbox[2*ii-1]  ff.edge[1].ebox[2*ii-1];
-                set ff fbox[2*ii]  ff.edge[1].ebox[2*ii];
-                if ( ff.edge[2].ebox[2*ii-1] < ff.fbox[2*ii-1] )
-                     then set ff fbox[2*ii-1] ff.edge[2].ebox[2*ii-1];
-                if ( ff.edge[2].ebox[2*ii] > ff.fbox[2*ii] )
-                     then set ff fbox[2*ii] ff.edge[2].ebox[2*ii];
-                if ( ff.edge[3].ebox[2*ii-1] < ff.fbox[2*ii-1] )
-                     then set ff fbox[2*ii-1] ff.edge[3].ebox[2*ii-1];
-                if ( ff.edge[3].ebox[2*ii] > ff.fbox[2*ii] )
-                     then set ff fbox[2*ii] ff.edge[3].ebox[2*ii];
-                if ( ii == 1 ) then
-                { v0 := ff.edge[1].vertex[1].x;
-                  v1 := ff.edge[1].vertex[3].x;
-                  v2 := ff.edge[1].vertex[2].x;
-                  v3 := ff.edge[3].vertex[3].x;
-                  v4 := ff.edge[2].vertex[3].x;
-                  v5 := ff.edge[2].vertex[2].x;
-                } else if ( ii == 2 ) then
-                { v0 := ff.edge[1].vertex[1].y;
-                  v1 := ff.edge[1].vertex[3].y;
-                  v2 := ff.edge[1].vertex[2].y;
-                  v3 := ff.edge[3].vertex[3].y;
-                  v4 := ff.edge[2].vertex[3].y;
-                  v5 := ff.edge[2].vertex[2].y;
-                } else 
-                { v0 := ff.edge[1].vertex[1].z;
-                  v1 := ff.edge[1].vertex[3].z;
-                  v2 := ff.edge[1].vertex[2].z;
-                  v3 := ff.edge[3].vertex[3].z;
-                  v4 := ff.edge[2].vertex[3].z;
-                  v5 := ff.edge[2].vertex[2].z;
+                ff.fbox[ii] := ff.edge[1].ebox[ii];
+                for ( jj := 2 ; jj <= 3; jj++ )
+                { if ( ff.edge[jj].ebox[ii][1] < ff.fbox[ii][1] )
+                     then ff.fbox[ii][1] := ff.edge[jj].ebox[ii][1];
+                  if ( ff.edge[jj].ebox[ii][2] > ff.fbox[ii][2] )
+                     then ff.fbox[ii][2] := ff.edge[jj].ebox[ii][2];
                 };
+                v0 := ff.edge[1].vertex[1].__x[ii];
+                v1 := ff.edge[1].vertex[3].__x[ii];
+                v2 := ff.edge[1].vertex[2].__x[ii];
+                v3 := ff.edge[3].vertex[3].__x[ii];
+                v4 := ff.edge[2].vertex[3].__x[ii];
+                v5 := ff.edge[2].vertex[2].__x[ii];
                 // x_u coeff of u
                 a11 := v0 - 2*v1 + v2;
                 // x_u coeff of v
@@ -119,8 +94,14 @@ fboxes := {
                       + vopt*(2-uopt-vopt)*v3
                       + uopt*vopt*v4
                       + 0.5*vopt*(vopt-1)*v5;
-                if ( vcrit < ff.fbox[2*ii-1] ) then set ff fbox[2*ii-1] vcrit; 
-                if ( vcrit > ff.fbox[2*ii] ) then set ff fbox[2*ii] vcrit; 
+                if ( vcrit < ff.fbox[ii][1] ) then ff.fbox[ii][1] := vcrit; 
+                if ( vcrit > ff.fbox[ii][2] ) then ff.fbox[ii][2] := vcrit; 
                } 
             } 
-        } 
+        }  // end fboxes
+
+
+// End quadbbox.cmd
+
+// Usage: eboxes
+//        fboxes

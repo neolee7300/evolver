@@ -41,10 +41,10 @@ void End_OOGL()
 
 void UpdateOOGL()
 {
-  void (*old_start)ARGS((void));
-  void (*old_end)ARGS((void));  
-  void (*old_gedge)ARGS((struct graphdata *,edge_id));
-  void (*old_gfacet)ARGS((struct graphdata*,facet_id)); 
+  void (*old_start)(void);
+  void (*old_end)(void);  
+  void (*old_gedge)(struct graphdata *,edge_id);
+  void (*old_gfacet)(struct graphdata*,facet_id); 
  
   /* if user has asked us to quit, don't bother redisplaying */
   /* (especially since graphgen resets breakflag!) */

@@ -61,7 +61,7 @@ void sqcurve_energy_init()
     selfsim_coeff = globals(param)->value.real/6; /* area and volume factor */
     if ( h0_flag == 0 ) { h0_flag = H0_IN_GLOBAL; h0_value = 0.0; }
   }
-}
+} // end sqcurve_energy_init()
 
 /***********************************************************************
 *
@@ -105,7 +105,7 @@ void sqcurve_force_init()
     selfsim_coeff = globals(param)->value.real/6; /* area and volume factor */
     if ( h0_flag == 0 ) { h0_flag = H0_IN_GLOBAL; h0_value = 0.0; }
   }
-}
+} // end sqcurve_force_init()
 
 /********************************************************************
 *
@@ -115,9 +115,10 @@ void sqcurve_force_init()
 *
 */
 
-void sqcurve_energy(v_id,side)
-vertex_id *v_id;  /* vertex list for facet */
-REAL (*side)[MAXCOORD];  /* side vectors */
+void sqcurve_energy(
+  vertex_id *v_id,  /* vertex list for facet */
+  REAL (*side)[MAXCOORD]  /* side vectors */
+)
 { 
   REAL t1t1,t1t2,t2t2;
   REAL det;
@@ -164,7 +165,7 @@ REAL (*side)[MAXCOORD];  /* side vectors */
       for ( j = 0 ; j < SDIM ; j++ )
         vc[i]->normal[j] += normal[j];
   }
-}
+} // end sqcurve_energy()
 
 
 /************************************************************************
@@ -175,10 +176,11 @@ REAL (*side)[MAXCOORD];  /* side vectors */
 *
 */
 
-void sqcurve_force(v_id,e_id,side)
-vertex_id *v_id; /* vertex list of facet */
-edge_id *e_id;     /* edge list */
-REAL (*side)[MAXCOORD];  /* side vectors */
+void sqcurve_force(
+  vertex_id *v_id, /* vertex list of facet */
+  edge_id *e_id,     /* edge list */
+  REAL (*side)[MAXCOORD]  /* side vectors */
+)
 { 
   REAL det;
   struct v_curve_t *vc[FACET_VERTS];
@@ -292,7 +294,7 @@ REAL (*side)[MAXCOORD];  /* side vectors */
          for ( j = 0 ; j < SDIM ; j++ )
             vc[i]->normal[j] += normal[j];
     }
- }
+ } // end sqcurve_force()
 
 /*************************************************************************
 *
@@ -354,7 +356,7 @@ void sqcurve_energy_end()
 
   temp_free((char*)v_curve);
   v_curve = NULL;
-}
+} // end sqcurve_energy_end()
 
 /*************************************************************************
 *
@@ -365,8 +367,7 @@ void sqcurve_energy_end()
 *
 */
 
-REAL vertex_sq_mean_curvature(v_id)
-vertex_id v_id;
+REAL vertex_sq_mean_curvature(vertex_id v_id)
 { REAL h,venergy;
   ATTR attr = get_vattr(v_id);
   int ordv = loc_ordinal(v_id);
@@ -393,11 +394,11 @@ vertex_id v_id;
   {
     conmap_t* conmap = get_v_constraint_map(v_id);
     int j,oncount = 0;
-    struct constraint *con[MAXCONPER];
+    struct constraint *con[MAXCONHIT];
     REAL perp[MAXCOORD];
 
     for ( j = 1 ; j <= (int)conmap[0] ; j++ )
-      if ( conmap[j] & CON_HIT_BIT ) 
+      if ( (conmap[j] & CON_HIT_BIT) && (oncount < web.sdim) ) 
          con[oncount++] = get_constraint(conmap[j]);
 
     constr_proj(TANGPROJ,oncount,con,get_coord(v_id),
@@ -423,7 +424,7 @@ vertex_id v_id;
        venergy = h*h;
   }
   else if ( h0_flag )
-  { REAL term,sim;
+  { REAL term,sim; 
     vc->h = h = SDIM_dot(vc->force,vc->normal)/
                           SDIM_dot(vc->normal,vc->normal)*3;
                             /* since vc->normal = 6*volgrad */
@@ -448,7 +449,7 @@ vertex_id v_id;
      venergy = SDIM_dot(vc->force,vc->force)/area/area/4;
 
   return venergy;
-}
+} // end vertex_sq_mean_curvature()
 
 /*************************************************************************
 *
@@ -505,11 +506,11 @@ void sqcurve_force_end()
     if ( attr & CONSTRAINT )
     { conmap_t *conmap = get_v_constraint_map(v_id);
       int oncount = 0;
-      struct constraint *con[MAXCONPER];
+      struct constraint *con[MAXCONHIT];
       REAL perp[MAXCOORD];
 
       for ( j = 1 ; j <= (int)conmap[0] ; j++ )
-      { if (conmap[j] & CON_HIT_BIT)
+      { if ( (conmap[j] & CON_HIT_BIT) && (oncount < web.sdim))
           con[oncount++] = get_constraint(conmap[j]);
       }
 
@@ -898,8 +899,11 @@ void sqcurve_force_end()
 
   temp_free((char*)e_curve);  e_curve = NULL;
   temp_free((char*)v_curve);  v_curve = NULL;
-}
+} // end sqcurve_force_end()
 
+/************************************************************************
+      sqcurve_string method
+************************************************************************/
 REAL curve_power;
 int curve_power_param;
 
@@ -907,6 +911,7 @@ int curve_power_param;
 *
 *  function: sqcurve_energy_string_init()
 *
+*  purpose: Initialization for evaluation of sqcurve_string method.
 */
 
 void sqcurve_energy_string_init()
@@ -918,7 +923,7 @@ void sqcurve_energy_string_init()
     globals(curve_power_param)->flags |=  ORDINARY_PARAM;
   }
   curve_power = globals(curve_power_param)->value.real;
-}
+} // end sqcurve_energy_string_init()
 
 /************************************************************************
 *
@@ -930,8 +935,7 @@ void sqcurve_energy_string_init()
 *
 */
 
-void sqcurve_energy_string(v_id)
-vertex_id v_id;
+void sqcurve_energy_string(vertex_id v_id)
 {
   REAL s1,s2,s1s2;  /* edge lengths */
   REAL side1[MAXCOORD],side2[MAXCOORD];
@@ -961,7 +965,7 @@ vertex_id v_id;
   /* fudge factor to agree with def */
   total_sqcurve += 2*energy;
 
-}
+} // end sqcurve_energy_string()
 
 /************************************************************************
 *
@@ -973,8 +977,7 @@ vertex_id v_id;
 *
 */
 
-void sqcurve_force_string(v_id)
-vertex_id v_id;
+void sqcurve_force_string(vertex_id v_id)
 {
   REAL s1,s2,s1s2;  /* edge lengths */
   REAL side1[MAXCOORD],side2[MAXCOORD];
@@ -1021,7 +1024,7 @@ vertex_id v_id;
      { hforce[i] += c2*side1[i] + c1*side2[i];
         vforce[i] -= c2*side1[i] + c1*side2[i];
      }
-}
+} // end sqcurve_force_string()
 
 /*************************************************************
 *
@@ -1044,6 +1047,8 @@ void sqcurve_force_string_end()
  *     Flat willmore energy for the graph of a function is the area integral 
  *     of the square of the trace of the Hessian of the function.
  *
+ *     Also has the value-only method stokes2d_laplacian.
+ *
  *  Boundary treatment: for use without boundary plateaus.  Multiplies
  *     Laplacian by two at fixed boundary points to simulate mirrored
  *     stream function.
@@ -1053,16 +1058,23 @@ void sqcurve_force_string_end()
 #define STOKES_SLIPWALL 1
 #define STOKES_NONSLIPWALL 2
 #define STOKES_VELOCITY_NAME "stokes_velocity"
-REAL stokes2d_all ARGS(( struct qinfo *, int));
+REAL stokes2d_all ( struct qinfo *, int);
 int stokes_type_attr;
 int stokes_velocity_attr;
 
 /* special mode value for Laplacian only */
 #define STOKES_LAPLACIAN   0x4757737
 
-void stokes2d_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+/**************************************************************************
+*
+* function: stokes2d_init()
+*
+* purpose: Initialization for evaluation of stokes2d method.
+*/
+void stokes2d_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 {
  /* find parameters */ 
  stokes_type_attr = find_attribute(VERTEX,STOKES_TYPE_NAME);
@@ -1074,14 +1086,21 @@ struct method_instance *mi;
  else /* create */
  { int two = SDIM;
    stokes_velocity_attr = add_attribute(VERTEX,STOKES_VELOCITY_NAME,
-       REAL_TYPE,1,&two,0,NULL);
+       REAL_TYPE,1,&two,0,NULL,MPI_NO_PROPAGATE);
  }
 
-}
+} // stokes2d_init()
 
-REAL stokes2d_all(v_info,mode)
-struct qinfo *v_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+/**************************************************************************
+*
+* function: stokes2d_all()
+*
+* purpose: Single-element evaluation of stokes2d method value,grad,hess.
+*/
+REAL stokes2d_all(
+  struct qinfo *v_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 { int n,nn,maxn;
   REAL h,H,x1,y1,x2,y2,u1,u2,det,sumarea,value;
   REAL wedge; /* angle around vertex, to detect boundary or corner point for kludge */
@@ -1152,7 +1171,6 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
           1./4./fabs(det)*(2*(-y1)*(-y2+y1)+2*(x1)*(-x1+x2));
       }
 	}
-
 	
     /* note that hessian of h is identically 0 */
 
@@ -1202,8 +1220,14 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
   /* nothing more to do for hessian, so ... */
   return value;
  
-}
+} // end stokes2d_all()
 
+/**************************************************************************
+*
+* function: stokes2d_value(), stokes2d_grad(),stokes2d_hess()
+*
+* purpose: wrappers for stokes2d method and stokes2d_laplacian.
+*/
 REAL stokes2d_value(v_info)
 struct qinfo *v_info;
 { return stokes2d_all(v_info,METHOD_VALUE);

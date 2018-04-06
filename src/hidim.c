@@ -22,8 +22,7 @@
 *  accumulates them at each control point.
 */
 
-void facet_force_l_hi_d(f_id)
-facet_id f_id;
+void facet_force_l_hi_d(facet_id f_id)
 {
   REAL side[FACET_EDGES][MAXCOORD];
   int i,j,k;
@@ -83,18 +82,6 @@ facet_id f_id;
             && !kusner_flag && !conf_edge_curv_flag ) 
      sqcurve_force(v_id,e_id,side);
 
-  /* accumulate star area around each vertex and edge */
-     {
-        fe_id = get_facet_fe(f_id);
-        for ( i = 0 ; i < FACET_EDGES ; i++, fe_id = get_next_edge(fe_id) )
-         {
-            edge_id ee_id = get_fe_edge(fe_id);
-            vertex_id vv_id = get_edge_headv(ee_id);
-            add_vertex_star(vv_id,area);
-            add_edge_star(ee_id,area);
-          }
-     }
-
   /* force on each vertex */
 
   for ( k = 0 ; k < SDIM ; k++ )
@@ -105,7 +92,7 @@ facet_id f_id;
         force[1][k] -= temp1 - temp2;
         force[2][k] -= temp2;
      }
-}
+} // end facet_force_l_hi_d()
 
 
 /*********************************************************************
@@ -116,8 +103,7 @@ facet_id f_id;
 *                For arbitrary ambient dimension.
 */
 
-void facet_energy_l_hi_d(f_id)
-facet_id f_id;
+void facet_energy_l_hi_d(facet_id f_id)
 {
   REAL side[FACET_EDGES][MAXCOORD];
   int i,j;
@@ -157,17 +143,6 @@ facet_id f_id;
             && !kusner_flag && !conf_edge_curv_flag )
      sqcurve_energy(v_id,side);
 
-      
-  /* accumulate 1/3 area around each vertex to scale motion */
-  if ( web.area_norm_flag )
-     {
-        fe_id = get_facet_fe(f_id);
-        for ( i = 0 ; i < FACET_EDGES ; i++, fe_id = get_next_edge(fe_id) )
-         {
-            vertex_id vv_id = get_fe_headv(fe_id);
-            add_vertex_star(vv_id,energy);
-          }
-     }
     
-}
+} // end facet_energy_l_hi_d()
  

@@ -6,7 +6,7 @@
 
 // Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
 
-// Usage: oderdmp
+// Usage: orderdmp
 
 define vertex attribute number integer
 
@@ -42,3 +42,6 @@ orderdmp := {
    };
    list bottominfo;
  }
+
+
+

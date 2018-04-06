@@ -50,8 +50,8 @@ struct sym_registry {
 
 /****************************************************************/
 /* Prototypes:  For this registry to work, your functions must  */
-/* be declared before the registry. So add your declarations     */
-/* to the list below.                             */
+/* be declared before the registry. So add your declarations    */
+/* to the list below.                                           */
 /****************************************************************/
 
 #include "include.h"
@@ -60,32 +60,32 @@ struct sym_registry {
 
 /* Torus, from torus.c */
 extern SYM_WRAP torus_wrap;
-extern WRAPTYPE torus_compose ARGS((WRAPTYPE,WRAPTYPE));
-extern WRAPTYPE  torus_inverse ARGS((WRAPTYPE));
+extern WRAPTYPE torus_compose(WRAPTYPE,WRAPTYPE);
+extern WRAPTYPE torus_inverse(WRAPTYPE);
 extern SYM_FORM torus_form_pullback;
 
 /* XYZ Rotation, from quotient.c */
 extern SYM_WRAP xyz_wrap;
-extern WRAPTYPE xyz_compose ARGS((WRAPTYPE,WRAPTYPE));
-extern WRAPTYPE xyz_inverse ARGS((WRAPTYPE));
+extern WRAPTYPE xyz_compose(WRAPTYPE,WRAPTYPE);
+extern WRAPTYPE xyz_inverse(WRAPTYPE);
 extern SYM_FORM xyz_form_pullback;
 
 /* Rotation, from quotient.c */
 extern SYM_WRAP rot_wrap;
-extern WRAPTYPE rot_compose ARGS((WRAPTYPE,WRAPTYPE));
-extern WRAPTYPE rot_inverse ARGS((WRAPTYPE));
+extern WRAPTYPE rot_compose(WRAPTYPE,WRAPTYPE);
+extern WRAPTYPE rot_inverse(WRAPTYPE);
 extern SYM_FORM rot_form_pullback;
 
 /* Cube point group, from quotient.c */
 extern SYM_WRAP pgcube_wrap;
-extern WRAPTYPE pgcube_compose ARGS((WRAPTYPE,WRAPTYPE));
-extern WRAPTYPE pgcube_inverse ARGS((WRAPTYPE));
+extern WRAPTYPE pgcube_compose(WRAPTYPE,WRAPTYPE);
+extern WRAPTYPE pgcube_inverse(WRAPTYPE);
 extern SYM_FORM pgcube_form_pullback;
 
 /* Full cube lattice group, from quotient.c */
 extern SYM_WRAP cubel_wrap;
-extern WRAPTYPE cubel_compose ARGS((WRAPTYPE,WRAPTYPE));
-extern WRAPTYPE cubel_inverse ARGS((WRAPTYPE));
+extern WRAPTYPE cubel_compose(WRAPTYPE,WRAPTYPE);
+extern WRAPTYPE cubel_inverse(WRAPTYPE);
 extern SYM_FORM cubel_form_pullback;
 
 /* Flip-Rotation, from quotient.c */
@@ -94,32 +94,32 @@ extern SYM_FORM frot_form_pullback;
 
 /* Central symmetry group, from quotient.c */
 extern SYM_WRAP central_wrap;
-extern WRAPTYPE central_compose ARGS((WRAPTYPE,WRAPTYPE));
-extern WRAPTYPE central_inverse ARGS((WRAPTYPE));
+extern WRAPTYPE central_compose(WRAPTYPE,WRAPTYPE);
+extern WRAPTYPE central_inverse(WRAPTYPE);
 extern SYM_FORM central_form_pullback;
 
 /* Genus 2 hyperbolic space, Klein model, from khyp.c */
 extern SYM_WRAP khyp_wrap;
-extern WRAPTYPE khyp_compose ARGS((WRAPTYPE,WRAPTYPE));
-extern WRAPTYPE  khyp_inverse ARGS((WRAPTYPE));
+extern WRAPTYPE khyp_compose(WRAPTYPE,WRAPTYPE);
+extern WRAPTYPE  khyp_inverse(WRAPTYPE);
 extern SYM_FORM khyp_form_pullback;
 
 /* hyperbolic space, Klein model, from dodecGroup.c (Ken Bromberg) */
 extern SYM_WRAP dodec_wrap;
-extern WRAPTYPE dodec_compose ARGS((WRAPTYPE,WRAPTYPE));
-extern WRAPTYPE  dodec_inverse ARGS((WRAPTYPE));
+extern WRAPTYPE dodec_compose(WRAPTYPE,WRAPTYPE);
+extern WRAPTYPE  dodec_inverse(WRAPTYPE);
 extern SYM_FORM dodec_form_pullback;
 
 /* screw rotation, from quotient.c  */
 extern SYM_WRAP screw_wrap;
-extern WRAPTYPE screw_compose ARGS((WRAPTYPE,WRAPTYPE));
-extern WRAPTYPE  screw_inverse ARGS((WRAPTYPE));
+extern WRAPTYPE screw_compose(WRAPTYPE,WRAPTYPE);
+extern WRAPTYPE  screw_inverse(WRAPTYPE);
 extern SYM_FORM screw_form_pullback;
 
 /* quarter_turn torus, from quotient.c  */
 extern SYM_WRAP quarter_turn_wrap;
-extern WRAPTYPE quarter_turn_compose ARGS((WRAPTYPE,WRAPTYPE));
-extern WRAPTYPE quarter_turn_inverse ARGS((WRAPTYPE));
+extern WRAPTYPE quarter_turn_compose(WRAPTYPE,WRAPTYPE);
+extern WRAPTYPE quarter_turn_inverse(WRAPTYPE);
 extern SYM_FORM quarter_turn_form_pullback;
 
 /* symmetry function registry array */

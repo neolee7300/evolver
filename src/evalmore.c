@@ -14,6 +14,10 @@
 #include "include.h" 
 #include "lex.h"
 #include "ytab.h"
+#ifdef MSC
+#include "psapi.h"
+#endif
+
 #ifdef MAC_APP
 #define S_IFIFO 0x100
 #elif !defined(MAC_CW)
@@ -30,14 +34,11 @@
 #endif
 #endif
 /*
-int wait ARGS((int*));
-int fork ARGS((void));
+int wait (int*);
+int fork (void);
 int execlp();
 int stat();
 */
-void flip_toggle ARGS((int*,int,char*));
-void set_body ARGS((element_id,body_id));
-
 
 
 /************************************************************************
@@ -49,14 +50,14 @@ void set_body ARGS((element_id,body_id));
 * Return: stacktop pointer
 */
 
-void other_stuff(node,recalc_flag,update_display_flag,q_id,localstack,
-                        localbase)
-struct treenode * node;
-int *recalc_flag;
-int *update_display_flag;
-element_id q_id;
-REAL *localstack; /* stack base */
-struct locallist_t *localbase;
+void other_stuff(
+  struct treenode * node,
+  int *recalc_flag,
+  int *update_display_flag,
+  element_id q_id,
+  REAL *localstack, /* stack base */
+  struct locallist_t *localbase
+)
 { int i,j,n,k;
   char *s,*h;
   REAL scale;
@@ -73,19 +74,43 @@ struct locallist_t *localbase;
 
   switch ( node->type ) 
   {
-    case SIMPLEX_TO_FE_:
+    case CONSTRAINT_FIXED_NODE:
+      { int connum = (int)(*stacktop--);
+        struct constraint *con = get_constraint(connum);
+        (*++stacktop) = !(con->attr & (NONPOSITIVE|NONNEGATIVE));
+        break;
+      }
+    case CONSTRAINT_NONPOSITIVE_NODE:
+      { int connum = (int)(*stacktop--);
+        struct constraint *con = get_constraint(connum);
+        (*++stacktop) = !!(con->attr & NONPOSITIVE);
+        break;
+      }
+    case CONSTRAINT_NONNEGATIVE_NODE:
+      { int connum = (int)(*stacktop--);
+        struct constraint *con = get_constraint(connum);
+        (*++stacktop) = !!(con->attr & NONNEGATIVE);
+        break;
+      }
+    case CONSTRAINT_NORMAL_NODE:
+      { int connum = (int)(*stacktop--);
+        struct constraint *con = get_constraint(connum);
+        (*++stacktop) = !!(con->attr & NONPOSITIVE);
+        break;
+      }
+    case SIMPLEX_TO_FE_NODE:
        simplex_to_fe(); break; 
        
-    case REORDER_STORAGE_:
+    case REORDER_STORAGE_NODE:
        reorder_storage(); break;
 
-    case RENUMBER_ALL_:
+    case RENUMBER_ALL_NODE:
        renumber_all(); break;
 
-    case DUMP_MEMLIST_:
+    case DUMP_MEMLIST_NODE:
        mem_list_dump(); break;
 
-    case VIEW_MATRIX_:
+    case VIEW_MATRIX_NODE:
        i = (int)(*(stacktop--));
        k = (int)(*(stacktop--));
        if ( (k < 1) || (k > SDIM+1) || (i < 1) || (i > SDIM+1) )
@@ -98,34 +123,34 @@ struct locallist_t *localbase;
        *(++stacktop) = view[k-1][i-1];
        break;
 
-    case RESET_COUNTS_:
+    case RESET_COUNTS_NODE:
        reset_counts();
        break;
 
-    case FLUSH_COUNTS_:
+    case FLUSH_COUNTS_NODE:
        flush_counts();
        break;
 
-    case PRINT_PROFILING_:
+    case PRINT_PROFILING_NODE:
        print_profiling();
        break;
 
-    case RESET_PROFILING_:
+    case RESET_PROFILING_NODE:
        reset_profiling();
        break;
 
-    case PAUSE_:
+    case PAUSE_NODE:
        outstring("Paused; hit RETURN to continue, b to break: ");
        my_fgets(msg,msgmax,stdin);
        if ( msg[0] == 'b' ) 
           breakflag = BREAKFULL;
        break;
 
-    case HELP_KEYWORD:
+    case HELP_KEYWORD_NODE:
        keyword_help(node->op1.string);
        break;
   
-    case CREATE_VERTEX_:
+    case CREATE_VERTEX_NODE:
      { vertex_id v_id;
        REAL x[MAXCOORD];
        for ( i = SDIM-1 ; i >= 0 ; i-- ) x[i] = *(stacktop--);
@@ -137,7 +162,19 @@ struct locallist_t *localbase;
        break;
      }
 
-    case CREATE_EDGE_:
+    case FACET_CROSSCUT_NODE:
+      {
+        int v2 = (int)(*stacktop--);
+        int v1 = (int)(*stacktop--);
+        int f1 = (int)(*stacktop--);
+        edge_id new_edge_id = facet_crosscut(get_ordinal_id(FACET,f1-1),
+                    get_ordinal_id(VERTEX,v1-1), get_ordinal_id(VERTEX,v2-1));
+        *(++stacktop) = (REAL)(ordinal(new_edge_id)+1);
+        *recalc_flag = 1;
+        break;
+      }
+
+    case CREATE_EDGE_NODE:
       { vertex_id v_id2; 
         vertex_id v_id1; 
         int v2 = (int)(*stacktop--);
@@ -165,7 +202,7 @@ struct locallist_t *localbase;
       }
       break;
 
-    case CREATE_FACET_:
+    case CREATE_FACET_NODE:
     { facetedge_id old_fe = NULLID;
        edge_id e_id;
        vertex_id tv,hv;
@@ -279,7 +316,7 @@ struct locallist_t *localbase;
     *recalc_flag = 1;
     break;
 
-    case CREATE_BODY_:
+    case CREATE_BODY_NODE:
        { body_id b_id = new_body();
           new_body_id = ordinal(b_id) + 1;
           set_original(b_id,new_body_id);
@@ -289,7 +326,7 @@ struct locallist_t *localbase;
        break;
 
 
-    case MERGE_VERTEX_:
+    case MERGE_VERTEX_NODE:
       { vertex_id v_id2; 
         vertex_id v_id1; 
         int v2 = (int)(*stacktop--);
@@ -313,7 +350,7 @@ struct locallist_t *localbase;
       }
       break;
 
-    case MERGE_EDGE_:
+    case MERGE_EDGE_NODE:
       { edge_id e_id2; 
         edge_id e_id1; 
         int e2 = (int)(*stacktop--);
@@ -339,7 +376,7 @@ struct locallist_t *localbase;
       }
       break;
 
-    case MERGE_FACET_:
+    case MERGE_FACET_NODE:
       { facet_id f_id2; 
         facet_id f_id1; 
         int f2 = (int)(*stacktop--);
@@ -365,7 +402,7 @@ struct locallist_t *localbase;
       }
       break;
 
-    case GET_TORUS_PERIODS_:
+    case GET_TORUS_PERIODS_NODE:
          j = (int)(*stacktop--);
          i = (int)(*stacktop--);
          if ( (j<1) || (j > SDIM))
@@ -385,7 +422,7 @@ struct locallist_t *localbase;
          *++stacktop = web.torus_period[i-1][j-1]; /* 1-based indexing */
          break;
 
-    case GET_INVERSE_PERIODS_:
+    case GET_INVERSE_PERIODS_NODE:
          j = (int)(*stacktop--);
          i = (int)(*stacktop--);
          if ( (j<1) || (j > SDIM) )
@@ -405,7 +442,7 @@ struct locallist_t *localbase;
          *++stacktop = web.inverse_periods[i-1][j-1]; /* 1-based indexing */
          break;
 
-    case SET_GAP_CONSTANT_:
+    case SET_GAP_CONSTANT_NODE:
        web.spring_constant = *(stacktop--); 
        if ( everything_quantities_flag )
                GEN_QUANT(gap_quantity_num)->modulus = web.spring_constant;
@@ -414,11 +451,11 @@ struct locallist_t *localbase;
        *recalc_flag = 1;
        break;
 
-    case GET_INTERNAL_:
+    case GET_INTERNAL_NODE:
        *++stacktop = get_internal_variable(node->op1.name_id);
           break;
   
-    case SET_INTERNAL_:
+    case SET_INTERNAL_NODE:
     { REAL oldvalue=0.0;
       REAL val; 
       /* get old value */
@@ -427,13 +464,15 @@ struct locallist_t *localbase;
 #ifdef MPI_EVOLVER
         case V_CORONA_STATE : oldvalue = mpi_corona_state; break;
 #endif
-        case V_PS_LABELSIZE_ :  oldvalue = ps_labelsize; break;
-        case V_PS_STRINGWIDTH_: oldvalue = ps_stringwidth; break;
-        case V_PS_FIXEDEDGEWIDTH_: oldvalue = ps_fixededgewidth; break;
-        case V_PS_TRIPLEEDGEWIDTH_: oldvalue = ps_tripleedgewidth; break;
-        case V_PS_CONEDGEWIDTH_: oldvalue = ps_conedgewidth; break;
-        case V_PS_BAREEDGEWIDTH_: oldvalue = ps_bareedgewidth; break;
-        case V_PS_GRIDEDGEWIDTH_: oldvalue = ps_gridedgewidth; break;
+        case V_BOUNDING_BOX_COLOR: oldvalue = bounding_box_color; break;
+        case V_DETORUS_EPSILON: oldvalue = dt_eps; break;
+        case V_PS_LABELSIZE:  oldvalue = ps_labelsize; break;
+        case V_PS_STRINGWIDTH: oldvalue = ps_stringwidth; break;
+        case V_PS_FIXEDEDGEWIDTH: oldvalue = ps_fixededgewidth; break;
+        case V_PS_TRIPLEEDGEWIDTH: oldvalue = ps_tripleedgewidth; break;
+        case V_PS_CONEDGEWIDTH: oldvalue = ps_conedgewidth; break;
+        case V_PS_BAREEDGEWIDTH: oldvalue = ps_bareedgewidth; break;
+        case V_PS_GRIDEDGEWIDTH: oldvalue = ps_gridedgewidth; break;
         case V_TOLERANCE: oldvalue = web.tolerance; break;
         case V_LAST_ERROR: oldvalue = last_error; break;
         case V_BRIGHTNESS: oldvalue = brightness; break;
@@ -441,7 +480,7 @@ struct locallist_t *localbase;
         case V_TARGET_TOLERANCE: oldvalue = web.target_tolerance;
               break;
         case V_HESS_EPSILON: oldvalue = hessian_epsilon; break;
-        case GRAV_CONST_: oldvalue = web.grav_const; break;
+        case GRAV_CONST_NODE: oldvalue = web.grav_const; break;
         case V_THICKNESS: oldvalue = thickness; break;
         case V_HESSIAN_SLANT_CUTOFF: oldvalue = hessian_slant_cutoff; break;
         case V_AMBIENT_PRESSURE: oldvalue = web.pressure; break;
@@ -451,10 +490,10 @@ struct locallist_t *localbase;
         case V_SCALE: oldvalue = web.scale; break;
         case V_SCALE_LIMIT: oldvalue = web.maxscale; break;
         case V_TIME: oldvalue = total_time; break;
-        case V_CHECK_COUNT_: oldvalue = check_count; break;
-        case V_VISIBILITY_DEBUG_: oldvalue = visdebuglevel; break;
-        case V_SCROLLBUFFERSIZE_: oldvalue = scrollbuffersize; break;
-        case V_BREAKFLAG_: oldvalue = breakflag; break;
+        case V_CHECK_COUNT_NODE: oldvalue = check_count; break;
+        case V_VISIBILITY_DEBUG_NODE: oldvalue = visdebuglevel; break;
+        case V_SCROLLBUFFERSIZE_NODE: oldvalue = scrollbuffersize; break;
+        case V_BREAKFLAG_NODE: oldvalue = breakflag; break;
         case V_STRING_CURVE_TOLERANCE: oldvalue = string_curve_tolerance;
              break;
         case V_MINDEG_DEBUG_LEVEL: oldvalue = mindeg_debug_level; break;
@@ -481,6 +520,7 @@ struct locallist_t *localbase;
         case V_INTEGRAL_ORDER_1D: oldvalue = web.gauss1D_order; break;
         case V_INTEGRAL_ORDER_2D: oldvalue = web.gauss2D_order; break;
         case V_AUTOCHOP_LENGTH: oldvalue = autochop_length; break;
+        case GRAV_CONST_TOK: oldvalue = web.grav_const; break;
         default: 
              sprintf(errmsg,"Internal: illegal variable number %d.\n",
                  node->op1.name_id);
@@ -490,156 +530,189 @@ struct locallist_t *localbase;
       }
       val = *(stacktop--);
       switch ( node->op2.assigntype )
-      { case ASSIGN_:    break;
-        case PLUSASSIGN_: val +=  oldvalue; break;
-        case SUBASSIGN_: val = oldvalue - val; break;
-        case MULTASSIGN_: val = oldvalue * val; break;
-        case DIVASSIGN_: val = oldvalue / val; break;
+      {    case ASSIGN_OP:    break;
+           case PLUSASSIGN_OP: val +=  oldvalue; break;
+           case SUBASSIGN_OP: val = oldvalue - val; break;
+           case MULTASSIGN_OP: val = oldvalue * val; break;
+           case DIVASSIGN_OP: val = oldvalue / val; break;
       }
       switch(node->op1.name_id)
-      { case V_TOLERANCE: web.tolerance = val; break;
-        case V_PS_LABELSIZE_: ps_labelsize = val; break;
-        case V_PS_STRINGWIDTH_: ps_stringwidth = val; break;
-        case V_PS_FIXEDEDGEWIDTH_: ps_fixededgewidth = val; break;
-        case V_PS_TRIPLEEDGEWIDTH_: ps_tripleedgewidth = val; break;
-        case V_PS_CONEDGEWIDTH_: ps_conedgewidth = val; break;
-        case V_PS_BAREEDGEWIDTH_: ps_bareedgewidth = val; break;
-        case V_PS_GRIDEDGEWIDTH_: ps_gridedgewidth = val; break;
+      {    case GRAV_CONST_TOK: web.grav_const = val;
+                if ( web.grav_const != 0.0 )
+                  web.gravflag = 1;
+                else
+                  web.gravflag = 0;
+                if (gravity_quantity_num >= 0 )
+                   GEN_QUANT(gravity_quantity_num)->modulus =
+                              web.gravflag ? web.grav_const : 0.0;
+                *recalc_flag = 1;
+                 break;
+           case V_TOLERANCE: web.tolerance = val; break;
+           case V_PS_LABELSIZE: ps_labelsize = val; break;
+           case V_PS_STRINGWIDTH: ps_stringwidth = val; break;
+           case V_PS_FIXEDEDGEWIDTH: ps_fixededgewidth = val; break;
+           case V_PS_TRIPLEEDGEWIDTH: ps_tripleedgewidth = val; break;
+           case V_PS_CONEDGEWIDTH: ps_conedgewidth = val; break;
+           case V_PS_BAREEDGEWIDTH: ps_bareedgewidth = val; break;
+           case V_PS_GRIDEDGEWIDTH: ps_gridedgewidth = val; break;
 #ifdef MPI_EVOLVER
-        case V_CORONA_STATE: mpi_set_corona((int)val); break;
+           case V_CORONA_STATE: mpi_set_corona((int)val); break;
 #else
-        case V_CORONA_STATE: ; break;
+           case V_CORONA_STATE: ; break;
          
 #endif
-        case V_BRIGHTNESS: 
-           if ( (val < 0.0) || (val > 1.0) )
-           { sprintf(errmsg,"Brightness is %f; must be between 0 and 1.\n",val);
-             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+           case V_BRIGHTNESS: 
+             if ( (val < 0.0) || (val > 1.0) )
+             { sprintf(errmsg,"Brightness is %f; must be between 0 and 1.\n",
+                    (DOUBLE)val);
+               sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                  file_names[node->file_no],node->line_no);
-             kb_error(2020,errmsg, RECOVERABLE);
-           }
-            else { brightness = val; update_display(); }
-               break;
-        case V_BACKGROUND:
-           background_color = (int)val; 
-           update_display();
-           break;
+               kb_error(2020,errmsg, RECOVERABLE);
+             }
+             else { brightness = val; update_display(); }
+                 break;
+           case V_BACKGROUND:
+             background_color = (int)val; 
+             update_display();
+             break;
 
-        case V_TARGET_TOLERANCE: web.target_tolerance = val;
+           case V_TARGET_TOLERANCE: web.target_tolerance = val;
               break;
-        case V_HESS_EPSILON: hessian_epsilon = val;
-           if ( hessian_epsilon < 0.0 )
-           { sprintf(errmsg,"hessian_epsilon is negative!\n");
-             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-             kb_error(2558,errmsg, WARNING);
-           }
-           break;
+           case V_HESS_EPSILON: hessian_epsilon = val;
+             if ( hessian_epsilon < 0.0 )
+             { sprintf(errmsg,"hessian_epsilon is negative!\n");
+               sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                   file_names[node->file_no],node->line_no);
+               kb_error(2558,errmsg, WARNING);
+             }
+             break;
 
-        case GRAV_CONST_: web.grav_const = val; 
-         if ( web.grav_const != 0.0 )
-           web.gravflag = 1;
-         else
-           web.gravflag = 0;
-         if (gravity_quantity_num >= 0 )
-           GEN_QUANT(gravity_quantity_num)->modulus =
+           case GRAV_CONST_NODE: web.grav_const = val; 
+             if ( web.grav_const != 0.0 )
+               web.gravflag = 1;
+             else
+               web.gravflag = 0;
+             if (gravity_quantity_num >= 0 )
+               GEN_QUANT(gravity_quantity_num)->modulus =
                               web.gravflag ? web.grav_const : 0.0;
-         break;
+             break;
 
-        case V_DIFFUSION: web.diffusion_const = val; break;
-        case V_AMBIENT_PRESSURE: web.pressure = val; break;
-        case V_HESSIAN_SLANT_CUTOFF: hessian_slant_cutoff = val; break;
-        case V_THICKNESS: thickness = val; user_thickness_flag = 1;
+           case V_DIFFUSION: web.diffusion_const = val; break;
+           case V_AMBIENT_PRESSURE: web.pressure = val; break;
+           case V_HESSIAN_SLANT_CUTOFF: hessian_slant_cutoff = val; break;
+           case V_THICKNESS: thickness = val; user_thickness_flag = 1;
                   update_display();break;
-        case V_SCALE_SCALE: web.scale_scale = val; break;           
-        case V_SCALE: web.scale = val; break;
-        case V_SCALE_LIMIT: web.maxscale = val; break;
-        case V_LAST_ERROR: last_error = (int)val; break;
-        case V_TIME: total_time = val; break;
-        case V_CHECK_COUNT_: check_count = (int)val; break;
-        case V_VISIBILITY_DEBUG_: visdebuglevel = (int)val; break;
-        case V_SCROLLBUFFERSIZE_: scrollbuffersize = (int)val;
+           case V_SCALE_SCALE: web.scale_scale = val; break;           
+           case V_SCALE: web.scale = val; break;
+           case V_SCALE_LIMIT: web.maxscale = val; break;
+           case V_LAST_ERROR: last_error = (int)val; break;
+           case V_TIME: total_time = val; break;
+           case V_CHECK_COUNT_NODE: check_count = (int)val; break;
+           case V_VISIBILITY_DEBUG_NODE: visdebuglevel = (int)val; break;
+           case V_SCROLLBUFFERSIZE_NODE: scrollbuffersize = (int)val;
                 set_scroll_size(scrollbuffersize); break;
-        case V_BREAKFLAG_: breakflag = (int)val; break;
-        case V_STRING_CURVE_TOLERANCE: string_curve_tolerance = val; 
+           case V_BREAKFLAG_NODE: breakflag = (int)val; break;
+           case V_STRING_CURVE_TOLERANCE: string_curve_tolerance = val; 
                 update_display();break;
-        case V_MINDEG_DEBUG_LEVEL: mindeg_debug_level = (int)val; break;
-        case V_MINDEG_MARGIN: mindeg_margin = (int)val; break;
-        case V_MINDEG_MIN_REGION_SIZE: mindeg_min_region_size = (int)val; break;
-        case V_WINDOW_ASPECT_RATIO: window_aspect_ratio = (REAL)val;
+           case V_MINDEG_DEBUG_LEVEL: mindeg_debug_level = (int)val; break;
+           case V_MINDEG_MARGIN: mindeg_margin = (int)val; break;
+           case V_MINDEG_MIN_REGION_SIZE: mindeg_min_region_size = (int)val; break;
+           case V_WINDOW_ASPECT_RATIO: 
+             window_aspect_ratio = (REAL)val;
+             if ( window_aspect_ratio <= 1.0 ) 
+             { minclipx = -1.5/window_aspect_ratio; 
+               maxclipx = 1.5/window_aspect_ratio;
+               minclipy = -1.5; 
+               maxclipy = 1.5;
+             }
+             else
+             { minclipx = -1.5; 
+               maxclipx = 1.5;
+               minclipy = -1.5*window_aspect_ratio; 
+               maxclipy = 1.5*window_aspect_ratio;
+             }
              update_display(); break;
-        case V_PICKVNUM: pickvnum = (int)val; break;
-        case V_PICKENUM: pickenum = (int)val; break;
-        case V_PICKFNUM: pickfnum = (int)val; break;
-        case V_JIG_TEMP: web.temperature = val; break;
-        case V_LINEAR_METRIC_MIX: linear_metric_mix=val; break;
-        case V_GAP_CONSTANT: web.spring_constant = val; break;
-        case V_AUTOCHOP_LENGTH: autochop_length = val; break;
-        case V_QUADRATIC_METRIC_MIX: 
-              quadratic_metric_mix=val; break;
-        case V_RANDOM_SEED: random_seed = (int)val;
-              srand(random_seed); srand48(random_seed); 
-              kb_initr(random_seed); break;
-        case V_RANDOM: sprintf(errmsg,
-                 "Cannot set random. Set random_seed instead.\n"); 
-              sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-              kb_error(2021,errmsg,WARNING);
-             stacktop--; break;
-        case V_INTEGRAL_ORDER: 
-              web.gauss1D_order = (int)val;
-              set_by_user_gauss_1D = web.gauss1D_order;
-              web.gauss2D_order = (int)val;
-              set_by_user_gauss_2D = web.gauss2D_order;
-              gauss_setup();
-              if ( web.modeltype == LAGRANGE )
-              { gauss_lagrange_setup(
-                   (web.dimension==1)?1:web.dimension-1,
-                       web.lagrange_order,web.gauss1D_order);
-                gauss_lagrange_setup(web.dimension,
-                   web.lagrange_order,web.gauss2D_order);
-              }
-              *recalc_flag = 1;
-              break;
-        case V_INTEGRAL_ORDER_1D: 
-              web.gauss1D_order = (int)val;
-              set_by_user_gauss_1D = web.gauss1D_order;
-              if ( web.modeltype == LAGRANGE )
-                  gauss_lagrange_setup(
-                   (web.dimension==1)?1:web.dimension-1,
-                       web.lagrange_order,web.gauss1D_order);
-              gauss_setup();
-              *recalc_flag = 1;
-              break;
-        case V_INTEGRAL_ORDER_2D: 
-              web.gauss2D_order = (int)val;
-              set_by_user_gauss_2D = web.gauss2D_order;
-              gauss_setup();
-              if ( web.modeltype == LAGRANGE )
-                gauss_lagrange_setup(web.dimension,
-                   web.lagrange_order,web.gauss2D_order);
-              *recalc_flag = 1;
-              break;
-        default: 
-            sprintf(errmsg,"Internal: illegal internal variable number %d.\n",
-               node->op1.name_id);
-            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-            kb_error(1114,errmsg,RECOVERABLE);
-
+           case V_PICKVNUM: pickvnum = (int)val; break;
+           case V_PICKENUM: pickenum = (int)val; break;
+           case V_PICKFNUM: pickfnum = (int)val; break;
+           case V_JIG_TEMP: web.temperature = val; break;
+           case V_DETORUS_EPSILON: dt_eps = val; break;
+           case V_BOUNDING_BOX_COLOR: 
+                 if ( ((int)val < BLACK) || ((int)val > WHITE) )
+                 { sprintf(errmsg, "Illegal value %d for bounding_box_color.\n",(int)val);
+                   kb_error(3037,errmsg,RECOVERABLE);
+                 }
+                 bounding_box_color = (int)val;
+                 update_display(); 
+                 break;
+           case V_LINEAR_METRIC_MIX: linear_metric_mix=val; break;
+           case V_GAP_CONSTANT: web.spring_constant = val; break;
+           case V_AUTOCHOP_LENGTH: autochop_length = val; break;
+           case V_QUADRATIC_METRIC_MIX: 
+                 quadratic_metric_mix=val; break;
+           case V_RANDOM_SEED: random_seed = (int)val;
+                 srand(random_seed); srand48(random_seed); 
+                 kb_initr(random_seed); break;
+           case V_RANDOM: sprintf(errmsg,
+                    "Cannot set random. Set random_seed instead.\n"); 
+                 sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+                 kb_error(2021,errmsg,WARNING);
+                stacktop--; break;
+           case V_INTEGRAL_ORDER: 
+                 web.gauss1D_order = (int)val;
+                 set_by_user_gauss_1D = web.gauss1D_order;
+                 web.gauss2D_order = (int)val;
+                 set_by_user_gauss_2D = web.gauss2D_order;
+                 gauss_setup();
+                 if ( web.modeltype == LAGRANGE )
+                 { gauss_lagrange_setup(
+                      (web.dimension==1)?1:web.dimension-1,
+                          web.lagrange_order,web.gauss1D_order);
+                   gauss_lagrange_setup(web.dimension,
+                      web.lagrange_order,web.gauss2D_order);
+                 }
+                 *recalc_flag = 1;
+                 break;
+           case V_INTEGRAL_ORDER_1D: 
+                 web.gauss1D_order = (int)val;
+                 set_by_user_gauss_1D = web.gauss1D_order;
+                 if ( web.modeltype == LAGRANGE )
+                     gauss_lagrange_setup(
+                      (web.dimension==1)?1:web.dimension-1,
+                          web.lagrange_order,web.gauss1D_order);
+                 gauss_setup();
+                 *recalc_flag = 1;
+                 break;
+           case V_INTEGRAL_ORDER_2D: 
+                 web.gauss2D_order = (int)val;
+                 set_by_user_gauss_2D = web.gauss2D_order;
+                 gauss_setup();
+                 if ( web.modeltype == LAGRANGE )
+                   gauss_lagrange_setup(web.dimension,
+                      web.lagrange_order,web.gauss2D_order);
+                 *recalc_flag = 1;
+                 break;
+           default: 
+               sprintf(errmsg,"Internal: illegal internal variable number %d.\n",
+                  node->op1.name_id);
+               sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+               kb_error(1114,errmsg,RECOVERABLE);
+   
       }
       break;
     } /* end SET_INTERNAL_ */
 
-    case SIZEOF_ATTR_:
+    case SIZEOF_ATTR_NODE:
       *++stacktop = (REAL)EXTRAS(node->op2.eltype)[node->op1.extranum].array_spec.datacount;
        break;
 
-    case SIZEOF_ARRAY_:
+    case SIZEOF_ARRAY_NODE:
       *++stacktop = (REAL)get_name_arrayptr(node->op1.name_id,localstack,localbase)->datacount;
        break;
 
-    case SIZEOF_STRING_:
+    case SIZEOF_STRING_NODE:
      { char *s = *(char**)stacktop;
        *stacktop = s ? (REAL)strlen(s) : 0;
        if ( node->left && (node[node->left].flags & DEALLOCATE_POINTER) )
@@ -647,7 +720,7 @@ struct locallist_t *localbase;
        break;
      }
 
-    case TORDUP_:
+    case TORDUP_NODE:
        i = (int)*(stacktop--);
        if ( ! web.torus_flag )
        { outstring("Torus model not in effect.\n");
@@ -658,48 +731,48 @@ struct locallist_t *localbase;
        recalc();
        break;
      
-    case SKINNY_:
+    case SKINNY_NODE:
        sprintf(msg,"New edges: %d\n",web.facet_refine_count = skinny(*(stacktop--)));
        outstring(msg);
        recalc();
        break;
 
-    case PUSHQPRESSURE_:
+    case PUSHQPRESSURE_NODE:
      *++stacktop = GEN_QUANT(node->op1.quant_id)->pressure;
           break;
-    case PUSHQTARGET_:
+    case PUSHQTARGET_NODE:
      *++stacktop = GEN_QUANT(node->op1.quant_id)->target;
           break;
-    case PUSHQMODULUS_:
+    case PUSHQMODULUS_NODE:
      *++stacktop = GEN_QUANT(node->op1.quant_id)->modulus;
           break;
-    case PUSHQTOLERANCE_:
+    case PUSHQTOLERANCE_NODE:
      *++stacktop = GEN_QUANT(node->op1.quant_id)->tolerance;
           break;
-    case PUSHMMODULUS_:
+    case PUSHMMODULUS_NODE:
      *++stacktop = METH_INSTANCE(node->op1.meth_id)->modulus;
           break;
-    case PUSHQVALUE_:
+    case PUSHQVALUE_NODE:
       { struct gen_quant *q = GEN_QUANT(node->op1.quant_id);
         if ( q->timestamp<global_timestamp )
                    calc_quants(q->flags&(Q_INFO|Q_ENERGY|Q_FIXED));
         *++stacktop = q->value;
       }
       break;
-    case PUSHQFIXED_:
+    case PUSHQFIXED_NODE:
      *++stacktop = GEN_QUANT(node->op1.quant_id)->flags & Q_FIXED ? 1:0 ;
           break;
-    case PUSHQENERGY_:
+    case PUSHQENERGY_NODE:
      *++stacktop = GEN_QUANT(node->op1.quant_id)->flags & Q_ENERGY ? 1:0 ;
           break;
-    case PUSHQINFO_ONLY_:
+    case PUSHQINFO_ONLY_NODE:
      *++stacktop = GEN_QUANT(node->op1.quant_id)->flags & Q_INFO ? 1:0 ;
           break;
-    case PUSHQCONSERVED_:
+    case PUSHQCONSERVED_NODE:
      *++stacktop = GEN_QUANT(node->op1.quant_id)->flags & Q_CONSERVED ? 1:0 ;
           break;
 
-    case PUSHMVALUE_:
+    case PUSHMVALUE_NODE:
       { struct method_instance *q 
               = METH_INSTANCE(node->op1.meth_id);
         if ((q->timestamp<graph_timestamp) || (q->timestamp<web_timestamp))
@@ -708,16 +781,16 @@ struct locallist_t *localbase;
       }
       break;
 
-    case PUSHQVOLCONST_:
+    case PUSHQVOLCONST_NODE:
       *++stacktop = GEN_QUANT(node->op1.quant_id)->volconst;
       break;
   
-    case PUSH_NAMED_QUANTITY:
-    case PUSH_METHOD_INSTANCE_:
+    case PUSH_NAMED_QUANTITY_NODE:
+    case PUSH_METHOD_INSTANCE_NODE:
        *++stacktop = (REAL)node->op1.quant_id;
        break;
     
-    case FIX_QUANTITY_: case SET_Q_FIXED_:
+    case FIX_QUANTITY_NODE: case SET_Q_FIXED_NODE:
     { struct gen_quant *q = GEN_QUANT(node->op1.quant_id);
       q->flags &= ~(Q_ENERGY|Q_INFO|Q_CONSERVED);
       q->flags |= Q_FIXED;
@@ -727,7 +800,7 @@ struct locallist_t *localbase;
     }
     break;
 
-    case UNFIX_QUANTITY_:
+    case UNFIX_QUANTITY_NODE:
     { struct gen_quant *q = GEN_QUANT(node->op1.quant_id);
       q->flags &= ~(Q_ENERGY|Q_FIXED|Q_CONSERVED);
       q->flags |= Q_INFO;
@@ -737,7 +810,7 @@ struct locallist_t *localbase;
     }
     break;
 
-    case SET_Q_INFO_:
+    case SET_Q_INFO_NODE:
     { struct gen_quant *q = GEN_QUANT(node->op1.quant_id);
       q->flags &= ~(Q_ENERGY|Q_FIXED|Q_CONSERVED);
       q->flags |= Q_INFO;
@@ -747,7 +820,7 @@ struct locallist_t *localbase;
     }
     break;
 
-    case SET_Q_ENERGY_:
+    case SET_Q_ENERGY_NODE:
     { struct gen_quant *q = GEN_QUANT(node->op1.quant_id);
       if ( everything_quantities_flag )
         if ( valid_id(q->b_id) )
@@ -761,7 +834,7 @@ struct locallist_t *localbase;
     }
     break;
 
-    case SET_Q_CONSERVED_:
+    case SET_Q_CONSERVED_NODE:
     { struct gen_quant *q = GEN_QUANT(node->op1.quant_id);
       if ( everything_quantities_flag )
         if ( valid_id(q->b_id) )
@@ -776,32 +849,32 @@ struct locallist_t *localbase;
     break;
 
 
-   case UNFIX_PARAMETER_:
-   { struct global *p = globals(node->op1.name_id);
-     int old = p->flags & OPTIMIZING_PARAMETER;
-     if ( !old )
-     { if ( p->type != REAL_TYPE )
-       { sprintf(errmsg,"Cannot unfix \"%s\" since it is not type REAL.\n",
-           p->name);
-         kb_error(4124,errmsg,RECOVERABLE);
-       }
-       if ( optparamcount >= MAXOPTPARAM-1 )
-       { sprintf(errmsg,"Too many optimizing parameters.  Increase MAXOPTPARAM in extern.h and recompile.\n");
-         sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+    case UNFIX_PARAMETER_NODE: 
+    { struct global *p = globals(node->op1.name_id);
+      int old = p->flags & OPTIMIZING_PARAMETER;
+      if ( !old )
+      { if ( p->type != REAL_TYPE )
+        { sprintf(errmsg,"Cannot unfix \"%s\" since it is not type REAL.\n",
+            p->name);
+          kb_error(4124,errmsg,RECOVERABLE);
+        }
+        if ( optparamcount >= MAXOPTPARAM-1 )
+        { sprintf(errmsg,"Too many optimizing parameters.  Increase MAXOPTPARAM in extern.h and recompile.\n");
+          sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                  file_names[node->file_no],node->line_no);
           kb_error(2022,errmsg,RECOVERABLE);
-       }
-       p->flags |= OPTIMIZING_PARAMETER;
-       memset((char*)&optparam[optparamcount],0,sizeof(struct optparam_t));
-       optparam[optparamcount++].pnum = node->op1.name_id;
-       if ( !everything_quantities_flag ) convert_to_quantities();
-       sprintf(msg,"%s now optimizing parameter. (was not)\n",p->name);
-     }
-     else sprintf(msg,"%s now optimizing parameter. (already was)\n",p->name);
-     break;
-   }
+        }
+        p->flags |= OPTIMIZING_PARAMETER;
+        memset((char*)&optparam[optparamcount],0,sizeof(struct optparam_t));
+        optparam[optparamcount++].pnum = node->op1.name_id;
+        if ( !everything_quantities_flag ) convert_to_quantities();
+        sprintf(msg,"%s now optimizing parameter. (was not)\n",p->name);
+      }
+      else sprintf(msg,"%s now optimizing parameter. (already was)\n",p->name);
+      break;
+    }
 
-   case FIX_PARAMETER_:
+    case FIX_PARAMETER_NODE:
     { struct global *p = globals(node->op1.name_id);
       int old = p->flags & OPTIMIZING_PARAMETER;
       int spot;
@@ -823,933 +896,968 @@ struct locallist_t *localbase;
       break;
     }
 
-   /* attribute setting in set statements */
-   case SET_ATTRIBUTE_: 
-   case SET_ATTRIBUTE_L: 
-    if ( node->op1.localnum ) 
-           id = *(element_id*)get_localp(node->op1.localnum);
-    else id = q_id;
-    parallel_update_flag[id_type(id)] = 1; /* set when element info changed */
-    switch ( node->op2.attr_kind )
-    {
-      case SET_FIXED_: set_attr(id,FIXED); break;
-      case SET_TRIPLE_PT_: set_attr(id,TRIPLE_PT); --stacktop; break;
-      case SET_TETRA_PT_: set_attr(id,TETRA_PT); --stacktop; break;
-      case SET_AXIAL_POINT_: set_attr(id,AXIAL_POINT); --stacktop; break;
-
-      case SET_EXTRA_ATTR_:
-         { struct extra *ext;
-           int spot; /* index */
-           n = node->op3.extra_info & ((1<<ESHIFT)-1);
-           if ( node->op1.localnum ) 
+    /* attribute setting in set statements */
+    case SET_ATTRIBUTE_NODE: 
+    case SET_ATTRIBUTE_L_NODE: 
+         if ( node->op1.localnum ) 
               id = *(element_id*)get_localp(node->op1.localnum);
-           else id = q_id;
-           ext = EXTRAS(id_type(id)) + n;
-           /* get index */
-           spot = 0;
-           for ( k = 0 ; k < ext->array_spec.dim ; k++ )
-           { int j = (int)(stacktop[-ext->array_spec.dim+k+1]);
-             spot *= ext->array_spec.sizes[k];
-             if ( j > ext->array_spec.sizes[k] )
-             { sprintf(errmsg,
-                  "Attribute %s index %d is %d; maximum is %d (in %s).\n",
-                  ext->name,k+1,j,ext->array_spec.sizes[k],ext->name);
-               sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-               kb_error(1210,errmsg,RECOVERABLE);
-             }
-             if ( j < 1 )
-             { sprintf(errmsg,
-                  "Attribute %s index %d is %d; must be positive.\n",
-                     ext->name,k,j); 
-               sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-               kb_error(1129,errmsg,RECOVERABLE);
-             }
-             spot += (int)(stacktop[-ext->array_spec.dim+k+1]) - 1;
-           }
-           stacktop -= ext->array_spec.dim;
-
-           switch ( ext->type )
-           { case REAL_TYPE:  ((REAL*)get_extra(id,n))[spot] = *(stacktop--); 
-                break;
-             case INTEGER_TYPE:
-                ((int*)get_extra(id,n))[spot] = (int)*(stacktop--);
-                break;
-             case ULONG_TYPE:
-                ((unsigned long*)get_extra(id,n))[spot] = 
-                  (unsigned long)*(stacktop--);
-                break;
-             case USHORT_TYPE:
-                ((unsigned short*)get_extra(id,n))[spot] = 
-                  (unsigned short)*(stacktop--);
-                break;
-             case UINT_TYPE:
-                ((unsigned int*)get_extra(id,n))[spot] = 
-                  (unsigned int)*(stacktop--);
-                break;
-             case UCHAR_TYPE:
-                ((unsigned char*)get_extra(id,n))[spot] = 
-                  (unsigned char)*(stacktop--);
-                break;
-             case LONG_TYPE:
-                ((long int*)get_extra(id,n))[spot] = 
-                  (long int)*(stacktop--);
-                break;
-             case SHORT_TYPE:
-                ((short*)get_extra(id,n))[spot] = 
-                  (short)*(stacktop--);
-                break;
-             case CHAR_TYPE:
-                ((char*)get_extra(id,n))[spot] = 
-                  (char)*(stacktop--);
-                break;
-             case ELEMENTID_TYPE:
-             case VERTEX_TYPE:
-             case EDGE_TYPE:
-             case FACET_TYPE:
-             case BODY_TYPE:
-             case FACETEDGE_TYPE:
-                ((element_id*)get_extra(id,n))[spot] = 
-                  *(element_id*)(stacktop--);
-                break;
-             case PTR_TYPE:
-                ((char**)get_extra(id,n))[spot] = 
-                  *(char**)(stacktop--);
-                break;
-             case BOUNDARY_TYPE:
-             case CONSTRAINT_TYPE:
-             case QUANTITY_TYPE:
-             case INSTANCE_TYPE:
-             case PROCEDURE_TYPE:
-                ((int*)get_extra(id,n))[spot] = (int)*(stacktop--);
-                break;
-           }
-        }
-        break;
-
-      case SET_DENSITY_:
-        { REAL density = *(stacktop--);
-           if ( density != 1.0 ) set_attr(id,DENSITY);
-           switch ( id_type(id) )
-              { case EDGE: set_edge_density(id,density); 
-                    pressure_set_flag = 0; break;
-                case FACET: set_facet_density(id,density);
-                    pressure_set_flag = 0; break;
-                case BODY: set_body_density(id,density);
-                    web.gravflag = 1;
-                    if (gravity_quantity_num >= 0 )
-                        GEN_QUANT(gravity_quantity_num)->modulus =
-                              web.grav_const;
-                    break;
-              }
-           *recalc_flag = 1;
-          }
-        break;
-
-      case SET_PHASE_:
-        { int phase = (int)*(stacktop--);
-           switch ( id_type(id) )
-              { case BODY: set_b_phase(id,phase); break;
-                case FACET: set_f_phase(id,phase); break;
-              }
-           *recalc_flag = 1;
-        }
-        break;
-
-       case SET_VOLCONST_: 
-        { REAL v = *(stacktop--);
-          REAL oldvcon = get_body_volconst(id);
-          set_body_volconst(id,v); 
-          set_body_volume(id,get_body_volume(id)+v-oldvcon,SETSTAMP);
-          set_body_oldvolume(id,get_body_oldvolume(id)+v-oldvcon);
-          if ( everything_quantities_flag )
-            GEN_QUANT(get_body_volquant(id))->volconst = v;
-          *recalc_flag = 1;
-          break;
-        }
-
-       case SET_TARGET_: 
-        { REAL v = *(stacktop--);
-          if ( get_attr(id) & PRESSURE )
-          { sprintf(errmsg,"Must unset body pressure before fixing target.\n");
-            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-            kb_error(2024,errmsg, RECOVERABLE);
-          }
-          set_attr(id,FIXEDVOL);
-          set_body_fixvol(id,v);  /* takes care of quantity */
-          reset_conj_grad();
-          *recalc_flag = 1;
-          break;
-        }
-
-       case SET_PRESSURE_: 
-        { REAL p = *(stacktop--);
-          unset_attr(id,FIXEDVOL); 
-          set_attr(id,PRESSURE);
-          web.pressflag = 1;
-          set_body_pressure(id,p); 
-          reset_conj_grad();
-          if ( everything_quantities_flag )
-          { struct gen_quant *q = GEN_QUANT(get_body_volquant(id));
-            if ( p == 0.0 )
-            { q->modulus = 1.0;
-              if ( !(q->flags & Q_INFO) )
-              { q->flags &= ~(Q_ENERGY|Q_FIXED|Q_CONSERVED);
-                q->flags |= Q_INFO;
-              }
-            }
-            else 
-            { q->modulus = -p;
-              if ( !(q->flags & Q_ENERGY ) )
-              { q->flags &= ~(Q_INFO|Q_FIXED|Q_CONSERVED);
-                q->flags |= Q_ENERGY;
-              }
-            }
-          }
-          *recalc_flag = 1;
-          break;
-          }
-
-       case SET_OPACITY_:
-          facet_alpha = *(stacktop)--;
-          break;
-
-       case SET_CONSTRAINT_:
-        { int con = (int)*(stacktop--);
-          struct constraint *constr;
-          constr = get_constraint(con); 
-          if ( (con<0) || (con>=web.maxcon) || !(constr->attr & IN_USE))
-            { sprintf(errmsg,"Illegal constraint number: %d.\n",con);
-              sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-              kb_error(1212,errmsg,RECOVERABLE);
-            }
-          if ( get_attr(id) & BOUNDARY )
-          { sprintf(errmsg,
-              "Cannot set constraint on %s %s since it is on a boundary.\n",
-               typenames[id_type(id)],ELNAME(id));
-            kb_error(4111,errmsg,RECOVERABLE);
-          }
-           set_attr(id,CONSTRAINT);
-           if ( constr->attr & CON_ENERGY )
-              set_attr(id, BDRY_ENERGY);
-           if ( constr->attr & CON_CONTENT )
-              set_attr(id, BDRY_CONTENT);
-           switch ( id_type(id) )
-              { case VERTEX: set_v_constraint_map(id,con); 
-                           project_v_constr(id,ACTUAL_MOVE,RESET_ONESIDEDNESS);
-                           break;
-                case EDGE: set_e_constraint_map(id,con); break;
-                case FACET: set_f_constraint_map(id,con); break;
-              }
-           *recalc_flag = 1;
-          }
-        break;
-
-      case SET_BOUNDARY_:
-      { struct boundary *bdry;
-        k =  (int)*(stacktop--);  /* boundary number */
-        bdry = web.boundaries+abs(k);
-        if (  (abs(k) >= web.bdrymax) || !(bdry->attr&IN_USE) ) 
-        { sprintf(errmsg,"Boundary %d is not valid.\n",k);
-          kb_error(3374,errmsg,RECOVERABLE);
-        }
-        if ( get_attr(q_id) & BOUNDARY )
-        { struct boundary *qbdry;
-          switch ( id_type(q_id) )
-          { case VERTEX: qbdry = get_boundary(q_id); break;
-            case EDGE:   qbdry = get_edge_boundary(q_id); break;
-            case FACET:  qbdry = get_facet_boundary(q_id); break;
-            default:     qbdry = NULL;  /* error message below */
-          }
-          if ( qbdry == bdry ) break;
-          sprintf(errmsg,"%s %s already on a different boundary.\n",
-             typenames[id_type(q_id)],ELNAME(q_id));
-          kb_error(3375,errmsg,RECOVERABLE);
-        }
-        set_attr(q_id,BOUNDARY);
-        if ( k < 0 )
-          set_attr(q_id,NEGBOUNDARY);
- 
-        switch(id_type(q_id))
-          { case VERTEX:
-            { REAL *x = get_coord(q_id);
-              int n;
-              set_boundary_num(q_id,abs(k));
-              for ( n = 0 ; n < SDIM ; n++ )
-              if ( bdry->coordf[n]->root != NULL )
-                x[n] = eval(bdry->coordf[n],get_param(q_id),q_id,NULL);
-              break;
-            }
-            case EDGE:
-             set_edge_boundary_num(q_id,abs(k));
-             break;
-            case FACET:
-             set_facet_boundary_num(q_id,abs(k));
-             break;
-            default: 
-             sprintf(errmsg,"Bad element type for boundary.\n");
-             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-             kb_error(3376,errmsg, RECOVERABLE);
-           }
-          if ( bdry->attr & CON_ENERGY )
-             apply_method_num(q_id,bdry->energy_method);
-          if ( bdry->attr & CON_CONTENT )
-          { if ( (web.representation == STRING) && (id_type(q_id) == VERTEX) )
-              fixup_vertex_content_meths(q_id);
-            else if ( (web.representation == SOAPFILM) && (id_type(q_id) == EDGE) )
-              fixup_edge_content_meths(q_id);
-          }  
-        
-          /* go back to next element generator */
-          node += node->op1.skipsize - 1;  /* back to start of loop */
-          break;
-        }
-
-        case SET_ORIGINAL_:
-          set_original(id,(int)*(stacktop--) | ((element_id)id_type(id)<<TYPESHIFT) | 
-                                                     VALIDMASK );
-          break;
-
-        case SET_COLOR_:
-        { int color = (int)*(stacktop--);
-           switch ( id_type(id) )
-              { case EDGE: set_edge_color(id,color); break;
-                case FACET: set_facet_color(id,color); break;
-              }
-           *update_display_flag = 1;
-          }
-        break;
-
-        case SET_FRONTCOLOR_:
-        { int color = (int)*(stacktop--);
-           set_facet_frontcolor(id,color);
-           *update_display_flag = 1;
-          }
-          break;
-
-        case SET_BACKCOLOR_:
-        { int color = (int)*(stacktop--);
-           set_facet_backcolor(id,color);
-           *update_display_flag = 1;
-          }
-          break;
-
-        case SET_WRAP_:
-        { int w = (int)*(stacktop--);
-          if ( web.symmetry_flag )
-          { set_edge_wrap(id,w);
-            *update_display_flag = 1;
-          }
-        }
-        break;
-
-        case SET_TAG_:
-        { int tag = (int)*(stacktop--);
-          switch ( id_type(id) )
-          { 
-            case FACET:
-                if ( F_TAG_ATTR == 0 )
-                { int one = 1;
-                  F_TAG_ATTR = add_attribute(FACET,"tag",INTEGER_TYPE,0,&one,0,
-                     NULL);
-                }
-                set_tag(id,tag); break;
-          }
-        }
-        break;
-
-        case SET_ORIENTATION_:
-        { int orient = (int)*(stacktop--);
-          if ( orient < 0 ) 
-            set_attr(id,NEGBOUNDARY);
-          else unset_attr(id,NEGBOUNDARY);
-        }
-        break; 
-
-        case SET_COORD_: case SET_COORD_1: 
-          if ( node->right ) /* indexed */
-          { int dim = (int)*(stacktop--)-1;
-            if ( (dim >= SDIM) || (dim < 0) )
+         else id = q_id;
+         parallel_update_flag[id_type(id)] = 1; /* set when element info changed */
+         switch ( node->op2.attr_kind )
+         {
+           case SET_FIXED_NODE: set_attr(id,FIXED); break;
+           case SET_TRIPLE_PT_NODE: set_attr(id,TRIPLE_PT); --stacktop; break;
+           case SET_TETRA_PT_NODE: set_attr(id,TETRA_PT); --stacktop; break;
+           case SET_AXIAL_POINT_NODE: set_attr(id,AXIAL_POINT); --stacktop; break;
+   
+           case SET_EXTRA_ATTR_NODE:
+            { struct extra *ext;
+              int spot; /* index */
+              n = node->op3.extra_info & ((1<<ESHIFT)-1);
+              if ( node->op1.localnum ) 
+                 id = *(element_id*)get_localp(node->op1.localnum);
+              else id = q_id;
+              ext = EXTRAS(id_type(id)) + n;
+              /* get index */
+              spot = 0;
+              for ( k = 0 ; k < ext->array_spec.dim ; k++ )
+              { int j = (int)(stacktop[-ext->array_spec.dim+k+1]);
+                spot *= ext->array_spec.sizes[k];
+                if ( j > ext->array_spec.sizes[k] )
                 { sprintf(errmsg,
-                   "Trying to set coordinate %d, in space dimension %d.\n",
-                        dim+1,SDIM);
+                     "Attribute %s index %d is %d; maximum is %d (in %s).\n",
+                     ext->name,k+1,j,ext->array_spec.sizes[k],ext->name);
                   sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                       file_names[node->file_no],node->line_no);
-                  kb_error(2026,errmsg,RECOVERABLE);
+                    file_names[node->file_no],node->line_no);
+                  kb_error(1210,errmsg,RECOVERABLE);
                 }
-              get_coord(id)[dim] = *(stacktop--);
-              *recalc_flag = 1;
-              break;
-           }
-           /* else fall through */
-
-         case SET_COORD_2:
-         case SET_COORD_3: case SET_COORD_4: case SET_COORD_5:
-         case SET_COORD_6: case SET_COORD_7: case SET_COORD_8:
-           get_coord(id)[node->op2.attr_kind-SET_COORD_1] = *(stacktop--);
-           if ( node->op2.attr_kind-SET_COORD_1 <= SDIM ) *recalc_flag = 1;
-           break;
-
-         case SET_PARAM_: case SET_PARAM_1: case SET_PARAM_2:
-         case SET_PARAM_3: case SET_PARAM_4:
-          if ( get_vattr(id) & BOUNDARY )
-            { struct boundary *boundary = get_boundary(id);
-               REAL *param = get_param(id);
-               REAL *xx = get_coord(id);
-               int pnum = node->op2.attr_kind-SET_PARAM_1; 
-               if ( node->right ) pnum += (int)*(stacktop--);
-               if ( pnum > boundary->pcount )
-               { sprintf(errmsg,"Parameter number is %d; maximum is %d.\n",
-                      pnum,boundary->pcount);
-                 sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                      file_names[node->file_no],node->line_no);
-                 kb_error(1149,errmsg,RECOVERABLE);
-               }
-               param[pnum] = *(stacktop--);
-               for ( k = 0 ; k < SDIM ; k++ )
-                  xx[k] = eval(boundary->coordf[k],param,id,NULL);
-               *recalc_flag = 1;
-            }
-           else /* just parking a value probably */ 
-           { REAL *param = get_param(id);
-             int pnum = node->op2.attr_kind-SET_PARAM_1;
-             if ( node->right ) pnum += (int)*(stacktop--);
-             param[pnum] = *(stacktop--);
+                if ( j < 1 )
+                { sprintf(errmsg,
+                     "Attribute %s index %d is %d; must be positive.\n",
+                        ext->name,k,j); 
+                  sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+                  kb_error(1129,errmsg,RECOVERABLE);
+                }
+                spot += (int)(stacktop[-ext->array_spec.dim+k+1]) - 1;
+              }
+              stacktop -= ext->array_spec.dim;
+   
+              switch ( ext->type )
+              { case REAL_TYPE:  ((REAL*)get_extra(id,n))[spot] = *(stacktop--); 
+                   break;
+                case INTEGER_TYPE:
+                   ((int*)get_extra(id,n))[spot] = (int)*(stacktop--);
+                   break;
+                case ULONG_TYPE:
+                   ((unsigned long*)get_extra(id,n))[spot] = 
+                     (unsigned long)*(stacktop--);
+                   break;
+                case USHORT_TYPE:
+                   ((unsigned short*)get_extra(id,n))[spot] = 
+                     (unsigned short)*(stacktop--);
+                   break;
+                case UINT_TYPE:
+                   ((unsigned int*)get_extra(id,n))[spot] = 
+                     (unsigned int)*(stacktop--);
+                   break;
+                case UCHAR_TYPE:
+                   ((unsigned char*)get_extra(id,n))[spot] = 
+                     (unsigned char)*(stacktop--);
+                   break;
+                case LONG_TYPE:
+                   ((long int*)get_extra(id,n))[spot] = 
+                     (long int)*(stacktop--);
+                   break;
+                case SHORT_TYPE:
+                   ((short*)get_extra(id,n))[spot] = 
+                     (short)*(stacktop--);
+                   break;
+                case CHAR_TYPE:
+                   ((char*)get_extra(id,n))[spot] = 
+                     (char)*(stacktop--);
+                   break;
+                case ELEMENTID_TYPE:
+                case VERTEX_TYPE:
+                case EDGE_TYPE:
+                case FACET_TYPE:
+                case BODY_TYPE:
+                case FACETEDGE_TYPE:
+                   ((element_id*)get_extra(id,n))[spot] = 
+                     *(element_id*)(stacktop--);
+                   break;
+                case PTR_TYPE:
+                   ((char**)get_extra(id,n))[spot] = 
+                     *(char**)(stacktop--);
+                   break;
+                case BOUNDARY_TYPE:
+                case CONSTRAINT_TYPE:
+                case QUANTITY_TYPE:
+                case INSTANCE_TYPE:
+                case PROCEDURE_TYPE:
+                   ((int*)get_extra(id,n))[spot] = (int)*(stacktop--);
+                   break;
+              }
            }
            break;
-
-          case SET_FRONTBODY_:
-          case SET_BACKBODY_:
-            b_id = get_ordinal_id(BODY,(int)*(stacktop--)-1);
-            if ( b_id && !valid_id(b_id) ) 
-            { sprintf(errmsg,"Invalid body in SET FRONTBODY or BACKBODY.\n");
-              sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-              kb_error(2027,errmsg,RECOVERABLE);
-            }
-            set_body((node->op2.attr_kind==SET_FRONTBODY_?id:inverse_id(id)),b_id);
-            *recalc_flag = 1;
-            break;
- 
-         default: 
-            sprintf(errmsg,"Unhandled SET attribute %d\n",node->op2.attr_kind);
-            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-            kb_error(2028,errmsg,RECOVERABLE);
-            break;
-
-      } /* end SET_ATTRIBUTE */
-      break;
-
-   /*****************************
-   * assignop attribute values  *
-   * for single element assigns *
-   *****************************/
-   case SET_ATTRIBUTE_A: 
-   { int assign_type = node[1].op1.assigntype;
-     if ( node->op1.localnum ) 
-       id = *(element_id*)get_localp(node->op1.localnum);
-     else id = q_id;
-     parallel_update_flag[id_type(id)] = 1; /* set when element info changed */
-     switch ( node->op2.attr_kind )
-     {  /* Those attributes not fitted for arithmetic assignment 
-           have error test for that in yexparse() */
-
-      case SET_ORIENTATION_:
-          if ( *(stacktop--) >= 0.0 )
-              unset_attr(id,NEGBOUNDARY);
-          else  set_attr(id,NEGBOUNDARY);
-          break;
-
-      case SET_EXTRA_ATTR_:
-        { struct extra *ext;
-          int spot; /* index */
-          n = node->op3.extra_info & ((1<<ESHIFT)-1);
-          if ( node->op1.localnum ) 
-            id = *(element_id*)get_localp(node->op1.localnum);
-          else id = q_id;
-          ext = EXTRAS(id_type(id)) + n;
-           /* get index */
-           spot = 0;
-           for ( k = 0 ; k < ext->array_spec.dim ; k++ )
-           { int j = (int)(stacktop[-ext->array_spec.dim+k+1]);
-             spot *= ext->array_spec.sizes[k];
-             if ( j > ext->array_spec.sizes[k] )
-             { sprintf(errmsg,
-                  "Attribute %s index %d is %d; maximum is %d (in %s).\n",
-                  ext->name,k+1,j,ext->array_spec.sizes[k],ext->name);
-               sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-               kb_error(2524,errmsg,RECOVERABLE);
-             }
-             if ( j < 1 )
-             { sprintf(errmsg,"Attribute %s index %d is %d; must be positive.\n",
-                     ext->name,k,j); 
-               sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-               kb_error(3365,errmsg,RECOVERABLE);
-             }
-             spot += (int)(stacktop[-ext->array_spec.dim+k+1]) - 1;
-           }
-           stacktop -= ext->array_spec.dim;
-
-#define ATTRCASE(type) \
-         switch ( assign_type ) \
-         { case ASSIGN_: \
-             ((type*)get_extra(id,n))[spot] = (type)*(stacktop--); break; \
-           case PLUSASSIGN_: \
-             ((type*)get_extra(id,n))[spot] += (type)*(stacktop--); break; \
-           case SUBASSIGN_: \
-             ((type*)get_extra(id,n))[spot] -= (type)*(stacktop--); break; \
-           case MULTASSIGN_: \
-             ((type*)get_extra(id,n))[spot] *= (type)*(stacktop--); break; \
-           case DIVASSIGN_: \
-             ((type*)get_extra(id,n))[spot] /= (type)*(stacktop--); break; \
-         } 
-
-          switch ( ext->type )
-          { case REAL_TYPE:  
-                switch ( assign_type )
-                { case ASSIGN_:
-                    ((REAL*)get_extra(id,n))[spot] = *(stacktop--); break;
-                   case PLUSASSIGN_:
-                    ((REAL*)get_extra(id,n))[spot] += *(stacktop--); break;
-                   case SUBASSIGN_:
-                    ((REAL*)get_extra(id,n))[spot] -= *(stacktop--); break;
-                   case MULTASSIGN_:
-                    ((REAL*)get_extra(id,n))[spot] *= *(stacktop--); break;
-                   case DIVASSIGN_:
-                    ((REAL*)get_extra(id,n))[spot] /= *(stacktop--); break;
-                }
-                break;
-              case INTEGER_TYPE:
-                switch ( assign_type )
-                { case ASSIGN_:
-                    ((int*)get_extra(id,n))[spot] = (int)*(stacktop--); break;
-                   case PLUSASSIGN_:
-                    ((int*)get_extra(id,n))[spot] += (int)*(stacktop--); break;
-                   case SUBASSIGN_:
-                    ((int*)get_extra(id,n))[spot] -= (int)*(stacktop--); break;
-                   case MULTASSIGN_:
-                    ((int*)get_extra(id,n))[spot] = 
-                       (int)(((int*)get_extra(id,n))[spot] * *(stacktop--));break;
-                   case DIVASSIGN_:
-                    ((int*)get_extra(id,n))[spot] = 
-                       (int)(((int*)get_extra(id,n))[spot] / *(stacktop--));break;
-                }
-                break;
-
-              case ULONG_TYPE:
-                ATTRCASE(unsigned long int);
-                break;
-
-              case LONG_TYPE:
-                ATTRCASE(long int);
-                break;
-
-              case UINT_TYPE:
-                ATTRCASE(unsigned int);
-                break;
-
-              case UCHAR_TYPE:
-                ATTRCASE(unsigned char);
-                break;
-
-              case CHAR_TYPE:
-                ATTRCASE(char);
-                break;
-
-              case SHORT_TYPE:
-                ATTRCASE(short int);
-                break;
-
-              case USHORT_TYPE:
-                ATTRCASE(unsigned short int);
-                break;
-
-              case ELEMENTID_TYPE:
-              case VERTEX_TYPE:
-              case EDGE_TYPE:
-              case FACET_TYPE:
-              case BODY_TYPE:
-              case FACETEDGE_TYPE:
-                switch ( assign_type )
-                { case ASSIGN_:
-                    ((element_id*)get_extra(id,n))[spot] = 
-                        *(element_id*)(stacktop--); break;
-                  default: 
-                     kb_error(3453,
-                      "Illegal assignment operation on element id attribute.\n",
-                           RECOVERABLE);
-                }
-
-              case PTR_TYPE:
-                switch ( assign_type )
-                { case ASSIGN_:
-                    ((char**)get_extra(id,n))[spot] = 
-                        *(char**)(stacktop--); break;
-                  default: 
-                     kb_error(3454,
-                       "Illegal assignment operation on pointer attribute.\n",
-                           RECOVERABLE);
-                }
-              case BOUNDARY_TYPE:
-              case CONSTRAINT_TYPE:
-              case QUANTITY_TYPE:
-              case INSTANCE_TYPE:
-              case PROCEDURE_TYPE:
-                switch ( assign_type )
-                { case ASSIGN_:
-                    ((int*)get_extra(id,n))[spot] = 
-                        *(int*)(stacktop--); break;
-                  default: 
-                     kb_error(3682,
-                       "Illegal assignment operation on attribute.\n",
-                           RECOVERABLE);
-                }
-           }
-        }
-        break;
-      case SET_DENSITY_:
-        { REAL density = *(stacktop--);
-           REAL oldvalue = 0.0;
-           if ( density != 1.0 ) set_attr(id,DENSITY);
-           switch ( id_type(id) )
-              { case EDGE: oldvalue = get_edge_density(id); break;
-                case FACET: oldvalue = get_facet_density(id); break;
-                case BODY: oldvalue = get_body_density(id); break;
-              }
-           switch ( assign_type )
-              { case ASSIGN_: break;
-                case PLUSASSIGN_: density += oldvalue; break;
-                case SUBASSIGN_: density = oldvalue - density; break;
-                case MULTASSIGN_: density *= oldvalue; break;
-                case DIVASSIGN_: density = oldvalue / density; break;
-              }
-           switch ( id_type(id) )
-              { case EDGE: set_edge_density(id,density); 
-                    pressure_set_flag = 0; break;
-                case FACET: set_facet_density(id,density);
-                    pressure_set_flag = 0; break;
-                case BODY: set_body_density(id,density);
-                    web.gravflag = 1;
-                    if (gravity_quantity_num >= 0 )
-                        GEN_QUANT(gravity_quantity_num)->modulus =
-                              web.grav_const;
-                    break;
-              }
-           *recalc_flag = 1;
-          }
-        break;
-
-      case SET_PHASE_:
-        { int phase = (int)*(stacktop--);
-           switch ( id_type(id) )
-              { case BODY: set_b_phase(id,phase); break;
-                case FACET: set_f_phase(id,phase); break;
-              }
-           *recalc_flag = 1;
-        }
-        break;
-
-      case SET_VOLCONST_: 
-        { REAL v = *(stacktop--);
-           REAL oldvalue = get_body_volconst(id); 
-           switch ( assign_type )
-              { case ASSIGN_:    break;
-                case PLUSASSIGN_: v +=  oldvalue; break;
-                case SUBASSIGN_: v = oldvalue - v; break;
-                case MULTASSIGN_: v = oldvalue * v; break;
-                case DIVASSIGN_: v = oldvalue / v; break;
-              }
-          set_body_volconst(id,v); 
-          set_body_volume(id,get_body_volume(id)+v-oldvalue,SETSTAMP);
-          set_body_oldvolume(id,get_body_oldvolume(id)+v-oldvalue);
-          if ( everything_quantities_flag )
-            GEN_QUANT(get_body_volquant(id))->volconst = v;
-           *recalc_flag = 1;
-          break;
-        }
-      case SET_TARGET_: 
-        { REAL v = *(stacktop--);
-           REAL oldvalue = get_body_fixvol(id); 
-           switch ( assign_type )
-              { case ASSIGN_:    break;
-                case PLUSASSIGN_: v +=  oldvalue; break;
-                case SUBASSIGN_: v = oldvalue - v; break;
-                case MULTASSIGN_: v = oldvalue * v; break;
-                case DIVASSIGN_: v = oldvalue / v; break;
-              }
-           if ( get_attr(id) & PRESSURE )
-           { sprintf(errmsg,"Must unset body pressure before fixing target.\n");
-              sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-              kb_error(2029,errmsg,RECOVERABLE);
-           }
-          set_attr(id,FIXEDVOL);
-          set_body_fixvol(id,v); 
-          *recalc_flag = 1;
-          break;
-        }
-      case SET_PRESSURE_: 
-        { REAL p = *(stacktop--);
-           REAL oldvalue = get_body_pressure(id); 
-           switch ( assign_type )
-              { case ASSIGN_:    break;
-                case PLUSASSIGN_: p +=  oldvalue; break;
-                case SUBASSIGN_: p = oldvalue - p; break;
-                case MULTASSIGN_: p = oldvalue * p; break;
-                case DIVASSIGN_: p = oldvalue / p; break;
-              }
-           if ( get_attr(id) & FIXEDVOL )
-           { sprintf(errmsg,"Must unset body target before fixing pressure.\n");
-             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-             kb_error(2030,errmsg,RECOVERABLE);
-           }
-          set_attr(id,PRESSURE);
-          set_body_pressure(id,p);    web.pressflag = 1;
-          if ( everything_quantities_flag )
-          { struct gen_quant *q = GEN_QUANT(get_body_volquant(id));
-            if ( p == 0.0 )
-            { q->modulus = 1.0;
-               if ( !(q->flags & Q_INFO) )
-               { q->flags &= ~(Q_ENERGY|Q_FIXED|Q_CONSERVED);
-                  q->flags |= Q_INFO;
-               }
-            }
-            else 
-            { q->modulus = -p;
-               if ( !(q->flags & Q_ENERGY ) )
-               { q->flags &= ~(Q_INFO|Q_FIXED|Q_CONSERVED);
-                  q->flags |= Q_ENERGY;
-               }
-            }
-          }
-           *recalc_flag = 1;
-          break;
-        }
-      case SET_OPACITY_:
-          facet_alpha = *(stacktop)--;
-          break;
-
-      case SET_CONSTRAINT_:
-        { int con = (int)*(stacktop--);
-           struct constraint *constr = get_constraint(con);
-           if ( (con<0) || (con>=web.maxcon) || !(constr->attr & IN_USE))
-           { sprintf(errmsg,"Illegal constraint number: %d.\n",con);
-             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-             kb_error(1146,errmsg,RECOVERABLE);
-           } 
-           set_attr(id,CONSTRAINT);
-           if ( constr->attr & CON_ENERGY )
-              set_attr(id, BDRY_ENERGY);
-           if ( constr->attr & CON_CONTENT )
-              set_attr(id, BDRY_CONTENT);
-           switch ( id_type(id) )
-              { case VERTEX: set_v_constraint_map(id,con); 
-                           project_v_constr(id,ACTUAL_MOVE,RESET_ONESIDEDNESS);
-                           break;
-                case EDGE: set_e_constraint_map(id,con); break;
-                case FACET: set_f_constraint_map(id,con); break;
-              }
-           *recalc_flag = 1;
-          }
-        break;
-
-      case SET_ORIGINAL_:
-        set_original(id,(int)*(stacktop--) | ((element_id)id_type(id)<<TYPESHIFT)
-               | VALIDMASK);
-        break;
-
-      case SET_COLOR_:
-        { int color = (int)*(stacktop--);
-           switch ( id_type(id) )
-              { case EDGE: set_edge_color(id,color); break;
-                case FACET: set_facet_color(id,color); break;
-              }
-           *update_display_flag = 1;
-        }
-        break;
-
-      case SET_FRONTCOLOR_:
-        { int color = (int)*(stacktop--);
-           set_facet_frontcolor(id,color);
-           *update_display_flag = 1;
-        }
-        break;
-
-      case SET_BACKCOLOR_:
-        { int color = (int)*(stacktop--);
-           set_facet_backcolor(id,color);
-           *update_display_flag = 1;
-        }
-        break;
-
-      case SET_WRAP_:
-        { int w = (int)*(stacktop--);
-          if ( web.symmetry_flag )
-          { set_edge_wrap(id,w);
-            *update_display_flag = 1;
-          }
-        }
-        break;
-
-      case SET_TAG_:
-        { int tag = (int)*(stacktop--);
-           switch ( id_type(id) )
-              { 
-                case FACET: set_tag(id,tag); break;
-              }
-        }
-        break;
-
-       case SET_COORD_: case SET_COORD_1: 
-          if ( node->right ) /* indexed */
-          { int dim = (int)*(stacktop--)-1;
-            REAL oldvalue = get_coord(id)[dim]; 
-            REAL v;
-            if ( (dim >= SDIM) || (dim < 0) )
-                { sprintf(errmsg,
-                   "Trying to set coordinate %d, in space dimension %d.\n",
-                        dim,SDIM);
-                  sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                       file_names[node->file_no],node->line_no);
-                  kb_error(2031,errmsg,RECOVERABLE);
-                }
-            v = *(stacktop--);
-            switch ( assign_type )
-              { case ASSIGN_:  break;
-                case PLUSASSIGN_: v +=  oldvalue; break;
-                case SUBASSIGN_: v = oldvalue - v; break;
-                case MULTASSIGN_: v = oldvalue * v; break;
-                case DIVASSIGN_: v = oldvalue / v; break;
-              }
-              get_coord(id)[dim] = v;
+   
+          case SET_DENSITY_NODE:
+          { REAL density = *(stacktop--);
+              if ( density != 1.0 ) set_attr(id,DENSITY);
+              switch ( id_type(id) )
+                 { case EDGE: set_edge_density(id,density); 
+                       pressure_set_flag = 0; break;
+                   case FACET: set_facet_density(id,density);
+                       pressure_set_flag = 0; break;
+                   case BODY: set_body_density(id,density);
+                       web.gravflag = 1;
+                       if (gravity_quantity_num >= 0 )
+                           GEN_QUANT(gravity_quantity_num)->modulus =
+                                 web.grav_const;
+                       break;
+                 }
               *recalc_flag = 1;
-              break;
-           }
-           /* else fall through */
-
-       case SET_COORD_2:
-       case SET_COORD_3: case SET_COORD_4: case SET_COORD_5:
-       case SET_COORD_6: case SET_COORD_7: case SET_COORD_8:
-          { REAL v = *(stacktop--);
-            REAL oldvalue = get_coord(id)[node->op2.attr_kind-SET_COORD_1];
-            switch ( assign_type )
-              { case ASSIGN_:  break;
-                case PLUSASSIGN_: v +=  oldvalue; break;
-                case SUBASSIGN_: v = oldvalue - v; break;
-                case MULTASSIGN_: v = oldvalue * v; break;
-                case DIVASSIGN_: v = oldvalue / v; break;
-              }
-            get_coord(id)[node->op2.attr_kind-SET_COORD_1] = v;
-            if ( node->op2.attr_kind-SET_COORD_1 <= SDIM ) *recalc_flag = 1;
-          }
-          break;
-
-       case SET_PARAM_: case SET_PARAM_1: case SET_PARAM_2:
-       case SET_PARAM_3: case SET_PARAM_4:
-          if ( get_vattr(id) & BOUNDARY )
-            { struct boundary *boundary = get_boundary(id);
-               REAL *param = get_param(id);
-               REAL *xx = get_coord(id);
-               REAL v;
-               int pnum = node->op2.attr_kind-SET_PARAM_1; 
-               REAL oldvalue = param[pnum];
-               if ( node->right ) pnum += (int)*(stacktop--);
-               if ( pnum > boundary->pcount )
-               { sprintf(errmsg,"Parameter number is %d; maximum is %d.\n",
-                       pnum,boundary->pcount);
-                 sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                      file_names[node->file_no],node->line_no);
-                 kb_error(1213,errmsg,RECOVERABLE);
-               }
-               v = *(stacktop--);
-               switch ( assign_type )
-               { case ASSIGN_:  break;
-                 case PLUSASSIGN_: v +=  oldvalue; break;
-                 case SUBASSIGN_: v = oldvalue - v; break;
-                 case MULTASSIGN_: v = oldvalue * v; break;
-                 case DIVASSIGN_: v = oldvalue / v; break;
-               }
-               param[pnum] = v; 
-               for ( k = 0 ; k < SDIM ; k++ )
-                  xx[k] = eval(boundary->coordf[k],param,id,NULL);
-               *recalc_flag = 1;
-            }
-           else /* just parking a value probably */ 
-              { REAL *param = get_param(id);
-                int pnum = node->op2.attr_kind-SET_PARAM_1;
-                REAL oldvalue = param[pnum];
-                REAL v;
-                if ( node->right ) pnum += (int)*(stacktop--);
-               v = *(stacktop--);
-               switch ( assign_type )
-               { case ASSIGN_:  break;
-                 case PLUSASSIGN_: v +=  oldvalue; break;
-                 case SUBASSIGN_: v = oldvalue - v; break;
-                 case MULTASSIGN_: v = oldvalue * v; break;
-                 case DIVASSIGN_: v = oldvalue / v; break;
-               }
-
-               param[pnum] = v;
              }
+           break;
+   
+      case SET_PHASE_NODE:
+          { int phase = (int)*(stacktop--);
+              switch ( id_type(id) )
+                 { case BODY: set_b_phase(id,phase); break;
+                   case FACET: set_f_phase(id,phase); break;
+                 }
+              *recalc_flag = 1;
+           }
+           break;
+   
+         case SET_VOLCONST_NODE: 
+           { REAL v = *(stacktop--);
+             REAL oldvcon = get_body_volconst(id);
+             set_body_volconst(id,v); 
+             set_body_volume(id,get_body_volume(id)+v-oldvcon,SETSTAMP);
+             set_body_oldvolume(id,get_body_oldvolume(id)+v-oldvcon);
+             if ( everything_quantities_flag )
+               GEN_QUANT(get_body_volquant(id))->volconst = v;
+             *recalc_flag = 1;
              break;
-
-          case SET_FRONTBODY_:
-          case SET_BACKBODY_:
-            b_id = get_ordinal_id(BODY,(int)*(stacktop--)-1);
-            if ( !valid_id(b_id) ) 
-            { sprintf(errmsg,"Invalid body in SET FRONTBODY or BACKBODY.\n");
-              sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+           }
+   
+         case SET_TARGET_NODE: 
+           { REAL v = *(stacktop--);
+             if ( get_attr(id) & PRESSURE )
+             { sprintf(errmsg,"Must unset body pressure before fixing target.\n");
+               sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+               kb_error(2024,errmsg, RECOVERABLE);
+             }
+             set_attr(id,FIXEDVOL);
+             set_body_fixvol(id,v);  /* takes care of quantity */
+             reset_conj_grad();
+             *recalc_flag = 1;
+             break;
+           }
+   
+           case SET_PRESSURE_NODE: 
+           { REAL p = *(stacktop--);
+             unset_attr(id,FIXEDVOL); 
+             set_attr(id,PRESSURE);
+             web.pressflag = 1;
+             set_body_pressure(id,p); 
+             reset_conj_grad();
+             if ( everything_quantities_flag )
+             { struct gen_quant *q = GEN_QUANT(get_body_volquant(id));
+               if ( p == 0.0 )
+               { q->modulus = 1.0;
+                 if ( !(q->flags & Q_INFO) )
+                 { q->flags &= ~(Q_ENERGY|Q_FIXED|Q_CONSERVED);
+                   q->flags |= Q_INFO;
+                 }
+               }
+               else 
+               { q->modulus = -p;
+                 if ( !(q->flags & Q_ENERGY ) )
+                 { q->flags &= ~(Q_INFO|Q_FIXED|Q_CONSERVED);
+                   q->flags |= Q_ENERGY;
+                 }
+               }
+             }
+             *recalc_flag = 1;
+             break;
+             }
+   
+           case SET_OPACITY_NODE:
+             *(REAL*)(get_extra(id,opacity_attr)) = *(stacktop)--;
+             *recalc_flag = 1;
+             break;
+   
+          case SET_CONSTRAINT_NODE:
+           { int con = (int)*(stacktop--);
+             struct constraint *constr;
+             constr = get_constraint(con); 
+             if ( (con<0) || (con>=web.maxcon) || !(constr->attr & IN_USE))
+               { sprintf(errmsg,"Illegal constraint number: %d.\n",con);
+                 sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+                 kb_error(1212,errmsg,RECOVERABLE);
+               }
+             if ( get_attr(id) & BOUNDARY ) 
+             { sprintf(errmsg,
+                 "Cannot set constraint on %s %s since it is on a boundary.\n",
+                  typenames[id_type(id)],ELNAME(id));
+                sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+               kb_error(4111,errmsg,RECOVERABLE);
+             }
+              set_attr(id,CONSTRAINT);
+              if ( constr->attr & CON_ENERGY )
+                 set_attr(id, BDRY_ENERGY);
+              if ( constr->attr & CON_CONTENT )
+                 set_attr(id, BDRY_CONTENT);
+              switch ( id_type(id) )
+                 { case VERTEX: set_v_constraint_map(id,con); 
+                              project_v_constr(id,ACTUAL_MOVE,RESET_ONESIDEDNESS);
+                              break;
+                   case EDGE: set_e_constraint_map(id,con); break;
+                   case FACET: set_f_constraint_map(id,con); break;
+                 }
+              *recalc_flag = 1;
+             }
+           break;
+      
+            case SET_BOUNDARY_NODE:
+            { struct boundary *bdry;
+              k =  (int)*(stacktop--);  /* boundary number */
+              bdry = web.boundaries+abs(k);
+              if (  (abs(k) >= web.bdrymax) || !(bdry->attr&IN_USE) ) 
+              { sprintf(errmsg,"Boundary %d is not valid.\n",k);
+                kb_error(3374,errmsg,RECOVERABLE);
+              }
+              if ( get_attr(q_id) & CONSTRAINT )
+              { sprintf(errmsg,"Cannot put %s %s on a boundary since it is already on a constraint.\n",
+                typenames[id_type(q_id)],ELNAME(q_id));
+                sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                    file_names[node->file_no],node->line_no);
-              kb_error(2032,errmsg,RECOVERABLE);
-            }
-            set_body((node->op2.attr_kind==SET_FRONTBODY_?id:inverse_id(id)),b_id);
-            *recalc_flag = 1;
-            break;
+                kb_error(6199,errmsg,RECOVERABLE);
+              }
 
-         default: 
-            sprintf(errmsg,"Unhandled SET attribute %d\n",node->op2.attr_kind);
-            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-            kb_error(2033,errmsg,RECOVERABLE);
-            break;
+              if ( get_attr(q_id) & BOUNDARY )
+              { struct boundary *qbdry;
+                switch ( id_type(q_id) )
+                { case VERTEX: qbdry = get_boundary(q_id); break;
+                  case EDGE:   qbdry = get_edge_boundary(q_id); break;
+                  case FACET:  qbdry = get_facet_boundary(q_id); break;
+                  default:     qbdry = NULL;  /* error message below */
+                }
+                if ( qbdry == bdry ) break;
+                sprintf(errmsg,"%s %s already on a different boundary.\n",
+                   typenames[id_type(q_id)],ELNAME(q_id));
+                sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+                kb_error(3375,errmsg,RECOVERABLE);
+              }
+              set_attr(q_id,BOUNDARY);
+              if ( k < 0 )
+                set_attr(q_id,NEGBOUNDARY);
+       
+              switch(id_type(q_id))
+                { case VERTEX:
+                  { REAL *x = get_coord(q_id);
+                    int n;
+                    set_boundary_num(q_id,abs(k));
+                    PUSH_TRACE;
+                    for ( n = 0 ; n < SDIM ; n++ )
+                     if ( bdry->coordf[n]->root != NULL )
+                      x[n] = eval(bdry->coordf[n],get_param(q_id),q_id,NULL);
+                    POP_TRACE;
+                    break;
+                  }
+                  case EDGE:
+                   set_edge_boundary_num(q_id,abs(k));
+                   break;
+                  case FACET:
+                   set_facet_boundary_num(q_id,abs(k));
+                   break;
+                  default: 
+                   sprintf(errmsg,"Bad element type for boundary.\n");
+                   sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                       file_names[node->file_no],node->line_no);
+                   kb_error(3376,errmsg, RECOVERABLE);
+                 }
+                if ( bdry->attr & CON_ENERGY )
+                   apply_method_num(q_id,bdry->energy_method);
+                if ( bdry->attr & CON_CONTENT )
+                { if ( (web.representation == STRING) && (id_type(q_id) == VERTEX) )
+                    fixup_vertex_content_meths(q_id);
+                  else if ( (web.representation == SOAPFILM) && (id_type(q_id) == EDGE) )
+                    fixup_edge_content_meths(q_id);
+                }  
+              
+                /* go back to next element generator */
+                node += node->op1.skipsize - 1;  /* back to start of loop */
+                break;
+              }
+      
+           case SET_ORIGINAL_NODE:
+             { int orig = (int)*(stacktop--);
+               if ( orig == 0 )
+                 set_original(id,NULLID);
+               else if ( orig > 0 )
+                 set_original(id,(orig-1) | ((element_id)id_type(id)<<TYPESHIFT) | 
+                                                        VALIDMASK );
+               else
+               { sprintf(errmsg,"Cannot have negative \"original\" attribute.\n");
+                 sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+                 kb_error(5987,errmsg,RECOVERABLE);
+               }
+             }
+             break;
+   
+           case SET_COLOR_NODE:
+           { int color = (int)*(stacktop--);
+              switch ( id_type(id) )
+                 { case EDGE: set_edge_color(id,color); break;
+                   case FACET: set_facet_color(id,color); break;
+                 }
+              *update_display_flag = 1;
+             }
+           break;
+   
+           case SET_FRONTCOLOR_NODE:
+           { int color = (int)*(stacktop--);
+              set_facet_frontcolor(id,color);
+              *update_display_flag = 1;
+             }
+             break;
+   
+          case SET_BACKCOLOR_NODE:
+           { int color = (int)*(stacktop--);
+              set_facet_backcolor(id,color);
+              *update_display_flag = 1;
+             }
+             break;
+   
+     case SET_WRAP_NODE:
+           { int w = (int)*(stacktop--);
+             if ( web.symmetry_flag )
+             { set_edge_wrap(id,w);
+               *update_display_flag = 1;
+             }
+           }
+           break;
+   
+          case SET_ORIENTATION_NODE:
+           { int orient = (int)*(stacktop--);
+             if ( orient < 0 ) 
+               set_attr(id,NEGBOUNDARY);
+             else unset_attr(id,NEGBOUNDARY);
+           }
+           break; 
+   
+          case SET_COORD_NODE: case SET_COORD_1_NODE: 
+             if ( node->right ) /* indexed */
+             { int dim = (int)*(stacktop--)-1;
+               if ( (dim >= SDIM) || (dim < 0) )
+                   { sprintf(errmsg,
+                      "Trying to set coordinate %d, in space dimension %d.\n",
+                           dim+1,SDIM);
+                     sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                          file_names[node->file_no],node->line_no);
+                     kb_error(2026,errmsg,RECOVERABLE);
+                   }
+                 get_coord(id)[dim] = *(stacktop--);
+                 *recalc_flag = 1;
+                 break;
+              }
+              /* else fall through */
+   
+            case SET_COORD_2_NODE:
+            case SET_COORD_3_NODE: case SET_COORD_4_NODE: case SET_COORD_5_NODE:
+            case SET_COORD_6_NODE: case SET_COORD_7_NODE: case SET_COORD_8_NODE:
+              get_coord(id)[node->op2.attr_kind-SET_COORD_1_NODE] = *(stacktop--);
+              *recalc_flag = 1;
+              break;
+   
+            case SET_PARAM_NODE: case SET_PARAM_1_NODE: case SET_PARAM_2_NODE:
+            case SET_PARAM_3_NODE: case SET_PARAM_4_NODE: case SET_PARAM_5_NODE:
+            case SET_PARAM_6_NODE: case SET_PARAM_7_NODE: case SET_PARAM_8_NODE:
+              { int pnum;
+                if ( node->right ) pnum = (int)*(stacktop--);
+                else pnum = node->op2.attr_kind-SET_PARAM_1_NODE; 
+                
+                if ( get_vattr(id) & BOUNDARY )
+                { struct boundary *boundary = get_boundary(id);
+                  REAL *param = get_param(id);
+                  REAL *xx = get_coord(id);
+                  
+                  if ( pnum > boundary->pcount )
+                  { sprintf(errmsg,"Parameter number is %d; maximum is %d.\n",
+                         pnum,boundary->pcount);
+                    sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                         file_names[node->file_no],node->line_no);
+                    kb_error(1149,errmsg,RECOVERABLE);
+                  }
+                  param[pnum] = *(stacktop--);
+                  PUSH_TRACE;
+                  for ( k = 0 ; k < SDIM ; k++ )
+                     xx[k] = eval(boundary->coordf[k],param,id,NULL);
+                  POP_TRACE;
+                  *recalc_flag = 1;
+               }
+               else /* just parking a value probably */ 
+               { REAL *param = get_param(id);
+                 if ( pnum > web.maxparam )
+                 { sprintf(errmsg,"Parameter index too high.\n");
+                   sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+                   kb_error(6531,errmsg,RECOVERABLE);
+                 }
+                 param[pnum] = *(stacktop--);
+               }
+              }
+              break;
+   
+             case SET_FRONTBODY_NODE:
+             case SET_BACKBODY_NODE:
+               b_id = get_ordinal_id(BODY,(int)*(stacktop--)-1);
+               if ( b_id && !valid_id(b_id) ) 
+               { sprintf(errmsg,"Invalid body in SET FRONTBODY or BACKBODY.\n");
+                 sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+                 kb_error(2027,errmsg,RECOVERABLE);
+               }
+               set_body((node->op2.attr_kind==SET_FRONTBODY_NODE?id:inverse_id(id)),b_id);
+               *recalc_flag = 1;
+               break;
+    
+            default: 
+               sprintf(errmsg,"Unhandled SET attribute %d\n",node->op2.attr_kind);
+               sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+               kb_error(2028,errmsg,RECOVERABLE);
+               break;
+   
+         } /* end SET_ATTRIBUTE */
+         break;
 
-        } /* end assigned SET_ATTRIBUTE_A */
-      }
-      break;
+    /*****************************
+    * assignop attribute values  *
+    * for single element assigns *
+    *****************************/
+    case SET_ATTRIBUTE_A_NODE: 
+      { int assign_type = node[1].op1.assigntype;
+        if ( node->op1.localnum ) 
+          id = *(element_id*)get_localp(node->op1.localnum);
+        else id = q_id;
+        parallel_update_flag[id_type(id)] = 1; /* set when element info changed */
+        switch ( node->op2.attr_kind )
+        {  /* Those attributes not fitted for arithmetic assignment 
+              have error test for that in yexparse() */
+   
+           case SET_ORIENTATION_NODE:
+             if ( *(stacktop--) >= 0.0 )
+                 unset_attr(id,NEGBOUNDARY);
+             else  set_attr(id,NEGBOUNDARY);
+             break;
+   
+           case SET_EXTRA_ATTR_NODE:
+           { struct extra *ext;
+             int spot; /* index */
+             n = node->op3.extra_info & ((1<<ESHIFT)-1);
+             if ( node->op1.localnum ) 
+               id = *(element_id*)get_localp(node->op1.localnum);
+             else id = q_id;
+             ext = EXTRAS(id_type(id)) + n;
+              /* get index */
+              spot = 0;
+              for ( k = 0 ; k < ext->array_spec.dim ; k++ )
+              { int j = (int)(stacktop[-ext->array_spec.dim+k+1]);
+                spot *= ext->array_spec.sizes[k];
+                if ( j > ext->array_spec.sizes[k] )
+                { sprintf(errmsg,
+                     "Attribute %s index %d is %d; maximum is %d (in %s).\n",
+                     ext->name,k+1,j,ext->array_spec.sizes[k],ext->name);
+                  sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+                  kb_error(2524,errmsg,RECOVERABLE);
+                }
+                if ( j < 1 )
+                { sprintf(errmsg,"Attribute %s index %d is %d; must be positive.\n",
+                        ext->name,k,j); 
+                  sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+                  kb_error(3365,errmsg,RECOVERABLE);
+                }
+                spot += (int)(stacktop[-ext->array_spec.dim+k+1]) - 1;
+              }
+              stacktop -= ext->array_spec.dim;
+   
+   #define ATTRCASE(type) \
+            switch ( assign_type ) \
+            { case ASSIGN_OP: \
+                ((type*)get_extra(id,n))[spot] = (type)*(stacktop--); break; \
+              case PLUSASSIGN_OP: \
+                ((type*)get_extra(id,n))[spot] += (type)*(stacktop--); break; \
+              case SUBASSIGN_OP: \
+                ((type*)get_extra(id,n))[spot] -= (type)*(stacktop--); break; \
+              case MULTASSIGN_OP: \
+                ((type*)get_extra(id,n))[spot] *= (type)*(stacktop--); break; \
+              case DIVASSIGN_OP: \
+                ((type*)get_extra(id,n))[spot] /= (type)*(stacktop--); break; \
+            } 
+   
+             switch ( ext->type )
+             { case REAL_TYPE:  
+                   switch ( assign_type )
+                   { case ASSIGN_OP:
+                       ((REAL*)get_extra(id,n))[spot] = *(stacktop--); break;
+                      case PLUSASSIGN_OP:
+                       ((REAL*)get_extra(id,n))[spot] += *(stacktop--); break;
+                      case SUBASSIGN_OP:
+                       ((REAL*)get_extra(id,n))[spot] -= *(stacktop--); break;
+                      case MULTASSIGN_OP:
+                       ((REAL*)get_extra(id,n))[spot] *= *(stacktop--); break;
+                      case DIVASSIGN_OP:
+                       ((REAL*)get_extra(id,n))[spot] /= *(stacktop--); break;
+                   }
+                   break;
+                 case INTEGER_TYPE:
+                   switch ( assign_type )
+                   { case ASSIGN_OP:
+                       ((int*)get_extra(id,n))[spot] = (int)*(stacktop--); break;
+                      case PLUSASSIGN_OP:
+                       ((int*)get_extra(id,n))[spot] += (int)*(stacktop--); break;
+                      case SUBASSIGN_OP:
+                       ((int*)get_extra(id,n))[spot] -= (int)*(stacktop--); break;
+                      case MULTASSIGN_OP:
+                       ((int*)get_extra(id,n))[spot] = 
+                          (int)(((int*)get_extra(id,n))[spot] * *(stacktop--));break;
+                      case DIVASSIGN_OP:
+                       ((int*)get_extra(id,n))[spot] = 
+                          (int)(((int*)get_extra(id,n))[spot] / *(stacktop--));break;
+                   }
+                   break;
+   
+                 case ULONG_TYPE:
+                   ATTRCASE(unsigned long int);
+                   break;
+   
+                 case LONG_TYPE:
+                   ATTRCASE(long int);
+                   break;
+   
+                 case UINT_TYPE:
+                   ATTRCASE(unsigned int);
+                   break;
+   
+                 case UCHAR_TYPE:
+                   ATTRCASE(unsigned char);
+                   break;
+   
+                 case CHAR_TYPE:
+                   ATTRCASE(char);
+                   break;
+   
+                 case SHORT_TYPE:
+                   ATTRCASE(short int);
+                   break;
+   
+                 case USHORT_TYPE:
+                   ATTRCASE(unsigned short int);
+                   break;
+   
+                 case ELEMENTID_TYPE:
+                 case VERTEX_TYPE:
+                 case EDGE_TYPE:
+                 case FACET_TYPE:
+                 case BODY_TYPE:
+                 case FACETEDGE_TYPE:
+                   switch ( assign_type )
+                   { case ASSIGN_OP:
+                       ((element_id*)get_extra(id,n))[spot] = 
+                           *(element_id*)(stacktop--); break;
+                     default: 
+                         { sprintf(errmsg,"Illegal assignment operation on element id attribute.\n");
+                           sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                                file_names[node->file_no],node->line_no);
+                            kb_error(3453, errmsg,RECOVERABLE);
+                         }
+                   }
+   
+                 case PTR_TYPE:
+                   switch ( assign_type )
+                   { case ASSIGN_OP:
+                       ((char**)get_extra(id,n))[spot] = 
+                           *(char**)(stacktop--); break;
+                     default: 
+                         { sprintf(errmsg,"Illegal assignment operation on pointer attribute.\n");
+                           sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                                file_names[node->file_no],node->line_no);
+                           kb_error(3454, errmsg, RECOVERABLE);
+                         }
+                   }
+                 case BOUNDARY_TYPE:
+                 case CONSTRAINT_TYPE:
+                 case QUANTITY_TYPE:
+                 case INSTANCE_TYPE:
+                 case PROCEDURE_TYPE:
+                   switch ( assign_type )
+                   { case ASSIGN_OP:
+                       ((int*)get_extra(id,n))[spot] = 
+                           *(int*)(stacktop--); break;
+                     default: 
+                         { sprintf(errmsg,"Illegal assignment operation on attribute.\n");
+                           sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                                file_names[node->file_no],node->line_no);
+                           kb_error(3682,errmsg,RECOVERABLE);
+                         }
+                   }
+              }
+           }
+           break;
+
+           case SET_DENSITY_NODE:
+           { REAL density = *(stacktop--);
+              REAL oldvalue = 0.0;
+              if ( density != 1.0 ) set_attr(id,DENSITY);
+              switch ( id_type(id) )
+                 { case EDGE: oldvalue = get_edge_density(id); break;
+                   case FACET: oldvalue = get_facet_density(id); break;
+                   case BODY: oldvalue = get_body_density(id); break;
+                 }
+              switch ( assign_type )
+                 { case ASSIGN_OP: break;
+                   case PLUSASSIGN_OP: density += oldvalue; break;
+                   case SUBASSIGN_OP: density = oldvalue - density; break;
+                   case MULTASSIGN_OP: density *= oldvalue; break;
+                   case DIVASSIGN_OP: density = oldvalue / density; break;
+                 }
+              switch ( id_type(id) )
+                 { case EDGE: set_edge_density(id,density); 
+                       pressure_set_flag = 0; break;
+                   case FACET: set_facet_density(id,density);
+                       pressure_set_flag = 0; break;
+                   case BODY: set_body_density(id,density);
+                       web.gravflag = 1;
+                       if (gravity_quantity_num >= 0 )
+                           GEN_QUANT(gravity_quantity_num)->modulus =
+                                 web.grav_const;
+                       break;
+                 }
+              *recalc_flag = 1;
+             }
+           break;
+   
+           case SET_PHASE_NODE:
+           { int phase = (int)*(stacktop--);
+              switch ( id_type(id) )
+                 { case BODY: set_b_phase(id,phase); break;
+                   case FACET: set_f_phase(id,phase); break;
+                 }
+              *recalc_flag = 1;
+           }
+           break;
+   
+           case SET_VOLCONST_NODE: 
+           { REAL v = *(stacktop--);
+              REAL oldvalue = get_body_volconst(id); 
+              switch ( assign_type )
+                 { case ASSIGN_OP:    break;
+                   case PLUSASSIGN_OP: v +=  oldvalue; break;
+                   case SUBASSIGN_OP: v = oldvalue - v; break;
+                   case MULTASSIGN_OP: v = oldvalue * v; break;
+                   case DIVASSIGN_OP: v = oldvalue / v; break;
+                 }
+             set_body_volconst(id,v); 
+             set_body_volume(id,get_body_volume(id)+v-oldvalue,SETSTAMP);
+             set_body_oldvolume(id,get_body_oldvolume(id)+v-oldvalue);
+             if ( everything_quantities_flag )
+               GEN_QUANT(get_body_volquant(id))->volconst = v;
+              *recalc_flag = 1;
+             break;
+           }
+
+           case SET_TARGET_NODE: 
+           { REAL v = *(stacktop--);
+              REAL oldvalue = get_body_fixvol(id); 
+              switch ( assign_type )
+                 { case ASSIGN_OP:    break;
+                   case PLUSASSIGN_OP: v +=  oldvalue; break;
+                   case SUBASSIGN_OP: v = oldvalue - v; break;
+                   case MULTASSIGN_OP: v = oldvalue * v; break;
+                   case DIVASSIGN_OP: v = oldvalue / v; break;
+                 }
+              if ( get_attr(id) & PRESSURE )
+              { sprintf(errmsg,"Must unset body pressure before fixing target.\n");
+                 sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+                 kb_error(2029,errmsg,RECOVERABLE);
+              }
+             set_attr(id,FIXEDVOL);
+             set_body_fixvol(id,v); 
+             *recalc_flag = 1;
+             break;
+           }
+           case SET_PRESSURE_NODE: 
+           { REAL p = *(stacktop--);
+              REAL oldvalue = get_body_pressure(id); 
+              switch ( assign_type )
+                 { case ASSIGN_OP:    break;
+                   case PLUSASSIGN_OP: p +=  oldvalue; break;
+                   case SUBASSIGN_OP: p = oldvalue - p; break;
+                   case MULTASSIGN_OP: p = oldvalue * p; break;
+                   case DIVASSIGN_OP: p = oldvalue / p; break;
+                 }
+              if ( get_attr(id) & FIXEDVOL )
+              { sprintf(errmsg,"Must unset body target before fixing pressure.\n");
+                sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+                kb_error(2030,errmsg,RECOVERABLE);
+              }
+             set_attr(id,PRESSURE);
+             set_body_pressure(id,p);    web.pressflag = 1;
+             if ( everything_quantities_flag )
+             { struct gen_quant *q = GEN_QUANT(get_body_volquant(id));
+               if ( p == 0.0 )
+               { q->modulus = 1.0;
+                  if ( !(q->flags & Q_INFO) )
+                  { q->flags &= ~(Q_ENERGY|Q_FIXED|Q_CONSERVED);
+                     q->flags |= Q_INFO;
+                  }
+               }
+               else 
+               { q->modulus = -p;
+                  if ( !(q->flags & Q_ENERGY ) )
+                  { q->flags &= ~(Q_INFO|Q_FIXED|Q_CONSERVED);
+                     q->flags |= Q_ENERGY;
+                  }
+               }
+             }
+              *recalc_flag = 1;
+             break;
+           }
+
+           case SET_OPACITY_NODE:
+             facet_alpha = *(stacktop)--;
+             break;
+   
+           case SET_CONSTRAINT_NODE:
+           { int con = (int)*(stacktop--);
+              struct constraint *constr = get_constraint(con);
+              if ( (con<0) || (con>=web.maxcon) || !(constr->attr & IN_USE))
+              { sprintf(errmsg,"Illegal constraint number: %d.\n",con);
+                sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+                kb_error(1146,errmsg,RECOVERABLE);
+              } 
+             if ( get_attr(id) & BOUNDARY ) 
+             { sprintf(errmsg,
+                 "Cannot set constraint on %s %s since it is on a boundary.\n",
+                  typenames[id_type(id)],ELNAME(id));
+                sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+               kb_error(5111,errmsg,RECOVERABLE);
+             }
+
+              set_attr(id,CONSTRAINT);
+              if ( constr->attr & CON_ENERGY )
+                 set_attr(id, BDRY_ENERGY);
+              if ( constr->attr & CON_CONTENT )
+                 set_attr(id, BDRY_CONTENT);
+              switch ( id_type(id) )
+                 { case VERTEX: set_v_constraint_map(id,con); 
+                              project_v_constr(id,ACTUAL_MOVE,RESET_ONESIDEDNESS);
+                              break;
+                   case EDGE: set_e_constraint_map(id,con); break;
+                   case FACET: set_f_constraint_map(id,con); break;
+                 }
+              *recalc_flag = 1;
+             }
+           break;
+   
+           case SET_ORIGINAL_NODE:
+             set_original(id,(int)*(stacktop--)-1 | ((element_id)id_type(id)<<TYPESHIFT)
+                  | VALIDMASK);
+             break;
+   
+           case SET_COLOR_NODE:
+           { int color = (int)*(stacktop--);
+              switch ( id_type(id) )
+                 { case EDGE: set_edge_color(id,color); break;
+                   case FACET: set_facet_color(id,color); break;
+                 }
+              *update_display_flag = 1;
+           }
+           break;
+   
+           case SET_FRONTCOLOR_NODE:
+           { int color = (int)*(stacktop--);
+              set_facet_frontcolor(id,color);
+              *update_display_flag = 1;
+           }
+           break;
+   
+           case SET_BACKCOLOR_NODE:
+           { int color = (int)*(stacktop--);
+              set_facet_backcolor(id,color);
+              *update_display_flag = 1;
+           }
+           break;
+   
+           case SET_WRAP_NODE:
+           { int w = (int)*(stacktop--);
+             if ( web.symmetry_flag )
+             { set_edge_wrap(id,w);
+               *update_display_flag = 1;
+             }
+           }
+           break;
+   
+           case SET_COORD_NODE: case SET_COORD_1_NODE: 
+             if ( node->right ) /* indexed */
+             { int dim = (int)*(stacktop--)-1;
+               REAL oldvalue = get_coord(id)[dim]; 
+               REAL v;
+               if ( (dim >= SDIM) || (dim < 0) )
+                   { sprintf(errmsg,
+                      "Trying to set coordinate %d, in space dimension %d.\n",
+                           dim,SDIM);
+                     sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                          file_names[node->file_no],node->line_no);
+                     kb_error(2031,errmsg,RECOVERABLE);
+                   }
+               v = *(stacktop--);
+               switch ( assign_type )
+                 { case ASSIGN_OP:  break;
+                   case PLUSASSIGN_OP: v +=  oldvalue; break;
+                   case SUBASSIGN_OP: v = oldvalue - v; break;
+                   case MULTASSIGN_OP: v = oldvalue * v; break;
+                   case DIVASSIGN_OP: v = oldvalue / v; break;
+                 }
+                 get_coord(id)[dim] = v;
+                 *recalc_flag = 1;
+                 break;
+              }
+              /* else fall through */
+   
+          case SET_COORD_2_NODE:
+          case SET_COORD_3_NODE: case SET_COORD_4_NODE: case SET_COORD_5_NODE:
+          case SET_COORD_6_NODE: case SET_COORD_7_NODE: case SET_COORD_8_NODE:
+             { REAL v = *(stacktop--);
+               REAL oldvalue = get_coord(id)[node->op2.attr_kind-SET_COORD_1_NODE];
+               switch ( assign_type )
+                 { case ASSIGN_OP:  break;
+                   case PLUSASSIGN_OP: v +=  oldvalue; break;
+                   case SUBASSIGN_OP: v = oldvalue - v; break;
+                   case MULTASSIGN_OP: v = oldvalue * v; break;
+                   case DIVASSIGN_OP: v = oldvalue / v; break;
+                 }
+               get_coord(id)[node->op2.attr_kind-SET_COORD_1_NODE] = v;
+               if ( node->op2.attr_kind-SET_COORD_1_NODE <= SDIM ) *recalc_flag = 1;
+             }
+             break;
+   
+          case SET_PARAM_NODE: case SET_PARAM_1_NODE: case SET_PARAM_2_NODE:
+          case SET_PARAM_3_NODE: case SET_PARAM_4_NODE:
+             if ( get_vattr(id) & BOUNDARY )
+               { struct boundary *boundary = get_boundary(id);
+                  REAL *param = get_param(id);
+                  REAL *xx = get_coord(id);
+                  REAL v;
+                  int pnum = node->op2.attr_kind-SET_PARAM_1_NODE; 
+                  REAL oldvalue = param[pnum];
+                  if ( node->right ) pnum += (int)*(stacktop--);
+                  if ( pnum > boundary->pcount )
+                  { sprintf(errmsg,"Parameter number is %d; maximum is %d.\n",
+                          pnum,boundary->pcount);
+                    sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                         file_names[node->file_no],node->line_no);
+                    kb_error(1213,errmsg,RECOVERABLE);
+                  }
+                  v = *(stacktop--);
+                  switch ( assign_type )
+                  { case ASSIGN_OP:  break;
+                    case PLUSASSIGN_OP: v +=  oldvalue; break;
+                    case SUBASSIGN_OP: v = oldvalue - v; break;
+                    case MULTASSIGN_OP: v = oldvalue * v; break;
+                    case DIVASSIGN_OP: v = oldvalue / v; break;
+                  }
+                  param[pnum] = v; 
+                  PUSH_TRACE;
+                  for ( k = 0 ; k < SDIM ; k++ )
+                     xx[k] = eval(boundary->coordf[k],param,id,NULL);
+                  POP_TRACE;
+                  *recalc_flag = 1;
+               }
+              else /* just parking a value probably */ 
+                 { REAL *param = get_param(id);
+                   int pnum = node->op2.attr_kind-SET_PARAM_1_NODE;
+                   REAL oldvalue = param[pnum];
+                   REAL v;
+                   if ( node->right ) pnum += (int)*(stacktop--);
+                  v = *(stacktop--);
+                  switch ( assign_type )
+                  { case ASSIGN_OP:  break;
+                    case PLUSASSIGN_OP: v +=  oldvalue; break;
+                    case SUBASSIGN_OP: v = oldvalue - v; break;
+                    case MULTASSIGN_OP: v = oldvalue * v; break;
+                    case DIVASSIGN_OP: v = oldvalue / v; break;
+                  }
+   
+                  param[pnum] = v;
+                }
+                break;
+   
+             case SET_FRONTBODY_NODE:
+             case SET_BACKBODY_NODE:
+               b_id = get_ordinal_id(BODY,(int)*(stacktop--)-1);
+               if ( b_id && !valid_id(b_id) ) 
+               { sprintf(errmsg,"Invalid body in SET FRONTBODY or BACKBODY.\n");
+                 sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                      file_names[node->file_no],node->line_no);
+                 kb_error(2032,errmsg,RECOVERABLE);
+               }
+               set_body((node->op2.attr_kind==SET_FRONTBODY_NODE?id:inverse_id(id)),b_id);
+               *recalc_flag = 1;
+               break;
+   
+            default: 
+               sprintf(errmsg,"Unhandled SET attribute %d\n",node->op2.attr_kind);
+               sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                    file_names[node->file_no],node->line_no);
+               kb_error(2033,errmsg,RECOVERABLE);
+               break;
+   
+           } /* end assigned SET_ATTRIBUTE_A */
+         }
+         break;
 
       /******************************/
       /* initializing element loops */
       /******************************/
 
-      case INIT_VERTEX_: /* all vertices */
+    case INIT_VERTEX_NODE: /* all vertices */
            *(element_id *)++stacktop = q_id; /* save old element */
            *(vertex_id*)++stacktop=web.skel[VERTEX].last; /* sentinel */
            *(element_id *)++stacktop = web.skel[VERTEX].used;
            break;
 
-      case INIT_EDGE_VERTEX_: /* edge endpoints */
+    case INIT_EDGE_VERTEX_NODE: /* edge endpoints */
+           *(element_id *)++stacktop = q_id; /* save old element */
            if ( node->op2.localnum ) 
               id = *(element_id*)get_localp(node->op2.localnum);
            else id = q_id;
-           *(element_id *)++stacktop = id; /* save old element */
+ //          *(element_id *)++stacktop = id; /* save old element */
            *(int *)++stacktop = 0; /* element number */
            *(element_id **)++stacktop = get_edge_vertices(id);
            break;
 
-      case INIT_FACET_VERTEX_: /* facet vertices */
+    case INIT_FACET_VERTEX_NODE: /* facet vertices */
+          *(element_id *)++stacktop = q_id; /* save old element */
            if ( node->op2.localnum ) 
               id = *(element_id*)get_localp(node->op2.localnum);
            else id = q_id;
-           *(element_id *)++stacktop = id; /* save old element */
+//           *(element_id *)++stacktop = id; /* save old element */
            if ( (web.representation == SIMPLEX) ||
                    (web.modeltype==LAGRANGE) || 
                 ((web.modeltype==QUADRATIC) && (web.representation==SOAPFILM)))
@@ -1771,7 +1879,7 @@ struct locallist_t *localbase;
            }
            break;
 
-      case INIT_BODY_VERTEX_: /* vertices on body */
+    case INIT_BODY_VERTEX_NODE: /* vertices on body */
            sprintf(errmsg,"Can't do body vertices yet.\n");
            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                  file_names[node->file_no],node->line_no);
@@ -1779,17 +1887,18 @@ struct locallist_t *localbase;
 
            break;
 
-      case INIT_EDGE_: /* all edges */
+    case INIT_EDGE_NODE: /* all edges */
            *(element_id *)++stacktop = q_id; /* save old element */
            *(edge_id *)++stacktop = web.skel[EDGE].last; /* sentinel */
            *(element_id *)++stacktop = web.skel[EDGE].used;
            break;
 
-      case INIT_VERTEX_EDGE_:
+    case INIT_VERTEX_EDGE_NODE:
+           *(element_id *)++stacktop = q_id; /* save old element */
            if ( node->op2.localnum ) 
               id = *(element_id*)get_localp(node->op2.localnum);
            else id = q_id;
-           *(element_id *)++stacktop = id; /* save old element */
+//           *(element_id *)++stacktop = id; /* save old element */
            if ( get_vattr(id) & Q_MIDFACET )
            { *(element_id *)++stacktop = NULLID;
              *(element_id *)++stacktop = NULLID;
@@ -1800,11 +1909,12 @@ struct locallist_t *localbase;
            }
            break;
            
-      case INIT_FACET_EDGE_:
+    case INIT_FACET_EDGE_NODE:
+           *(element_id *)++stacktop = q_id; /* save old element */
            if ( node->op2.localnum ) 
               id = *(element_id*)get_localp(node->op2.localnum);
            else id = q_id;
-           *(element_id *)++stacktop = id; /* save old element */
+//           *(element_id *)++stacktop = id; /* save old element */
            if ( web.representation == STRING )
            { facetedge_id fe = get_facet_fe(id);
              if ( inverted(id) && valid_id(fe) ) 
@@ -1824,66 +1934,71 @@ struct locallist_t *localbase;
            }
            break;
            
-      case INIT_BODY_EDGE_:
+    case INIT_BODY_EDGE_NODE:
            sprintf(errmsg,"Can't do body edges yet.\n");
            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                  file_names[node->file_no],node->line_no);
            kb_error(1215,errmsg,RECOVERABLE);
            break;
 
-      case INIT_FACET_: /* all facets */
+    case INIT_FACET_NODE: /* all facets */
            *(element_id *)++stacktop = q_id; /* save old element */
            *(facet_id *)++stacktop = web.skel[FACET].last; /* sentinel */
            *(element_id *)++stacktop = web.skel[FACET].used;
            break;
 
-      case INIT_VERTEX_FACET_:
+    case INIT_VERTEX_FACET_NODE:
+ //       *(element_id *)++stacktop = q_id; /* save old element */
          if ( node->op2.localnum ) 
               id = *(element_id*)get_localp(node->op2.localnum);
          else id = q_id;
-         *(element_id *)++stacktop = id; /* save old element */
-
+//         *(element_id *)++stacktop = id; /* save old element */
+         *(element_id *)++stacktop = id;  //save the vertex
          *(element_id *)++stacktop = f_id = get_vertex_first_facet(id); 
          *(element_id *)++stacktop = f_id; 
          break;
 
-      case INIT_FACETEDGE_EDGE_:
+    case INIT_FACETEDGE_EDGE_NODE:
+          *(element_id *)++stacktop = q_id; /* save old element */
            if ( node->op2.localnum ) 
               id = *(element_id*)get_localp(node->op2.localnum);
            else id = q_id;
-           *(element_id *)++stacktop = id; /* save old element */
+//           *(element_id *)++stacktop = id; /* save old element */
            *(element_id *)++stacktop = get_fe_edge(id); /* start */
            *(element_id *)++stacktop = get_fe_edge(id);
            break;
 
-      case INIT_FACETEDGE_FACET_:
+    case INIT_FACETEDGE_FACET_NODE:
+           *(element_id *)++stacktop = q_id; /* save old element */
            if ( node->op2.localnum ) 
               id = *(element_id*)get_localp(node->op2.localnum);
            else id = q_id;
-           *(element_id *)++stacktop = id; /* save old element */
+//           *(element_id *)++stacktop = id; /* save old element */
            *(element_id *)++stacktop = get_fe_facet(id); /* start */
            *(element_id *)++stacktop = get_fe_facet(id);
            break;
 
-      case INIT_EDGE_FACET_:
-           if ( node->op2.localnum ) 
+    case INIT_EDGE_FACET_NODE:
+           *(element_id *)++stacktop = q_id; /* save old element */
+          if ( node->op2.localnum ) 
               id = *(element_id*)get_localp(node->op2.localnum);
            else id = q_id;
-           *(element_id *)++stacktop = id; /* save old element */
+//           *(element_id *)++stacktop = id; /* save old element */
            *(element_id *)++stacktop = get_edge_fe(id); /* start */
            *(element_id *)++stacktop = get_edge_fe(id);
            break;
 
-      case INIT_EDGE_FACETEDGE_:
-           if ( node->op2.localnum ) 
+    case INIT_EDGE_FACETEDGE_NODE:
+          *(element_id *)++stacktop = q_id; /* save old element */
+          if ( node->op2.localnum ) 
               id = *(element_id*)get_localp(node->op2.localnum);
            else id = q_id;
-           *(element_id *)++stacktop = id; /* save old element */
+//           *(element_id *)++stacktop = id; /* save old element */
            *(element_id *)++stacktop = get_edge_fe(id); /* start */
            *(element_id *)++stacktop = get_edge_fe(id);
            break;
 
-      case INIT_BODY_FACET_:
+    case INIT_BODY_FACET_NODE:
            if ( node->op2.localnum ) 
               id = *(element_id*)get_localp(node->op2.localnum);
            else id = q_id;
@@ -1902,6 +2017,8 @@ struct locallist_t *localbase;
                if ( counter++ > maxcount )
                { sprintf(errmsg,"Internal error: Body %s facet list is not closed.\n",
                       ELNAME(q_id));
+                 sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                                file_names[node->file_no],node->line_no);
                  kb_error(4376,errmsg,RECOVERABLE);
                }
              } while ( !equal_id(f_id,start_f) );
@@ -1909,13 +2026,13 @@ struct locallist_t *localbase;
            }
            break;
 
-      case INIT_BODY_: /* all bodies */
+    case INIT_BODY_NODE: /* all bodies */
            *(element_id *)++stacktop = q_id; /* save old element */
            *(body_id *)++stacktop = web.skel[BODY].last; /* sentinel */
            *(element_id *)++stacktop = web.skel[BODY].used;
            break;
 
-      case INIT_FACET_BODY_: 
+    case INIT_FACET_BODY_NODE: 
            if ( node->op2.localnum ) 
               id = *(element_id*)get_localp(node->op2.localnum);
            else id = q_id;
@@ -1924,27 +2041,27 @@ struct locallist_t *localbase;
            *(element_id *)++stacktop = NULLID;
            break;
 
-      case INIT_VERTEX_BODY_:
+    case INIT_VERTEX_BODY_NODE:
            sprintf(errmsg,"Can't do vertex bodies yet.\n");
            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                  file_names[node->file_no],node->line_no);
            kb_error(1216,errmsg,RECOVERABLE);
            break;
 
-      case INIT_EDGE_BODY_:
+    case INIT_EDGE_BODY_NODE:
            sprintf(errmsg,"Can't do edge bodies yet.\n");
            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                  file_names[node->file_no],node->line_no);
            kb_error(1217,errmsg,RECOVERABLE);
            break;
 
-      case INIT_FACETEDGE_: /* all edges */
+    case INIT_FACETEDGE_NODE: /* all edges */
            *(element_id *)++stacktop = q_id; /* save old element */
            *(edge_id *)++stacktop = web.skel[FACETEDGE].last; /* sentinel */
            *(element_id *)++stacktop = web.skel[FACETEDGE].used;
            break;
 
-      case SINGLE_ELEMENT_INIT_: 
+    case SINGLE_ELEMENT_INIT_NODE: 
            *(element_id *)++stacktop = q_id; /* save old element */
            *(++stacktop) = 0.0 ; /* iteration count */
            stacktop++;  /* dummy local to pop */
@@ -1955,12 +2072,12 @@ struct locallist_t *localbase;
     /* simple commands */
     /*******************/
 
-    case NOP_:
-    case NULLBLOCK_:
-    case NULLCMD_:
+    case NOP_NODE:
+    case NULLBLOCK_NODE:
+    case NULLCMD_NODE:
         break;
 
-    case DEFINE_EXTRA_:
+    case DEFINE_EXTRA_NODE:
        { int one = 1; 
          struct extra *ex = EXTRAS(node->op2.eltype) + node->op1.extranum;
          if ( ex->array_spec.dim == 0 )
@@ -1971,7 +2088,7 @@ struct locallist_t *localbase;
          break;
        }
 
-    case DEFINE_EXTRA_INDEX_:  /* have indexes tacked onto DEFINE_EXTRA_ */
+    case DEFINE_EXTRA_INDEX_NODE:  /* have indexes tacked onto DEFINE_EXTRA_ */
        { int newsizes[MAXARRAYDIMS];
          struct extra *ex = EXTRAS(node->op2.eltype) + node->op1.extranum;
          for ( k = ex->array_spec.dim-1 ; k >= 0 ; k-- ) 
@@ -1980,7 +2097,7 @@ struct locallist_t *localbase;
          break;
        }
 
-    case HISTORY_:
+    case HISTORY_NODE:
         if ( history_space == NULL ) { outstring("No history.\n"); break;}
         for ( k = history_count-1 ; k >= 0 ; k-- )
           { h = history_space+history_offsets[k];
@@ -1989,17 +2106,18 @@ struct locallist_t *localbase;
           }
           break;
 
-    case REDIRECT_:
-    case REDIRECTOVER_:
+    case REDIRECT_NODE:
+    case REDIRECTOVER_NODE:
         { struct stat st;
            int retval;
+           flush_counts(); // so don't get into redirected output
            if ( node->left ) s = *(char**)(stacktop--);
            else s = node->op1.string;
            *(FILE **)(++stacktop) = outfd;
            retval = stat(s,&st);
            outfd = NULL;
            if ( ((retval == 0) && (st.st_mode & S_IFIFO)) 
-            || (node->type==REDIRECTOVER_) )
+            || (node->type==REDIRECTOVER_NODE) )
               outfd = fopen(s,"w");
            else outfd = fopen(s,"a");
            if ( outfd == NULL )
@@ -2020,13 +2138,50 @@ struct locallist_t *localbase;
           }
            break;
 
-    case REDIRECT_END_:
+    case REDIRECT_END_NODE:
            fclose(outfd);
            /* outfd = stdout; */
            outfd = *(FILE**)(stacktop--);
            break;
 
-    case PIPE_:
+    case REDIRECT_ERR_NODE:
+    case REDIRECTOVER_ERR_NODE:
+        { struct stat st;
+           int retval;
+           flush_counts(); // so don't get into redirected output
+           if ( node->left ) s = *(char**)(stacktop--);
+           else s = node->op1.string;
+           *(FILE **)(++stacktop) = erroutfd;
+           retval = stat(s,&st);
+           erroutfd = NULL;
+           if ( ((retval == 0) && (st.st_mode & S_IFIFO)) 
+            || (node->type==REDIRECTOVER_NODE) )
+              erroutfd = fopen(s,"w");
+           else erroutfd = fopen(s,"a");
+           if ( erroutfd == NULL )
+           { erroutfd = stderr;
+#ifdef MAC_APP
+             sprintf(errmsg,"Cannot open file %s. \n",s);
+#else
+             perror(s);
+             sprintf(errmsg,"Cannot open redirection file %s.\n",s);
+#endif
+             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                 file_names[node->file_no],node->line_no);
+             kb_error(5218,errmsg,RECOVERABLE);
+
+            }
+           if ( node->left && (node[node->left].flags & DEALLOCATE_POINTER) )
+             myfree(s);
+          }
+           break;
+
+    case REDIRECT_ERR_END_NODE:
+           fclose(erroutfd);
+           erroutfd = *(FILE**)(stacktop--);
+           break;
+
+    case PIPE_NODE:
            if ( node->left ) s = *(char**)(stacktop--);
            else s = node->op1.string;
            *(FILE **)(++stacktop) = outfd;
@@ -2057,7 +2212,7 @@ struct locallist_t *localbase;
            broken_pipe_flag = 0; /* reset */
            break;
  
-       case PIPE_END_:
+    case PIPE_END_NODE:
 #ifdef NOPIPE
            fclose(outfd);
 #else
@@ -2067,21 +2222,21 @@ struct locallist_t *localbase;
            outfd = *(FILE**)(stacktop--);
            break;
 
-       case DEBUG_:
+    case DEBUG_NODE:
           outstring(yydebug?"YACC debugging was ON.":
               "YACC debugging was OFF.\n");
           yydebug = (node->op1.toggle_state==ON_) ? 1 : 0;
           outstring(yydebug?"Now ON.\n":"Now OFF.\n");
           break;
 
-       case ITDEBUG_:
+    case ITDEBUG_NODE:
           outstring(itdebug?"Iteration debugging was ON.":
               "Iteration debugging was OFF.\n");
           itdebug = (node->op1.toggle_state==ON_) ? 1 : 0;
           outstring(itdebug?"Now ON.\n":"Now OFF.\n");
           break;
 
-       case MEMDEBUG_:
+    case MEMDEBUG_NODE:
           old = memdebug;
           memdebug = (node->op1.toggle_state==ON_) ? 1 : 0;
 #ifdef M_DEBUG
@@ -2092,31 +2247,31 @@ struct locallist_t *localbase;
           outstring(old?" (was on)\n":" (was off)\n");
           break;
 
-       case RECALC_: recalc(); break;
+    case RECALC_NODE: recalc(); break;
 
-       case CLOSE_SHOW_: close_graphics(); break;
+    case CLOSE_SHOW_NODE: close_graphics(); break;
 
-       case TOPINFO_: 
+    case TOPINFO_NODE: 
           oldquiet = quiet_flag; quiet_flag = 0;
           top_dump(outfd);
           quiet_flag = oldquiet;   
           break;
 
-       case BOTTOMINFO_: 
+    case BOTTOMINFO_NODE: 
           oldquiet = quiet_flag; quiet_flag = 0;
           bottom_dump(outfd);
           quiet_flag = oldquiet;   
           break;
 
-       case LIST_QUANTITY_:
+    case LIST_QUANTITY_NODE:
           list_quantity(node->op1.quant_id);
           break;
 
-       case LIST_METHOD_INSTANCE_:
+    case LIST_METHOD_INSTANCE_NODE:
           list_method_instance(node->op1.meth_id);
           break;
 
-       case LIST_CONSTRAINT_:
+    case LIST_CONSTRAINT_NODE:
           k = (int)(*(stacktop--));
           if ( k < 0 || k >= web.maxcon || !(get_constraint(k)->attr & IN_USE) )
             kb_error(3614,"Invalid constraint for list_constraint.",
@@ -2124,7 +2279,7 @@ struct locallist_t *localbase;
           list_constraint(k);
           break;
 
-       case LIST_BOUNDARY_:
+    case LIST_BOUNDARY_NODE:
           k = (int)(*(stacktop--));
           if ( k < 0 || k >= web.bdrymax || !(web.boundaries[k].attr & IN_USE) )
             kb_error(3615,"Invalid boundary for list_boundary.",
@@ -2132,26 +2287,26 @@ struct locallist_t *localbase;
           list_boundary(k);
           break;
 
-       case LIST_PROCS_:
+    case LIST_PROCS_NODE:
           oldquiet = quiet_flag; quiet_flag = 0;
           list_procedures(LIST_PROTO);
           quiet_flag = oldquiet;   
           break;
     
-       case LIST_ATTRIBUTES_:
+    case LIST_ATTRIBUTES_NODE:
           oldquiet = quiet_flag; quiet_flag = 0;
           outstring("//Element attributes: \n");
           list_attributes();
           quiet_flag = oldquiet;   
           break;
     
-       case PRINT_ARRAY_:
+    case PRINT_ARRAY_NODE:
           oldquiet = quiet_flag; quiet_flag = 0;
-          print_array(globals(node->op1.name_id)->attr.arrayptr,NULL);
+          print_array(globals(node->op1.name_id)->attr.arrayptr,NULL,PRINT_PLAIN);
           quiet_flag = oldquiet;   
           break;
 
-       case PRINT_ARRAY_LVALUE_:
+    case PRINT_ARRAY_LVALUE_NODE:
         { struct array *a,kludge;
           oldquiet = quiet_flag; quiet_flag = 0;
           a = get_name_arrayptr(node->op2.name_id,localstack,localbase);
@@ -2161,55 +2316,30 @@ struct locallist_t *localbase;
             kludge.sizes[0] = SDIM;
             a = &kludge;
           }
-          print_array(a,*(char**)(stacktop--));
+          print_array(a,*(char**)(stacktop--),PRINT_PLAIN);
           quiet_flag = oldquiet;   
           break;
         }
         
-       case PRINT_ARRAYPART_:
+    case PRINT_ARRAYPART_NODE:
         { struct array *part;
-          struct global *g = globals(node[node->left].op1.name_id);
-          int offset = 0;
           struct array *a;
+          char *datastart = *(char**)(stacktop--);
 
-          if ( g->flags & GLOB_LOCALVAR )
-             a = *(struct array **)(localstack+g->value.offset);
-          else
-             a = g->attr.arrayptr;
+          a = get_name_arrayptr(node[node->left].op2.name_id,localstack,localbase);
 
           part = (struct array *)temp_calloc(1,sizeof(struct array)+
                   a->dim*sizeof(int));
-          part->dim =  a->dim - node->op1.indexcount;
+          part->dim =  a->dim - node->op5.indexcount;
           part->datatype = a->datatype;
           part->itemsize = a->itemsize;
           part->datacount = a->datacount;
-          part->datastart = a->datastart +
-                 ((char*)(a) - (char*)part);
-          for ( n = 0; n < node->op1.indexcount ; n++ )
-          { int size = a->sizes[n];
-            int inx = (int)*(stacktop - node->op1.indexcount + n + 1) - 1;
-            if ( inx >= size )
-            { sprintf(errmsg,
-                "Index %d of array %s is %d; exceeds declared size, %d\n",
-                n+1,g->name,inx+1,size);
-              sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
-                 file_names[node->file_no],node->line_no);
-              kb_error(2610,errmsg,RECOVERABLE);
-            }
-            if ( size ) part->datacount /= size;
-            offset *= size;
-            offset += inx;
-          }
-          stacktop -= n;
-          for ( k = 0 ; n < a->dim ; n++,k++ )
-          { int size = a->sizes[n];
-            part->sizes[k] = size;
-            offset *= size;
-          }
-          part->datastart += offset*part->itemsize;
+          part->datastart = (char*)part - (char*)datastart;
+          for ( i = node->op5.indexcount, j = 0  ; i < a->dim ; i++,j++ )
+            part->sizes[j] = a->sizes[i];
           msg[0] = 0;
           oldquiet = quiet_flag; quiet_flag = 0;
-          print_array(part,NULL);
+          print_array(part,datastart,PRINT_PLAIN);
           quiet_flag = oldquiet;   
           temp_free((char*)part);
           break;
@@ -2217,7 +2347,7 @@ struct locallist_t *localbase;
 
        
 
-       case PRINT_ATTR_ARRAY_:
+    case PRINT_ATTR_ARRAY_NODE:
         { struct array *part;
           struct extra *ext;
           int offset = 0;
@@ -2228,14 +2358,14 @@ struct locallist_t *localbase;
 
           part = (struct array *)temp_calloc(1,sizeof(struct array)+
                   ext->array_spec.dim*sizeof(int));
-          part->dim =  ext->array_spec.dim - node->op1.indexcount;
+          part->dim =  ext->array_spec.dim - node->op5.indexcount;
           part->datatype = ext->type;
           part->itemsize = ext->array_spec.itemsize;
           part->datacount = ext->array_spec.datacount;
           part->datastart =  (char*)get_extra(id,n) - (char*)part;
-          for ( n = 0; n < node->op1.indexcount ; n++ )
+          for ( n = 0; n < node->op5.indexcount ; n++ )
           { int size = ext->array_spec.sizes[n];
-            int inx = (int)*(stacktop - node->op1.indexcount + n + 1) - 1;
+            int inx = (int)*(stacktop - node->op5.indexcount + n + 1) - 1;
             if ( inx >= size )
             { sprintf(errmsg,
                 "Index %d of attribute %s is %d; exceeds declared size, %d\n",
@@ -2257,17 +2387,20 @@ struct locallist_t *localbase;
           part->datastart += offset*part->itemsize;
           msg[0] = 0;
           oldquiet = quiet_flag; quiet_flag = 0;
-          print_array(part,NULL);
+          print_array(part,NULL,PRINT_PLAIN);
           quiet_flag = oldquiet;   
           temp_free((char*)part);
           break;
         }
 
-       case DIRICHLET_:
-       case DIRICHLET_SEEK_:
-          scale = dirichlet(node->type==DIRICHLET_?0:1);
+    case DIRICHLET_NODE:
+    case DIRICHLET_SEEK_NODE:
+          scale = dirichlet(node->type==DIRICHLET_NODE?0:1);
           recalc();
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+          sprintf(msg,"%3d.  energy: %#*.*Qg  scale: %#g\n",gocount,
+              DWIDTH,DPREC, web.total_energy,(DOUBLE)scale);
+#elif defined(LONGDOUBLE)
           sprintf(msg,"%3d.  energy: %#*.*Lg  scale: %#g\n",gocount,
               DWIDTH,DPREC, web.total_energy,(DOUBLE)scale);
 #else
@@ -2277,11 +2410,14 @@ struct locallist_t *localbase;
           outstring(msg);
           break;
 
-       case SOBOLEV_:
-       case SOBOLEV_SEEK_:
-          scale = sobolev(node->type==SOBOLEV_?0:1);
+    case SOBOLEV_NODE:
+    case SOBOLEV_SEEK_NODE:
+          scale = sobolev(node->type==SOBOLEV_NODE?0:1);
           recalc();
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+          sprintf(msg,"%3d.  energy: %#*.*Qg  scale: %#g\n",gocount,
+              DWIDTH,DPREC,web.total_energy,(DOUBLE)scale);
+#elif defined(LONGDOUBLE)
           sprintf(msg,"%3d.  energy: %#*.*Lg  scale: %#g\n",gocount,
               DWIDTH,DPREC,web.total_energy,(DOUBLE)scale);
 #else
@@ -2291,13 +2427,16 @@ struct locallist_t *localbase;
           outstring(msg);
           break;
 
-       case HESSIAN_SEEK_:
+    case HESSIAN_SEEK_NODE:
        { REAL maxscale; 
           if ( node->left ) maxscale = *(stacktop--);
           else maxscale = 10.;
           scale = hessian_seek(maxscale);
           recalc();
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+          sprintf(msg,"%3d.  energy: %#*.*Qg  scale: %#g\n",gocount,
+              DWIDTH,DPREC,web.total_energy,(DOUBLE)scale);
+#elif defined(LONGDOUBLE)
           sprintf(msg,"%3d.  energy: %#*.*Lg  scale: %#g\n",gocount,
               DWIDTH,DPREC,web.total_energy,(DOUBLE)scale);
 #else
@@ -2308,7 +2447,7 @@ struct locallist_t *localbase;
         }
         break;
 
-       case HESSIAN_SADDLE_:
+    case HESSIAN_SADDLE_NODE:
        { REAL maxscale; 
           if ( node->left ) maxscale = *(stacktop--);
           else maxscale = 100.;
@@ -2316,14 +2455,17 @@ struct locallist_t *localbase;
        }
        break;
 
-       case HESSIAN_MENU_: 
+    case HESSIAN_MENU_NODE: 
           if ( hessian_subshell_flag )
           { kb_error(3633,"Can't do hessian_menu in a hessian subshell.\n",WARNING);
             break;
           }
            hessian_menu();
            recalc();
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+          sprintf(msg,"%3d.  energy: %#*.*Qg \n",1, 
+               DWIDTH,DPREC,web.total_energy);
+#elif defined(LONGDOUBLE)
           sprintf(msg,"%3d.  energy: %#*.*Lg \n",1, 
                DWIDTH,DPREC,web.total_energy);
 #else
@@ -2333,10 +2475,13 @@ struct locallist_t *localbase;
            outstring(msg);
            break;
 
-       case HESSIAN_ : 
+    case HESSIAN_NODE: 
            hessian_auto();
            recalc();
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+          sprintf(msg,"%3d.  energy: %#*.*Qg  \n",gocount, DWIDTH,
+               DPREC,web.total_energy);
+#elif defined(LONGDOUBLE)
           sprintf(msg,"%3d.  energy: %#*.*Lg  \n",gocount, DWIDTH,
                DPREC,web.total_energy);
 #else
@@ -2346,9 +2491,9 @@ struct locallist_t *localbase;
            outstring(msg);
            break;
 
-       case SHELL_:  /* execute subshell */
+    case SHELL_NODE:  /* execute subshell */
 #if defined(__WIN32__) || defined(_WIN32)
-       spawnlp(P_WAIT,"command",NULL);
+       _spawnlp(_P_WAIT,"cmd.exe","cmd.exe",NULL);
 #else
 #if defined(MAC_APP) || defined(MAC_CW)
        kb_error(1221,"No subshell on Mac.\n",RECOVERABLE);
@@ -2363,16 +2508,16 @@ struct locallist_t *localbase;
 #endif
           break;
 
-       case SHOW_TRANS_:
+    case SHOW_TRANS_NODE:
            view_transform(*(char**)(stacktop--));
            update_display();
            break;
 
-       case CHECK_:
+    case CHECK_NODE:
           run_checks();
           break;
 
-       case CONVERT_TO_QUANTS_:
+    case CONVERT_TO_QUANTS_NODE:
           if ( everything_quantities_flag )
             outstring("Everything already quantities.\n");
           else
@@ -2381,29 +2526,29 @@ struct locallist_t *localbase;
           }
           break;
 
-       case SHOW_VOL_:
+    case SHOW_VOL_NODE:
           show_volumes();
           break;
 
-     case LOGFILE_:
+    case LOGFILE_NODE:
           start_logfile(*(char**)(stacktop--));
           outstring("Logfile ON.\n");
           break;
 
-     case KEYLOGFILE_:
+    case KEYLOGFILE_NODE:
           start_keylogfile(*(char**)(stacktop--));
           outstring("Keylogfile ON.\n");
           break;
 
-     case GEOMVIEW_:
+    case GEOMVIEW_NODE:
           geomview_command(*(char**)(stacktop--));
           break;
 
-     case IS_DEFINED_:
-         *stacktop = (identcase(*(char**)stacktop) != NEWIDENT_);  
+    case IS_DEFINED_NODE:
+         *stacktop = (identcase(*(char**)stacktop) != NEWIDENT_TOK);  
          break;
 
-     case REPARTITION_:
+    case REPARTITION_NODE:
 #ifdef MPI_EVOLVER
        mpi_repartition();
        update_display();
@@ -2413,11 +2558,11 @@ struct locallist_t *localbase;
 #endif
        break;
 
-     case EXEC_:
+    case EXEC_NODE:
        command(*(char**)(stacktop--),NO_HISTORY);
        break;
 
-     case PARALLEL_EXEC_:
+    case PARALLEL_EXEC_NODE:
 #ifdef MPI_EVOLVER
        mpi_parallel_exec(*(char**)(stacktop--));
 #else
@@ -2425,35 +2570,44 @@ struct locallist_t *localbase;
 #endif
        break;
 
-     case TASK_EXEC_:
+    case TASK_EXEC_NODE:
        { int task = (int)(stacktop[-1]); 
 #ifdef MPI_EVOLVER
          if ( task == 0 ) command(*(char**)(stacktop--),NO_HISTORY);
          else if ( task >= mpi_nprocs )
          { sprintf(errmsg,"Node number %d exceeds maximum node number, %d.\n",
               task,mpi_nprocs-1);
+           sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                                file_names[node->file_no],node->line_no);
            kb_error(3167,errmsg,RECOVERABLE);
          }
          else if ( task < 0 )
          { sprintf(errmsg,"Node number %d is negative!\n", task);
+           sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                                file_names[node->file_no],node->line_no);
            kb_error(3168,errmsg,RECOVERABLE);
          }
          else
            mpi_task_exec(task,*(char**)(stacktop--));
 #else
          if ( task != 0 )
-           kb_error(3169,"Node_exec node number must be 0 for non-MPI Evolver.\n",RECOVERABLE);
+         { 
+            sprintf(errmsg,"Node_exec node number must be 0 for non-MPI Evolver.\n");
+            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                                file_names[node->file_no],node->line_no);
+            kb_error(3169,errmsg,RECOVERABLE);
+         }
          command(*(char**)(stacktop--),NO_HISTORY);
 #endif
          stacktop--; /* pop node number */
        }
        break;
 
-     case SYSTEM_:
+    case SYSTEM_NODE:
        system(*(char**)(stacktop--));
        break;
 
-     case CHDIR_:
+    case CHDIR_NODE:
 #ifdef MSC
        k = _chdir(*(char**)(stacktop--));
        if ( k < 0 )
@@ -2477,12 +2631,12 @@ struct locallist_t *localbase;
 
        break;
 
-     case READ_:
+    case READ_NODE:
        if ( read_depth <= 1 ) warning_messages_new = 0;
        exec_file(NULL,*(char**)(stacktop--));
        break;
 
-     case VIEW_TRANSFORM_SWAP_COLORS_: 
+    case VIEW_TRANSFORM_SWAP_COLORS_NODE: 
         { int k = (int)(*stacktop--);
           if ( (k < 1) || (k > transform_count) )
           { sprintf(errmsg,
@@ -2497,7 +2651,7 @@ struct locallist_t *localbase;
           break;
         }
 
-     case VIEW_TRANSFORM_PARITY_:
+    case VIEW_TRANSFORM_PARITY_NODE:
         { int k = (int)(*stacktop--);
           if ( !transform_parity ) 
            *(++stacktop) = 1;
@@ -2506,13 +2660,13 @@ struct locallist_t *localbase;
           break;
         }
 
-     case VIEW_TRANSFORMS_:
+    case VIEW_TRANSFORMS_NODE:
        read_transforms((int)(*stacktop--));
        break;
 
-      case VIEW_TRANSFORMS_NOP_: 
+    case VIEW_TRANSFORMS_NOP_NODE: 
          break;  /* just to get first two indices on stack */
-      case VIEW_TRANSFORMS_ELEMENT_:
+    case VIEW_TRANSFORMS_ELEMENT_NODE:
          { int k = (int)(*stacktop--);
            int j = (int)(*stacktop--);
            int i = (int)(*stacktop--);
@@ -2563,25 +2717,25 @@ struct locallist_t *localbase;
            *(++stacktop) = view_transforms[i-1][j-1][k-1];
            break;
         }
-     case TRANSFORM_DEPTH_:
+    case TRANSFORM_DEPTH_NODE:
        generate_transforms((int)(*stacktop--));
        update_display();
        break;
 
-     case TRANSFORM_EXPR_:
+    case TRANSFORM_EXPR_NODE:
        calc_view_transform_gens();
        transform_gen_expr(*(char**)(stacktop--));
        update_display();
        break;
 
-     case DEFINE_METHOD_INSTANCE_:
-     case DEFINE_QUANTITY_:
-     case DEFINE_CONSTRAINT_:
-     case DEFINE_BOUNDARY_:
+    case DEFINE_METHOD_INSTANCE_NODE:
+    case DEFINE_QUANTITY_NODE:
+    case DEFINE_CONSTRAINT_NODE:
+    case DEFINE_BOUNDARY_NODE:
        /* was parse-time action */
        break;
 
-     case GRAVITY_:
+    case GRAVITY_NODE:
        old = web.gravflag;
        web.gravflag = (node->op1.toggle_state==ON_) ? 1 : 0;
        outstring(web.gravflag ? "Gravity ON." : "Gravity OFF.");
@@ -2589,11 +2743,11 @@ struct locallist_t *localbase;
        recalc();
        break;
 
-     case TOGGLEVALUE:
+    case TOGGLEVALUE_NODE:
        *++stacktop = (REAL)get_toggle_value(node->op1.toggle_id);
        break;
 
-     case FACET_COLORS_:
+    case FACET_COLORS_NODE:
        old = color_flag;
        color_flag = (node->op1.toggle_state==ON_) ? 1 : 0; 
        outstring(color_flag ? "Facet colors ON.":
@@ -2601,7 +2755,7 @@ struct locallist_t *localbase;
           outstring(old?" (was on)\n":" (was off)\n");
        break;
 
-     case SHADING_:
+    case SHADING_NODE:
        old = shading_flag;
        shading_flag = (node->op1.toggle_state==ON_) ? 1 : 0; 
        outstring(shading_flag ? "Facet shading ON.":
@@ -2609,10 +2763,10 @@ struct locallist_t *localbase;
           outstring(old?" (was on)\n":" (was off)\n");
        break;
 
-       case PREPRINTF_:
-       case PRESPRINTF_:
+    case PREPRINTF_NODE:
+    case PRESPRINTF_NODE:
            break;
-       case GO_:
+    case GO_NODE:
           iterate();
           break;
 
@@ -2632,10 +2786,11 @@ struct locallist_t *localbase;
 *     can make a short jump to it within this file.
 */
 
-void flip_toggle(flag,newstate,phrase)
-int *flag;  /* toggle variable */
-int newstate;
-char *phrase; /* to print */
+void flip_toggle(
+  int *flag,  /* toggle variable */
+  int newstate,
+  char *phrase /* to print */
+)
 { int old;
   old = *flag;
   *flag = (newstate==ON_) ? 1 : 0;
@@ -2644,7 +2799,7 @@ char *phrase; /* to print */
   if ( old < 0 ) outstring(" (was unset)\n");
   else if ( old == 0 ) outstring(" (was off)\n");
   else outstring(" (was on)\n");
-}
+} // end flip_toggle()
 
 /************************************************************************
 *
@@ -2656,14 +2811,14 @@ char *phrase; /* to print */
 *
 */
 
-void more_other_stuff(node,recalc_flag,update_display_flag,q_id,
-                        localstack,localbase)
-struct treenode * node;
-int *recalc_flag;
-int *update_display_flag;
-element_id q_id;
-REAL *localstack;
-struct locallist_t *localbase;
+void more_other_stuff(
+  struct treenode * node,
+  int *recalc_flag,
+  int *update_display_flag,
+  element_id q_id,
+  REAL *localstack,
+  struct locallist_t *localbase
+)
 { 
   char response[100];
   int old; /* old state of toggle */
@@ -2679,7 +2834,7 @@ struct locallist_t *localbase;
 
   switch ( node->type )
   {
-    case WRAP_VERTEX_:
+    case WRAP_VERTEX_NODE:
          { vertex_id v_id = get_ordinal_id(VERTEX,(int)(stacktop[-1])-1);
            int wrap = (int)(stacktop[0]);
 
@@ -2690,7 +2845,7 @@ struct locallist_t *localbase;
          }
          break;
 
-    case NORMAL_MOTION_:
+    case NORMAL_MOTION_NODE:
          old = normal_motion_flag;
          normal_motion_flag = (node->op1.toggle_state==ON_) ? 1 : 0; 
          outstring(normal_motion_flag ? "Normal motion ON.":
@@ -2701,7 +2856,7 @@ struct locallist_t *localbase;
          else end_normal_motion();
          break;
 
-    case VIEW_4D_: 
+    case VIEW_4D_NODE: 
          old = view_4D_flag;
          view_4D_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(view_4D_flag ? "4D graphics  ON." :
@@ -2710,7 +2865,7 @@ struct locallist_t *localbase;
          update_display();
          break;
      
-    case PINNING_: 
+    case PINNING_NODE: 
          old = check_pinning_flag;
          check_pinning_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(check_pinning_flag ? "Constraint pinning ON." :
@@ -2718,7 +2873,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
      
-    case METRIC_CONVERSION_: 
+    case METRIC_CONVERSION_NODE: 
          old = metric_convert_flag;
          metric_convert_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(metric_convert_flag ? "Metric conversion ON." :
@@ -2727,7 +2882,7 @@ struct locallist_t *localbase;
          break;
      
 
-    case SELF_SIMILAR_: 
+    case SELF_SIMILAR_NODE: 
          old = self_similar_flag;
          self_similar_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(self_similar_flag ? "Self similarity mode ON." :
@@ -2735,7 +2890,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case GV_BINARY_: 
+    case GV_BINARY_NODE: 
          old = gv_binary_flag;
          gv_binary_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(gv_binary_flag ? "Geomview binary mode ON." :
@@ -2743,7 +2898,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
      
-    case KUSNER_: 
+    case KUSNER_NODE: 
          old = kusner_flag;
          kusner_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          conf_edge_curv_flag = 0;
@@ -2753,7 +2908,7 @@ struct locallist_t *localbase;
          recalc();
          break;
      
-    case BOUNDARY_CURVATURE_: 
+    case BOUNDARY_CURVATURE_NODE: 
          old = boundary_curvature_flag;
          boundary_curvature_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(boundary_curvature_flag ? "Boundary curvature ON." :
@@ -2762,7 +2917,7 @@ struct locallist_t *localbase;
          recalc();
          break;
      
-    case CONF_EDGE_SQCURV_: 
+    case CONF_EDGE_SQCURV_NODE: 
          old = conf_edge_curv_flag;
          conf_edge_curv_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          kusner_flag = 0;
@@ -2773,7 +2928,7 @@ struct locallist_t *localbase;
          recalc();
          break;
 
-    case POST_PROJECT_: 
+    case POST_PROJECT_NODE: 
          old = post_project_flag;
          post_project_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(post_project_flag ? "Post-projection ON." :
@@ -2781,7 +2936,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case MEAN_CURV_INT_: 
+    case MEAN_CURV_INT_NODE: 
          old = mean_curv_int_flag;
          mean_curv_int_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(mean_curv_int_flag ? "Mean curvature integral ON." :
@@ -2789,14 +2944,14 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case AUTORECALC_: 
+    case AUTORECALC_NODE: 
          old = autorecalc_flag;
          autorecalc_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(autorecalc_flag ? "Autorecalc ON." : "Autorecalc OFF.");
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case FORCE_POS_DEF_: 
+    case FORCE_POS_DEF_NODE: 
          old = make_pos_def_flag;
          make_pos_def_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(make_pos_def_flag ? "Force positive definite ON." : 
@@ -2804,14 +2959,14 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case ESTIMATE_: 
+    case ESTIMATE_NODE: 
          old = estimate_flag;
          estimate_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(estimate_flag ? "Estimation ON." : "Estimation OFF.");
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case TRANSFORMS_: 
+    case TRANSFORMS_NODE: 
          old = transforms_flag;
          transforms_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(transforms_flag ? "Transform showing ON." : 
@@ -2820,7 +2975,7 @@ struct locallist_t *localbase;
          update_display();
          break;
 
-    case DETURCK_:
+    case DETURCK_NODE:
          old = unit_normal_flag;
          unit_normal_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(sqgauss_flag ? "Unit normal motion ON." :
@@ -2834,7 +2989,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case SQGAUSS_: 
+    case SQGAUSS_NODE: 
          old = sqgauss_flag;
          sqgauss_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(sqgauss_flag ? "Squared Gaussian curvature ON." :
@@ -2843,11 +2998,11 @@ struct locallist_t *localbase;
          recalc();
          break;
 
-    case STABILITY_TEST_: 
+    case STABILITY_TEST_NODE: 
          stability_test();
          break;
 
-    case AUTOPOP_: 
+    case AUTOPOP_NODE: 
          old = autopop_flag;
          autopop_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(autopop_flag ? "Autopopping ON.\n" : "Autopopping OFF.\n");
@@ -2865,7 +3020,7 @@ struct locallist_t *localbase;
             }
          break;
 
-    case AUTOPOP_QUARTIC_: 
+    case AUTOPOP_QUARTIC_NODE: 
          old = autopop_quartic_flag;
          autopop_quartic_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(autopop_quartic_flag ? "Autopop quartic mode ON.\n" :
@@ -2873,7 +3028,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case IMMEDIATE_AUTOPOP_: 
+    case IMMEDIATE_AUTOPOP_NODE: 
          old = immediate_autopop_flag;
          immediate_autopop_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(immediate_autopop_flag ? "Immediate autopop mode ON.\n" :
@@ -2881,34 +3036,34 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case AUTOCHOP_:
+    case AUTOCHOP_NODE:
          old = autochop_flag;
          autochop_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          if ( autochop_flag )
-              { 
-                 sprintf(msg,"Autochopping ON. Chop length %g ",(DOUBLE)autochop_length);
-                 outstring(msg);
-                 outstring(old?" (was on)\n":" (was off)\n");
-                 outstring("Set autochop length with  AUTOCHOP := value\n");
-              }
+         { 
+           sprintf(msg,"Autochopping ON. Chop length %g ",(DOUBLE)autochop_length);
+           outstring(msg);
+           outstring(old?" (was on)\n":" (was off)\n");
+           outstring("Set autochop length with  AUTOCHOP_LENGTH := value\n");
+         }
          else 
          { outstring("Autochopping OFF.");
            outstring(old?" (was on)\n":" (was off)\n");
          }
          break;
 
-    case UTEST_: 
+    case UTEST_NODE: 
          simplex_delaunay_test();
          break;
 
-    case OLD_AREA_: 
+    case OLD_AREA_NODE: 
          old = old_area_flag;
          old_area_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(old_area_flag ? "old_area ON." : "old_area OFF.");
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case APPROX_CURV_: 
+    case APPROX_CURV_NODE: 
          old = approx_curve_flag;
          approx_curve_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(approx_curve_flag ? "approx_curvature ON." :
@@ -2916,7 +3071,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case H_INVERSE_METRIC_: 
+    case H_INVERSE_METRIC_NODE: 
          old = web.h_inverse_metric_flag;
          web.h_inverse_metric_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(web.h_inverse_metric_flag ? "h_inverse_metric ON." :
@@ -2924,7 +3079,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case ASSUME_ORIENTED_: 
+    case ASSUME_ORIENTED_NODE: 
          old = assume_oriented_flag;
          assume_oriented_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(assume_oriented_flag ? "assume_oriented ON." :
@@ -2932,17 +3087,17 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case OOGLFILE_:
+    case OOGLFILE_NODE:
          strncpy(pix_file_name,*(char**)(stacktop--),sizeof(pix_file_name));
          do_gfile('2',pix_file_name);
          break;
 
-    case BINARY_OFF_FILE_:
+    case BINARY_OFF_FILE_NODE:
          strncpy(pix_file_name,*(char**)(stacktop--),sizeof(pix_file_name));
          do_gfile('7',pix_file_name);
          break;
 
-    case POSTSCRIPT_:
+    case POSTSCRIPT_NODE:
          if ( ps_colorflag < 0 )  ps_colorflag = 0 ;
          if ( gridflag < 0 ) gridflag = 0;
          if ( crossingflag < 0 ) crossingflag = 0;
@@ -2956,7 +3111,7 @@ struct locallist_t *localbase;
          do_gfile('3',ps_file_name);
          break;
 
-    case SET_CONSTRAINT_GLOBAL:
+    case SET_CONSTRAINT_GLOBAL_NODE:
          { int connum = (int)(*stacktop--);
            struct constraint *con = get_constraint(connum);
            if ( !(con->attr & GLOBAL) )
@@ -2969,8 +3124,8 @@ struct locallist_t *localbase;
          }
          break;              
 
-    case UNSET_CONSTRAINT_GLOBAL:
-         { int connum = (int)(*stacktop--);
+    case UNSET_CONSTRAINT_GLOBAL_NODE:
+         { unsigned int connum = (int)(*stacktop--);
            struct constraint *con = get_constraint(connum);
            con->attr &= ~GLOBAL;
            for ( i = 0 ; i < web.con_global_count ; i++ )
@@ -2982,7 +3137,7 @@ struct locallist_t *localbase;
          }
          break;
 
-    case SET_CONSTRAINT_NAME_GLOBAL:
+    case SET_CONSTRAINT_NAME_GLOBAL_NODE:
          { int connum = node->op3.connum;
            struct constraint *con = get_constraint(connum);
            if ( !(con->attr & GLOBAL) )
@@ -2995,8 +3150,8 @@ struct locallist_t *localbase;
          }
          break;              
 
-    case UNSET_CONSTRAINT_NAME_GLOBAL:
-         { int connum = node->op3.connum;
+    case UNSET_CONSTRAINT_NAME_GLOBAL_NODE:
+         { unsigned int connum = node->op3.connum;
            struct constraint *con = get_constraint(connum);
            con->attr &= ~GLOBAL;
            for ( i = 0 ; i < web.con_global_count ; i++ )
@@ -3008,12 +3163,12 @@ struct locallist_t *localbase;
          }
          break;
 
-    case GEOMPIPE_:  /* to command */
+    case GEOMPIPE_NODE:  /* to command */
          old = geompipe_flag;
          do_gfile('C',*(char**)(stacktop--));
          break;
 
-    case GEOMPIPE_TOGGLE_: 
+    case GEOMPIPE_TOGGLE_NODE: 
          old = geompipe_flag;
          do_gfile((node->op1.toggle_state==ON_) ? 'A' : 'B',NULL);
          outstring(geompipe_flag ? "geompipe ON." :
@@ -3021,7 +3176,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case GEOMVIEW_TOGGLE_: 
+    case GEOMVIEW_TOGGLE_NODE: 
          old = geomview_flag;
          if ( !geomview_flag && (node->op1.toggle_state==ON_) )
              do_gfile( '8',NULL);
@@ -3032,7 +3187,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case LOGFILE_TOGGLE_:
+    case LOGFILE_TOGGLE_NODE:
          old = logfile_flag;
          if ( !logfile_flag && (node->op1.toggle_state==ON_) )
              start_logfile(NULL);
@@ -3043,7 +3198,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case KEYLOGFILE_TOGGLE_:
+    case KEYLOGFILE_TOGGLE_NODE:
          old = keylogfile_flag;
          if ( !keylogfile_flag && (node->op1.toggle_state==ON_) )
              start_keylogfile(NULL);
@@ -3054,7 +3209,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case JIGGLE_TOGGLE_: 
+    case JIGGLE_TOGGLE_NODE: 
          old = web.jiggle_flag;
          web.jiggle_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(web.jiggle_flag ? "jiggling ON." :
@@ -3062,7 +3217,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case RIBIERE_CG_: 
+    case RIBIERE_CG_NODE: 
          old = ribiere_flag;
          ribiere_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(ribiere_flag ? "Polak-Ribiere conjugate gradient ON." :
@@ -3071,7 +3226,7 @@ struct locallist_t *localbase;
          reset_conj_grad();
          break;
 
-    case CONJ_GRAD_:
+    case CONJ_GRAD_NODE:
          old = conj_grad_flag;
          conj_grad_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          reset_conj_grad();
@@ -3094,7 +3249,7 @@ struct locallist_t *localbase;
          }
          break;
 
-     case MEAN_CURV_:
+    case MEAN_CURV_NODE:
          web.norm_check_flag = 0; /* default OFF */
          old = web.area_norm_flag;
          web.area_norm_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
@@ -3109,22 +3264,39 @@ struct locallist_t *localbase;
          break;
 
 
-    case SHOW_ALL_QUANTITIES_: 
+    case SHOW_ALL_QUANTITIES_NODE: 
           flip_toggle(&show_all_quantities,node->op1.toggle_state,"show_all_quantities");
           break;
-    case PSCOLORFLAG_: 
-          flip_toggle(&ps_colorflag,node->op1.toggle_state,"pscolorflag");
+    case PSCOLORFLAG_NODE: 
+          flip_toggle(&ps_colorflag,node->op1.toggle_state,"ps_colorflag");
           break;
-    case GRIDFLAG_:
-          flip_toggle(&gridflag,node->op1.toggle_state,"gridflag");
+    case PS_CMYKFLAG_NODE: 
+          flip_toggle(&ps_cmykflag,node->op1.toggle_state,"ps_cmykflag");
           break;
-    case CROSSINGFLAG_: 
+    case FORCE_EDGESWAP_NODE:
+           flip_toggle(&force_edgeswap_flag,node->op1.toggle_state,"force_edgeswap");
+          break;
+    case GRIDFLAG_NODE:
+          flip_toggle(&gridflag,node->op1.toggle_state,"ps_gridflag");
+          break;
+    case CROSSINGFLAG_NODE: 
           flip_toggle(&crossingflag,node->op1.toggle_state,"crossingflag");
           break;
-    case LABELFLAG_:
-          flip_toggle(&labelflag,node->op1.toggle_state,"labelflag");
+    case LABELFLAG_NODE:
+          flip_toggle(&labelflag,node->op1.toggle_state,"ps_labelflag");
           break;
-    case TORUS_FILLED_:
+    case BOX_FLAG_NODE:
+          flip_toggle(&box_flag,node->op1.toggle_state,"show_bounding_box");
+          update_display();
+          break;
+   case SHOW_ALL_EDGES_NODE:
+          flip_toggle(&edgeshow_flag,node->op1.toggle_state,"show_all_edges");
+          update_display();
+          break;
+    case SEPTUM_FLAG_NODE:
+          flip_toggle(&septum_flag,node->op1.toggle_state,"septum_flag");
+          break;
+    case TORUS_FILLED_NODE:
           if ( !web.torus_flag )
           { 
             sprintf(errmsg,
@@ -3137,28 +3309,28 @@ struct locallist_t *localbase;
           flip_toggle(&web.full_flag,node->op1.toggle_state,"torus_filled");
           break;
 
-    case VERBOSE_:
+    case VERBOSE_NODE:
          old = verbose_flag;
          verbose_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(verbose_flag ? "Verbose ON." : "Verbose OFF.");
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case QUIET_:
+    case QUIET_NODE:
          old = quiet_flag;
          quiet_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(quiet_flag ? "Quiet ON." : "Quiet OFF.");
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case QUIETLOAD_:
+    case QUIETLOAD_NODE:
          old = quiet_load_flag;
          quiet_load_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(quiet_load_flag ? "QuietLoad ON." : "QuietLoad OFF.");
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case FUNCTION_QUANTITY_SPARSE_:
+    case FUNCTION_QUANTITY_SPARSE_NODE:
          old = quantity_function_sparse_flag;
          quantity_function_sparse_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(quantity_function_sparse_flag ?
@@ -3166,7 +3338,23 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case FORCE_DELETION_:
+    case DETORUS_STICKY_NODE:
+         old = detorus_sticky;
+         detorus_sticky = (node->op1.toggle_state==ON_) ? 1 : 0;
+         outstring(detorus_sticky ?
+            "detorus_sticky ON." : "detorus_sticky OFF.");
+         outstring(old?" (was on)\n":" (was off)\n");
+         break;
+
+    case VIEW_TRANSFORMS_USE_UNIQUE_NODE:
+         old = view_transforms_unique_point_flag;
+         view_transforms_unique_point_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
+         outstring(view_transforms_unique_point_flag ?
+            "view_transforms_use_unique ON." : "view_transforms_use_unique OFF.");
+         outstring(old?" (was on)\n":" (was off)\n");
+         break;
+
+    case FORCE_DELETION_NODE:
          old = force_deletion;
          force_deletion = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(force_deletion ?
@@ -3174,7 +3362,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case STAR_FINAGLING_:
+    case STAR_FINAGLING_NODE:
          old = star_finagling;
          star_finagling = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(star_finagling ?
@@ -3182,23 +3370,25 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case SLICE_VIEW_:
+    case SLICE_VIEW_NODE:
          old = slice_view_flag;
+         slice_coeff_set_flag = 1;
          slice_view_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(slice_view_flag ? "slice_view ON." : "slice_view OFF.");
          outstring(old?" (was on)\n":" (was off)\n");
          update_display();
          break;
 
-    case CLIP_VIEW_:
+    case CLIP_VIEW_NODE:
          old = clip_view_flag;
+         clip_coeff_set_flag = 1;
          clip_view_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(clip_view_flag ? "clip_view ON." : "clip_view OFF.");
          outstring(old?" (was on)\n":" (was off)\n");
          update_display();
          break;
 
-    case BACKCULL_:
+    case BACKCULL_NODE:
          old = backcull_flag;
          backcull_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(backcull_flag ? "backcull ON." : "backcull OFF.");
@@ -3206,14 +3396,22 @@ struct locallist_t *localbase;
          update_display();
          break;
 
-    case VOLGRADS_EVERY_:
+    case ROTATE_LIGHTS_NODE:
+         old = rotate_lights_flag;
+         rotate_lights_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
+         outstring(rotate_lights_flag ? "rotate_lights ON." : "rotate_lights OFF.");
+         outstring(old?" (was on)\n":" (was off)\n");
+         update_display();
+         break;
+
+    case VOLGRADS_EVERY_NODE:
          old = volgrads_every_flag;
          volgrads_every_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(volgrads_every_flag ? "Volgrads_every ON." : "Volgrads_every OFF.");
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case ZENER_DRAG_:
+    case ZENER_DRAG_NODE:
          old = zener_drag_flag;
          zener_drag_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(zener_drag_flag ? "Zener_drag ON." : "Zener_drag OFF.");
@@ -3226,14 +3424,14 @@ struct locallist_t *localbase;
          }
          break;
 
-    case QUIETGO_:
+    case QUIETGO_NODE:
          old = quiet_go_flag;
          quiet_go_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(quiet_go_flag ? "QuietGo ON." : "QuietGo OFF.");
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case DIRICHLET_MODE_:
+    case DIRICHLET_MODE_NODE:
          if ( !everything_quantities_flag )
           { convert_to_quantities();
             recalc();
@@ -3242,17 +3440,22 @@ struct locallist_t *localbase;
          sobolev_flag = 0;
          break;
 
-    case RGB_COLORS_FLAG_:
+    case RGB_COLORS_FLAG_NODE:
          flip_toggle(&rgb_colors_flag,node->op1.toggle_state,"RGB colors");
          update_display();
          break;
 
-    case BREAK_AFTER_WARNING_:
+    case BREAK_AFTER_WARNING_NODE:
          flip_toggle(&break_after_warning,node->op1.toggle_state,
           "Break after warning");
          break;
 
-    case BLAS_FLAG_:
+    case BREAK_ON_WARNING_NODE:
+         flip_toggle(&break_on_warning,node->op1.toggle_state,
+          "Break on warning");
+         break;
+
+    case BLAS_FLAG_NODE:
 #ifdef BLAS
          flip_toggle(&blas_flag,node->op1.toggle_state,"using BLAS");
 #else
@@ -3263,7 +3466,7 @@ struct locallist_t *localbase;
 #endif
          break;
 
-    case AUGMENTED_HESSIAN_:
+    case AUGMENTED_HESSIAN_NODE:
          flip_toggle(&augmented_hessian_flag,node->op1.toggle_state,
              "augmented Hessian");
          if ( augmented_hessian_flag )
@@ -3273,7 +3476,7 @@ struct locallist_t *localbase;
          }
          break;
 
-    case SPARSE_CONSTRAINTS_:
+    case SPARSE_CONSTRAINTS_NODE:
          flip_toggle(&sparse_constraints_flag,node->op1.toggle_state,
                 "sparse constraints");
          if ( !sparse_constraints_flag && augmented_hessian_flag )
@@ -3281,70 +3484,74 @@ struct locallist_t *localbase;
              "augmented Hessian");
          break;
 
-    case VISIBILITY_TEST_:
+    case VISIBILITY_TEST_NODE:
          flip_toggle(&visibility_test,node->op1.toggle_state,"visibility test");
          update_display();
          break;
 
-    case CIRCULAR_ARC_DRAW_:
+    case CIRCULAR_ARC_DRAW_NODE:
          flip_toggle(&circular_arc_flag,node->op1.toggle_state,"Circular arc drawing");
          break;
 
-    case KRAYNIKPOPVERTEX_FLAG_:
+    case KRAYNIKPOPVERTEX_FLAG_NODE:
          flip_toggle(&kraynikpopvertex_flag,node->op1.toggle_state,"Kraynik pop vertex mode");
          break;
 
-    case KRAYNIKPOPEDGE_FLAG_:
+    case KRAYNIKPOPEDGE_FLAG_NODE:
          flip_toggle(&kraynikpopedge_flag,node->op1.toggle_state,"Kraynik pop edge mode");
          break;
 
-    case SMOOTH_GRAPH_:
+    case K_ALTITUDE_FLAG_NODE:
+         flip_toggle(&K_altitude_flag,node->op1.toggle_state,"K altitude mode");
+         break;
+
+    case SMOOTH_GRAPH_NODE:
          flip_toggle(&smooth_graph_flag,node->op1.toggle_state,"smooth graph");
          update_display();
          break;
 
-    case FULL_BOUNDING_BOX_:
+    case FULL_BOUNDING_BOX_NODE:
          flip_toggle(&full_bounding_box_flag,node->op1.toggle_state,
            "full_bounding_box");
          update_display();
          break;
 
-    case POP_TO_EDGE_:
+    case POP_TO_EDGE_NODE:
          flip_toggle(&pop_to_edge_flag,node->op1.toggle_state,"pop_to_edge");
          if ( pop_to_edge_flag ) pop_to_face_flag = 0;
          break;
 
-    case POP_TO_FACE_:
+    case POP_TO_FACE_NODE:
          flip_toggle(&pop_to_face_flag,node->op1.toggle_state,"pop_to_face");
          if ( pop_to_face_flag ) pop_to_edge_flag = 0;
          break;
 
-    case POP_DISJOIN_:
+    case POP_DISJOIN_NODE:
          flip_toggle(&pop_disjoin_flag,node->op1.toggle_state,"pop_disjoin");
          if ( pop_disjoin_flag )
            pop_enjoin_flag = 0;
          break;
 
-    case POP_ENJOIN_:
+    case POP_ENJOIN_NODE:
          flip_toggle(&pop_enjoin_flag,node->op1.toggle_state,"pop_enjoin");
          if ( pop_enjoin_flag )
            pop_disjoin_flag = 0;
          break;
 
-    case BIG_ENDIAN_:
+    case BIG_ENDIAN_NODE:
          flip_toggle(&big_endian_flag,node->op1.toggle_state,"big_endian");
          if ( big_endian_flag )
            little_endian_flag = 0;
          break;
 
-    case LITTLE_ENDIAN_:
+    case LITTLE_ENDIAN_NODE:
          flip_toggle(&little_endian_flag,node->op1.toggle_state,
              "little_endian");
          if ( little_endian_flag )
            big_endian_flag = 0;
          break;
 
-    case MPI_DEBUG_:
+    case MPI_DEBUG_NODE:
          flip_toggle(&mpi_debug,node->op1.toggle_state,"mpi_debug");
          update_display();
          #ifdef MPI_EVOLVER
@@ -3352,8 +3559,12 @@ struct locallist_t *localbase;
          #endif
          break;
 
+    case MPI_LOCAL_BODIES_NODE:
+         flip_toggle(&mpi_debug,node->op1.toggle_state,"mpi_local_bodies");
+         break;
 
-    case BEZIER_BASIS_:
+
+    case BEZIER_BASIS_NODE:
        { int dim,k;
          old = bezier_flag;
          bezier_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
@@ -3377,7 +3588,7 @@ struct locallist_t *localbase;
          break;
        }
 
-    case SOBOLEV_MODE_:
+    case SOBOLEV_MODE_NODE:
          if ( !everything_quantities_flag )
           { convert_to_quantities();
             recalc();
@@ -3387,7 +3598,7 @@ struct locallist_t *localbase;
          break;
 
 
-    case HESSIAN_NORMAL_:
+    case HESSIAN_NORMAL_NODE:
          old = hessian_normal_flag;
          hessian_normal_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(hessian_normal_flag ? "hessian_normal  ON." :
@@ -3395,20 +3606,22 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case HESSIAN_SPECIAL_NORMAL_:
+    case HESSIAN_SPECIAL_NORMAL_NODE:
          old = hessian_special_normal_flag;
          if ( node->op1.toggle_state == ON_ && 
                  hessian_special_normal_expr[0].start == NULL )
-            kb_error(3835,"hessian_special_normal_vector not set.\n",
-                RECOVERABLE);
-
+         { sprintf(errmsg,"hessian_special_normal_vector not set.\n");
+           sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                                file_names[node->file_no],node->line_no);
+            kb_error(3835,errmsg, RECOVERABLE);
+         }
          hessian_special_normal_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(hessian_special_normal_flag ? "hessian_special_normal ON." :
              "hessian_special_normal OFF.");
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case HESSIAN_NORMAL_PERP_:
+    case HESSIAN_NORMAL_PERP_NODE:
          old = hessian_normal_perp_flag;
          hessian_normal_perp_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(hessian_normal_perp_flag ? "hessian_normal_perp  ON." :
@@ -3417,7 +3630,7 @@ struct locallist_t *localbase;
          break;
 
 
-    case HESSIAN_DOUBLE_NORMAL_:
+    case HESSIAN_DOUBLE_NORMAL_NODE:
          old = hessian_double_normal_flag;
          hessian_double_normal_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(hessian_double_normal_flag ? "hessian_double_normal  ON." :
@@ -3425,7 +3638,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case HESSIAN_NORMAL_ONE_:
+    case HESSIAN_NORMAL_ONE_NODE:
          if ( node->op1.toggle_state==ON_ && 
          ((web.representation == SIMPLEX) || (SDIM - web.dimension > 1)))
          {  sprintf(errmsg,
@@ -3441,7 +3654,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case HESSIAN_QUIET_:
+    case HESSIAN_QUIET_NODE:
          old = hessian_quiet_flag;
          hessian_quiet_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(hessian_quiet_flag ? "hessian_quiet  ON." :
@@ -3449,7 +3662,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case HESSIAN_DIFF_:
+    case HESSIAN_DIFF_NODE:
          old = hessian_by_diff_flag;
          if ( !web.pressure_flag && count_fixed_vol() )
          {  sprintf(errmsg,
@@ -3464,7 +3677,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case INTERP_BDRY_PARAM_:
+    case INTERP_BDRY_PARAM_NODE:
          old = interp_bdry_param;
          interp_bdry_param = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(interp_bdry_param ? "interpolation of boundary parameters  ON." :
@@ -3472,7 +3685,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case RITZ_:
+    case RITZ_NODE:
       { int krydim;  /* Krylov subspace dimension */
          krydim = (int)*(stacktop--);
          ritz_command(*(stacktop--),krydim);
@@ -3480,7 +3693,7 @@ struct locallist_t *localbase;
       break;
 
     
-    case LANCZOS_:
+    case LANCZOS_NODE:
       { int krydim;  /* Krylov subspace dimension */
          if ( node->right ) krydim = (int)*(stacktop--);
          else krydim = 100;
@@ -3488,22 +3701,25 @@ struct locallist_t *localbase;
       }
       break;
 
-    case MOVE_:
+    case MOVE_NODE:
          calc_all_grads(CALC_VOLGRADS);
          move_vertices(ACTUAL_MOVE,*(stacktop--));
          vgrad_end();
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+         sprintf(msg,"1.  energy: %*.*Qg  stepsize: %g\n",DWIDTH,DPREC,
+            web.total_energy,(DOUBLE)stacktop[1]);
+#elif defined(LONGDOUBLE)
          sprintf(msg,"1.  energy: %*.*Lg  stepsize: %g\n",DWIDTH,DPREC,
             web.total_energy,(DOUBLE)stacktop[1]);
 #else
          sprintf(msg,"1. %s: %17.15g energy: %17.15g  stepsize: %g\n",
             areaname,web.total_area,web.total_energy,stacktop[1]);
 #endif 
-		 outstring(msg);
+         outstring(msg);
          update_display();
          break;
 
-    case EIGENPROBE_:
+    case EIGENPROBE_NODE:
       { int iters;
          if ( node->right ) iters = (int)*(stacktop--);
          else iters = 0;
@@ -3511,11 +3727,18 @@ struct locallist_t *localbase;
       }
       break;
 
+    case SET_NO_DUMP_NODE:
+      { if ( node->op2.intval )
+          globals(node->op1.name_id)->flags2 |= NO_DUMP_BIT;
+        else
+          globals(node->op1.name_id)->flags2 &= ~NO_DUMP_BIT;
+      }
+      break;
 
-    case EXPRLIST_:
+    case EXPRLIST_NODE:
              break;  /* leave expression on stack */
  
-    case GET_TRANSFORM_EXPR_: /* put ptr in both halves */
+    case GET_TRANSFORM_EXPR_NODE: /* put ptr in both halves for 32-bit */
        { int pp = (sizeof(REAL))/sizeof(char*);
          int nn;
          ++stacktop;
@@ -3524,7 +3747,7 @@ struct locallist_t *localbase;
        }
        break;
 
-    case DATAFILENAME_: /* put ptr in both halves */
+    case DATAFILENAME_NODE: /* put ptr in both halves for 32-bit */
        { int pp = (sizeof(REAL))/sizeof(char*);
          int nn;
          ++stacktop;
@@ -3533,7 +3756,7 @@ struct locallist_t *localbase;
        }
        break;
 
-    case WARNING_MESSAGES_: /* put ptr in both halves */
+    case WARNING_MESSAGES_NODE: /* put ptr in both halves for 32-bit */
        { int pp = (sizeof(REAL))/sizeof(char*);
          int nn;
          ++stacktop;
@@ -3543,7 +3766,7 @@ struct locallist_t *localbase;
        break;
 
 
-    case QUOTATION_: /* put ptr in both halves */
+    case QUOTATION_NODE: /* put ptr in both halves for 32-bit */
        { int pp = (sizeof(REAL))/sizeof(char*);
          int nn;
          *++stacktop = 0.0;
@@ -3552,7 +3775,7 @@ struct locallist_t *localbase;
        }
        break;
 
-    case DATE_AND_TIME_:
+    case DATE_AND_TIME_NODE:
        { time_t ltime;
          time(&ltime);
          *(char**)(++stacktop) = ctime(&ltime); 
@@ -3561,30 +3784,37 @@ struct locallist_t *localbase;
          break;
        }
 
-    case PRINTFHEAD_:
-    case BINARY_PRINTFHEAD_:
+    case EVOLVER_VERSION_NODE:
+         *(char**)(++stacktop) = evolver_version; 
+         break;
+      
+
+    case PRINTFHEAD_NODE:
+    case BINARY_PRINTFHEAD_NODE:
           if ( node->op1.string ) s = node->op1.string;
           else s = *(char**)(stacktop--);
           oldquiet = quiet_flag; quiet_flag = 0;
-          outstring(s);
+          sprintf(msg,s);
+          outstring(msg);
           quiet_flag = oldquiet;
           break;
 
-    case ERRPRINTFHEAD_:
+    case ERRPRINTFHEAD_NODE:
           if ( node->op1.string ) s = node->op1.string;
           else s = *(char**)(stacktop--);
-          erroutstring(s);
+          sprintf(errmsg,s);
+          erroutstring(errmsg);
           break;
 
-     case SPRINTFHEAD_:
+    case SPRINTFHEAD_NODE:
           if ( node->op1.string )
              *(char **)(++stacktop) = node->op1.string;
           /* else already on stack */
           break;
 
-     case PRINTF_:
-     case ERRPRINTF_:
-     case SPRINTF_:
+    case PRINTF_NODE:
+    case ERRPRINTF_NODE:
+    case SPRINTF_NODE:
      { char format[1000];
        char *newmsg;
        int newmsgsize;
@@ -3656,11 +3886,13 @@ struct locallist_t *localbase;
                    nnode += nnode->right;
                  nnode += nnode->left;
                  if ( !(nnode->flags &  HAS_STRING) && 
-                        !(nnode->type == STRINGGLOBAL_) &&
-                          !(nnode->type == PERM_STRINGGLOBAL_) &&
-                           !(nnode->type == SPRINTFHEAD_)  &&
-                           !(nnode->type == DATE_AND_TIME_)  &&
-                           !(nnode->type == DATAFILENAME_))  
+                       !(nnode->datatype == STRING_TYPE) &&
+                        !(nnode->type == STRINGGLOBAL_NODE) &&
+                          !(nnode->type == PERM_STRINGGLOBAL_NODE) &&
+                           !(nnode->type == SPRINTFHEAD_NODE)  &&
+                           !(nnode->type == DATE_AND_TIME_NODE)  &&
+                           !(nnode->type == EVOLVER_VERSION_NODE) &&
+                           !(nnode->type == DATAFILENAME_NODE))  
                   {  sprintf(errmsg,
                      "Argument %d: String format does not have string argument.\n",
                         formatcount+1);
@@ -3681,18 +3913,27 @@ struct locallist_t *localbase;
                  sprintf(msgspot,format,ss);
                  ++formatcount;
                  break;
-               case 'd': case 'u': case 'o': case 'x': case 'X': case 'p':
+               case 'd': case 'u': case 'o': case 'x': case 'X': case 'p': case 'c':
                  sprintf(msgspot,format,(int)(*(stacktop-n+ ++formatcount)));
                  break;
                case 'f': case 'g': case 'e': case 'E': case 'G':
                  if ( fabs(*(stacktop-n+ (formatcount+1))) > 1e100 )
                     f[-1] = 'g'; /* prevent buffer overflow */
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+                 f[0] = f[-1]; f[-1] = 'Q'; f[1] = 0;
+#elif defined(LONGDOUBLE)
                  f[0] = f[-1]; f[-1] = 'L'; f[1] = 0;
 #endif
-                 sprintf(msgspot,format,(*(stacktop-n+ ++formatcount)));
+                 ++formatcount;
+                 if ( !is_finite(*(stacktop-n + formatcount)) )
+                    strcat(msgspot,"(NaN)");  
+                 else
+                    sprintf(msgspot,format,(*(stacktop-n + formatcount)));
                  break;
 
+               case 'n': 
+                 kb_error(5434,"Illegal format specifier: %n\n",RECOVERABLE);
+                 break;
 
                default: 
                  sprintf(msgspot,format,0,0,0,0);  /* unrecognized */
@@ -3712,13 +3953,13 @@ struct locallist_t *localbase;
        }
 
        if ( node[node->left].op1.string == NULL ) stacktop--;
-       if ( node->type == PRINTF_ )
+       if ( node->type == PRINTF_NODE )
        { int old_flag = quiet_flag;
          quiet_flag = 0;
          outstring(newmsg);
          quiet_flag = old_flag;
        }
-       else if ( node->type == ERRPRINTF_ )
+       else if ( node->type == ERRPRINTF_NODE )
           erroutstring(newmsg);
        else /* SPRINTF_ */
        { char *str = mycalloc(strlen(newmsg)+2,1);
@@ -3730,15 +3971,17 @@ struct locallist_t *localbase;
       }
      break;
 
-     case BINARY_PRINTF_:
+    case BINARY_PRINTF_NODE:
      { char format[1000];
        int formatcount = 0;
        int byte_reverse = 0;
        int test_int = 0x0124567;
 
        if ( !big_endian_flag && !little_endian_flag )
-       { kb_error(5387,
-          "binary_printf: you must set 'big_endian' or 'little_endian' toggles.",RECOVERABLE);
+       { sprintf(errmsg, "binary_printf: you must set 'big_endian' or 'little_endian' toggles.");
+         sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                                file_names[node->file_no],node->line_no);
+         kb_error(1935,errmsg,RECOVERABLE);
        }
        if ( big_endian_flag && (*(char*)&test_int)==0x67)
          byte_reverse = 1;
@@ -3783,11 +4026,11 @@ struct locallist_t *localbase;
                    nnode += nnode->right;
                  nnode += nnode->left;
                  if ( !(nnode->flags &  HAS_STRING) && 
-                        !(nnode->type == STRINGGLOBAL_) &&
-                          !(nnode->type == PERM_STRINGGLOBAL_) &&
-                           !(nnode->type == SPRINTFHEAD_)  &&
-                           !(nnode->type == DATE_AND_TIME_)  &&
-                           !(nnode->type == DATAFILENAME_))  
+                        !(nnode->type == STRINGGLOBAL_NODE) &&
+                          !(nnode->type == PERM_STRINGGLOBAL_NODE) &&
+                           !(nnode->type == SPRINTFHEAD_NODE)  &&
+                           !(nnode->type == DATE_AND_TIME_NODE)  &&
+                           !(nnode->type == DATAFILENAME_NODE))  
                   {  sprintf(errmsg,
                      "Argument %d: String format does not have string argument.\n",
                         formatcount+1);
@@ -3880,18 +4123,27 @@ struct locallist_t *localbase;
       }
      break;
 
-     case PRINT_: /* verb */
-#ifdef LONGDOUBLE
-          sprintf(msg,"%*.*Lg\n",DWIDTH,DPREC,*(stacktop--));
+    case PRINT_NODE: /* verb */
+          if ( node[node->left].datatype == STRING_TYPE )
+          { char *s = *(char**)(stacktop--);
+            sprintf(msg,"%s\n",s);
+          }
+          else
+          {
+#ifdef FLOAT128
+            sprintf(msg,"%*.*Qg\n",DWIDTH,DPREC,*(stacktop--));
+#elif defined(LONGDOUBLE)
+            sprintf(msg,"%*.*Lg\n",DWIDTH,DPREC,*(stacktop--));
 #else
-          sprintf(msg,"%20.15g\n",*(stacktop--));
+            sprintf(msg,"%20.15g\n",*(stacktop--));
 #endif 
+          }
           oldquiet = quiet_flag; quiet_flag = 0;
           outstring(msg);
           quiet_flag = oldquiet;
           break;
 
-     case STRPRINT_: /* verb */
+    case STRPRINT_NODE: /* verb */
           oldquiet = quiet_flag; quiet_flag = 0;
           s = *(char**)(stacktop--);
           outstring(s);
@@ -3901,7 +4153,7 @@ struct locallist_t *localbase;
             myfree(s);
           break;
 
-     case PRINT_LETTER_:
+    case PRINT_LETTER_NODE:
          oldquiet = quiet_flag; quiet_flag = 0;
          if ( single_redefine[node->op1.letter].start )
             outstring(print_express(&single_redefine[node->op1.name_id],'X'));
@@ -3910,29 +4162,31 @@ struct locallist_t *localbase;
          quiet_flag = oldquiet;   
          break;
 
-     case PRINT_PROCEDURE_:
+    case PRINT_PROCEDURE_NODE:
          oldquiet = quiet_flag; quiet_flag = 0;
          outstring(print_express(&globals(node->op1.name_id)->value.proc,'X'));
          outstring("\n\n");
          quiet_flag = oldquiet;   
          break;
 
-     case PRINT_PERM_PROCEDURE_:
+    case PRINT_PERM_PROCEDURE_NODE:
          oldquiet = quiet_flag; quiet_flag = 0;
          outstring(print_express(&perm_globals(node->op1.name_id)->value.proc,'X'));
          outstring("\n\n");
          quiet_flag = oldquiet;   
          break;
 
-     case EXPRINT_PROCEDURE_:
+    case EXPRINT_PROCEDURE_NODE:
          oldquiet = quiet_flag; quiet_flag = 0;
          outstring(globals(node->op1.name_id)->attr.procstuff.proc_text);
          outstring("\n\n");
          quiet_flag = oldquiet;   
          break;
 
-     case EPRINT_: /* print and pass on value inside expression */
-#ifdef LONGDOUBLE
+    case EPRINT_NODE: /* print and pass on value inside expression */
+#ifdef FLOAT128
+          sprintf(msg,"%*.*Qg\n",DWIDTH,DPREC,*stacktop);
+#elif defined(LONGDOUBLE)
           sprintf(msg,"%*.*Lg\n",DWIDTH,DPREC,*stacktop);
 #else
           sprintf(msg,"%20.15g\n",*stacktop);
@@ -3942,21 +4196,26 @@ struct locallist_t *localbase;
           quiet_flag = oldquiet;   
           break;
 
-     case SHOWQ_:
+    case SHOWQ_NODE:
+         go_display_flag = 1;
          display();
          break;
 
-    case SET_THICKEN_ :
+    case SET_THICKEN_NODE:
       thickness = *(stacktop--);
       break;
 
-    case JIGGLE_:
+    case JIGGLE_NODE:
       web.temperature = *(stacktop--);
       jiggle();
       recalc();
       break;
-     
-    case NOTCH_:
+    
+    case QUIT_NODE:
+      exit((int)floor(*stacktop));
+      break;
+
+    case NOTCH_NODE:
       if ( web.representation == SIMPLEX )
       { sprintf(errmsg,"Notching not implemented for simplex representation.\n");
         sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
@@ -3984,11 +4243,11 @@ struct locallist_t *localbase;
         }
       break;
 
-    case SET_AUTOCHOP_:
+    case SET_AUTOCHOP_NODE:
       autochop_length = *(stacktop--);
       break;
 
-    case SET_AMBIENT_PRESSURE_:
+    case SET_AMBIENT_PRESSURE_NODE:
       web.pressure = *(stacktop--);
       if ( web.pressure > 0.00000001 )
          {  body_id b_id;
@@ -3997,7 +4256,9 @@ struct locallist_t *localbase;
             web.projection_flag = 0;
             web.pressure_flag = 1;
             if ( everything_quantities_flag )
-              FOR_ALL_BODIES(b_id) create_pressure_quant(b_id);
+            { FOR_ALL_BODIES(b_id) 
+                create_pressure_quant(b_id);
+            }
          }
       else
          {
@@ -4007,7 +4268,7 @@ struct locallist_t *localbase;
       recalc();
       break;
 
-    case SET_DIFFUSION_:
+    case SET_DIFFUSION_NODE:
          old = web.diffusion_flag;
          web.diffusion_const = *(stacktop--);
          web.diffusion_flag = 1;
@@ -4016,7 +4277,7 @@ struct locallist_t *localbase;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case AREAWEED_:
+    case AREAWEED_NODE:
          sprintf(msg,"Skinny triangles weeded: %d\n",
               web.facet_delete_count = areaweed(*(stacktop--)));
          outstring(msg);
@@ -4024,39 +4285,39 @@ struct locallist_t *localbase;
          recalc();
          break;
 
-    case METIS_:
-    case KMETIS_:
+    case METIS_NODE:
+    case KMETIS_NODE:
 /*
          metis_partition_dual((int)(*(stacktop--)),node->type);
 */
          metis_partition_plain((int)(*(stacktop--)),node->type);
          break;
 
-    case METIS_READJUST_:
-         metis_partition_dual((int)(*(stacktop--)),node->type);
+    case METIS_READJUST_NODE:
+         metis_partition_dual((int)(*(stacktop--)),METIS_READJUST);
 /*
-         metis_partition_plain((int)(*(stacktop--)),node->type);
+         metis_partition_plain((int)(*(stacktop--)),METIS_READJUST);
 */
          break;
 
-    case BODY_METIS_:
-         metis_partition_body((int)(*(stacktop--)),METIS_);
+    case BODY_METIS_NODE:
+         metis_partition_body((int)(*(stacktop--)),METIS_MODE);
          break;
 
-    case OMETIS_:
+    case OMETIS_NODE:
          if ( node->left )
             metis_vertex_order((int)(*(stacktop--)));
          else metis_vertex_order(100);
          break;
 
-    case EDGEWEED_:
+    case EDGEWEED_NODE:
          sprintf(msg,"Deleted edges: %d\n",
               web.edge_delete_count = edgeweed(*(stacktop--)));
          outstring(msg);
          recalc();
          break;
 
-    case OPTIMIZE_:
+    case OPTIMIZE_NODE:
          web.motion_flag = (node->op1.toggle_state==ON_) ? 0 : 1;
          if ( web.motion_flag )
             sprintf(msg,"Scale fixed at %g.\n",(DOUBLE)web.scale);
@@ -4064,27 +4325,27 @@ struct locallist_t *localbase;
          outstring(msg);
          break;
 
-    case SET_OPTIMIZE_:
+    case SET_OPTIMIZE_NODE:
          web.maxscale = *(stacktop--);
          web.motion_flag = 0;
          sprintf(msg,"Scale optimizing with bound %g.\n",(DOUBLE)web.maxscale);
          outstring(msg);
          break;
 
-    case SET_SCALE_:
+    case SET_SCALE_NODE:
          web.scale = *(stacktop--);
          web.motion_flag = 1;
          sprintf(msg,"Scale fixed at %g.\n",(DOUBLE)web.scale);
          outstring(msg);
          break;
 
-    case SET_GRAVITY_:
+    case SET_GRAVITY_NODE:
          switch ( node->op1.assigntype )
-         { case ASSIGN_: web.grav_const = *(stacktop--); break;
-           case PLUSASSIGN_: web.grav_const += *(stacktop--); break;
-           case SUBASSIGN_: web.grav_const -= *(stacktop--); break;
-           case MULTASSIGN_: web.grav_const *= *(stacktop--); break;
-           case DIVASSIGN_: web.grav_const /= *(stacktop--); break;
+         { case ASSIGN_OP: web.grav_const = *(stacktop--); break;
+           case PLUSASSIGN_OP: web.grav_const += *(stacktop--); break;
+           case SUBASSIGN_OP: web.grav_const -= *(stacktop--); break;
+           case MULTASSIGN_OP: web.grav_const *= *(stacktop--); break;
+           case DIVASSIGN_OP: web.grav_const /= *(stacktop--); break;
          }
          old = web.gravflag;
          if ( web.grav_const != 0.0 )
@@ -4104,36 +4365,48 @@ struct locallist_t *localbase;
          recalc();
          break;
 
-    case SET_MODEL_:
+    case SET_MODEL_NODE:
          switch ( (int)*(stacktop--) )
          { 
             case LINEAR: 
                 if ( web.modeltype == QUADRATIC )
-                 { outstring("Changing to LINEAR model. (was QUADRATIC)\n");
-                    quad_to_linear(); recalc(); }
+                { outstring("Changing to LINEAR model. (was QUADRATIC)\n");
+                  quad_to_linear(); 
+                }
                 else if ( web.modeltype == LAGRANGE )
                  { outstring("Changing to LINEAR model. (was LAGRANGE)\n");
-                    lagrange_to_linear(); recalc(); }
+                   lagrange_to_linear(); 
+                 }
                  else outstring("Model already LINEAR.\n");
                  break;
             case QUADRATIC: 
                 if ( web.modeltype == LINEAR )
                  { outstring("Changing to QUADRATIC model. (was LINEAR)\n");
-                    linear_to_quad(); recalc(); }
+                   linear_to_quad();  
+                }
                 else if ( web.modeltype == LAGRANGE )
-                 { outstring("Changing to QUADRATIC model. (was LAGRANGE)\n");
-                    lagrange_to_quad(); recalc(); }
+                { outstring("Changing to QUADRATIC model. (was LAGRANGE)\n");
+                    lagrange_to_quad(); 
+                }
                 else outstring("Model already QUADRATIC.\n");
                  break;
             default: 
                  if ( stacktop[1] > 2. )
                  { if ( web.modeltype == LINEAR )
                    { outstring("Changing to LAGRANGE model. (was LINEAR)\n");
-                         linear_to_lagrange((int)stacktop[1]); recalc(); }
+                     linear_to_lagrange((int)stacktop[1]); 
+                   }
                    else if ( web.modeltype == QUADRATIC )
-                    { outstring("Changing to LAGRANGE model. (was QUADRATIC)\n");
-                         quad_to_lagrange((int)stacktop[1]); recalc(); }
-                   else lagrange_to_lagrange((int)stacktop[1]);
+                   { outstring("Changing to LAGRANGE model. (was QUADRATIC)\n");
+                     quad_to_lagrange((int)stacktop[1]); 
+                   }
+                   else 
+                   { sprintf(msg,
+                       "Changing to LAGRANGE %d model. (was LAGRANGE %d)\n",
+                           (int)stacktop[1],web.lagrange_order);
+                     outstring(msg); 
+                     lagrange_to_lagrange((int)stacktop[1]); 
+                   }
                  }
                  else
             {  sprintf(errmsg,
@@ -4146,46 +4419,56 @@ struct locallist_t *localbase;
          recalc();
          break;
 
-    case INVOKE_P_MENU_:
+    case INVOKE_P_MENU_NODE:
          display_file((int)*(stacktop--));
          break;
 
-    case EDGEDIVIDE_:
+    case EDGEDIVIDE_NODE:
          sprintf(msg,"New edges: %d\n",
              web.edge_refine_count = articulate(*(stacktop--)));
          outstring(msg);
          recalc();
             break;
 
-     case SET_SGLOBAL_:
+    case SET_SGLOBAL_NODE:
        { struct global *g = globals(node->op1.name_id);
          char *s,**ss;
+
+         s = *(char**)(stacktop--);         
          if ( g->flags & GLOB_LOCALVAR )
-            ss = (char**)(localstack+g->value.offset); 
-         else ss = &(g->value.string);
-         if ( *ss ) myfree(*ss);
-         s = *(char**)(stacktop--);
-         if ( s )
-         { *ss = mycalloc(strlen(s)+1,sizeof(char));
-           strcpy(*ss,s);
+         { ss = (char**)(localstack+g->value.offset); 
+           *ss = temp_realloc(*ss,(s?strlen(s):0)+1);
          }
          else 
-         { *ss = mycalloc(1,sizeof(char));  /* empty */
-         } 
-
+         { ss = &(g->value.string);
+           *ss = kb_realloc(*ss,(s?strlen(s):0)+1);
+         }
+         strcpy(*ss,s);
          g->flags |= STRINGVAL;
          if ( node->left && (node[node->left].flags & DEALLOCATE_POINTER) )
-           myfree(s);
+           myfree(s);  // for sprintf source of right side
        } break;
 
-     case SET_PERM_SGLOBAL_:
+    case SET_PERM_SGLOBAL_NODE:
        { struct global *g = perm_globals(node->op1.name_id);
          char *s;
-         if ( g->value.string ) free(g->value.string);
+         if ( g->value.string && !(g->flags & INTERNAL_NAME) ) 
+             free(g->value.string);
          s = *(char**)(stacktop--);
          if ( s )
-         { g->value.string = calloc(strlen(s)+1,sizeof(char));
-            strcpy(g->value.string,s);
+         { if ( !(g->flags & INTERNAL_NAME) )
+              g->value.string = calloc(strlen(s)+1,sizeof(char));
+           strcpy(g->value.string,s);
+           #ifdef WIN32
+           if ( node->op1.name_id == console_title_global )
+             SetConsoleTitleA(console_title);
+           #endif
+           if ( node->op1.name_id == graphics_title_global )
+             set_graphics_title(1, graphics_title);
+           else if ( node->op1.name_id == graphics_title2_global )
+             set_graphics_title(2, graphics_title2);
+           else if ( node->op1.name_id == graphics_title3_global )
+             set_graphics_title(3, graphics_title3);         
          }
          else 
          { g->value.string = calloc(1,sizeof(char));  /* empty */
@@ -4197,35 +4480,42 @@ struct locallist_t *localbase;
        } break;
 
 
-     case SET_PARAM_SCALE:
+    case SET_PARAM_SCALE_NODE:
        { struct global *g = globals(node->op1.name_id);
          REAL value = *(stacktop--);
          switch ( node->op2.assigntype )
-         { case ASSIGN_: g->attr.varstuff.pscale = value; break;
-           case PLUSASSIGN_: g->attr.varstuff.pscale += value; break;
-           case SUBASSIGN_: g->attr.varstuff.pscale -= value; break;
-           case MULTASSIGN_: g->attr.varstuff.pscale *= value; break;
-           case DIVASSIGN_: g->attr.varstuff.pscale /= value; break;
+         { case ASSIGN_OP: g->attr.varstuff.pscale = value; break;
+           case PLUSASSIGN_OP: g->attr.varstuff.pscale += value; break;
+           case SUBASSIGN_OP: g->attr.varstuff.pscale -= value; break;
+           case MULTASSIGN_OP: g->attr.varstuff.pscale *= value; break;
+           case DIVASSIGN_OP: g->attr.varstuff.pscale /= value; break;
          } 
          break;
        }
 
-     case SET_DELTA_:
+    case SET_DELTA_NODE:
        { struct global *g = globals(node->op1.name_id);
          REAL value = *(stacktop--);
          switch ( node->op2.assigntype )
-         { case ASSIGN_: g->attr.varstuff.delta = value; break;
-           case PLUSASSIGN_: g->attr.varstuff.delta += value; break;
-           case SUBASSIGN_: g->attr.varstuff.delta -= value; break;
-           case MULTASSIGN_: g->attr.varstuff.delta *= value; break;
-           case DIVASSIGN_: g->attr.varstuff.delta /= value; break;
+         { case ASSIGN_OP: g->attr.varstuff.delta = value; break;
+           case PLUSASSIGN_OP: g->attr.varstuff.delta += value; break;
+           case SUBASSIGN_OP: g->attr.varstuff.delta -= value; break;
+           case MULTASSIGN_OP: g->attr.varstuff.delta *= value; break;
+           case DIVASSIGN_OP: g->attr.varstuff.delta /= value; break;
          } 
          break;
        }
 
-     case DEFINE_IDENT_: break;
+    case SET_ON_ASSIGN_CALL_NODE:
+       { struct global *g = globals(node->op1.name_id);
+         g->attr.varstuff.on_assign_call = node->op2.name_id;
+         break;
+       }
+ 
 
-     case DEFINE_ARRAY_:
+    case DEFINE_IDENT_NODE: break;
+
+    case DEFINE_ARRAY_NODE:
           { int dim,size,i; 
             struct treenode *nnode = node;
             struct global *g = globals(node->op1.name_id);
@@ -4233,21 +4523,41 @@ struct locallist_t *localbase;
             int pointercount;
             struct array *oldarray;
             struct array **array_info;
+            int different_size;
 
             if ( g->flags & GLOB_LOCALVAR )
             { localbase->flags |= LL_HAS_ARRAY;
               array_info = (struct array **)(localstack+g->value.offset);
             }
             else array_info = &(g->attr.arrayptr);
- 
+            
             oldarray = *array_info;
             itemsize = datatype_size[node->op2.valtype];
-            pointercount = 1;
+            pointercount = 0;
+            different_size = oldarray ? 0 : 1;
             for ( size = 1, dim=0 ; dim < g->attr.arrayptr->dim ; dim++ ) 
-            { size *= (int)stacktop[-dim]; 
-              if ( dim > 0 )
-                pointercount *= (int)stacktop[-dim];
+            { int dimsize;
+              pointercount += size;
+              dimsize = (int)stacktop[1-g->attr.arrayptr->dim+dim];
+              size *= dimsize;
+              if ( oldarray && (dimsize != oldarray->sizes[dim]) )
+                different_size = 1;
             }
+            if ( oldarray && (oldarray->datatype != node->op2.valtype) )
+            { different_size = 1;
+              if ( oldarray->datatype )
+              { sprintf(errmsg,"Changing datatype of array '%s'.  Data zeroed.\n",g->name);
+                sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                   file_names[node->file_no],node->line_no);
+                kb_error(4822,errmsg,WARNING);
+              }
+              oldarray = NULL;  // zero out data instead of converting
+            }
+            if ( !different_size )
+            { stacktop -= dim;
+              break;  // no need to do anything
+            }
+           
             if ( g->flags & GLOB_LOCALVAR )
               *array_info = (struct array*)temp_calloc( 
                 sizeof(struct array)+dim*sizeof(int)
@@ -4281,6 +4591,7 @@ struct locallist_t *localbase;
                 for ( n = dim-1 ; n >= 0 ; n-- )
                 { int nd = (*array_info)->sizes[n];
                   int od = oldarray->sizes[n];
+                  if ( od == 0 ) goto skip;
                   pp = p % od;
                   p  = p / od;
                   if ( pp >= nd ) goto skip;
@@ -4303,14 +4614,14 @@ skip: ;
            } 
            break;
          
-     case SET_ELEMENT_GLOBAL_:
+    case SET_ELEMENT_GLOBAL_NODE:
        { struct global *g = globals(node->op1.name_id);
          g->value.id = *(element_id*)(stacktop--);
          break;
        } 
           
 
-    case ZOOM_:
+    case ZOOM_NODE:
             if ( node->left ) /* have vertex number */
               { vertex_id v_id;
                  int vnum;
@@ -4340,9 +4651,9 @@ skip: ;
             recalc();
             break;
 
-     case VIEW_MATRIX_LVALUE_: break;  /* just to hold indices */
+    case VIEW_MATRIX_LVALUE_NODE: break;  /* just to hold indices */
 
-     case SET_VIEW_MATRIX_:
+    case SET_VIEW_MATRIX_NODE:
       { int i = (int)(stacktop[-2]);
         int k = (int)(stacktop[-1]);
         REAL value = *stacktop;
@@ -4356,11 +4667,11 @@ skip: ;
          }
          i--;k--;  /* convert to 0 based indexing */
          switch ( node->op2.assigntype )
-         { case ASSIGN_: view[i][k] = value; break;
-           case PLUSASSIGN_: view[i][k] += value; break;
-           case SUBASSIGN_: view[i][k] -= value; break;
-           case MULTASSIGN_: view[i][k] *= value; break;
-           case DIVASSIGN_: 
+         { case ASSIGN_OP: view[i][k] = value; break;
+           case PLUSASSIGN_OP: view[i][k] += value; break;
+           case SUBASSIGN_OP: view[i][k] -= value; break;
+           case MULTASSIGN_OP: view[i][k] *= value; break;
+           case DIVASSIGN_OP: 
                if ( value == 0.0 )
                { sprintf(errmsg,"Division by zero.\n");
                  sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
@@ -4374,14 +4685,14 @@ skip: ;
       break;
 
 
-     case SET_QTARGET_:
+    case SET_QTARGET_NODE:
       { struct gen_quant *q = GEN_QUANT(node->op1.quant_id);
          switch ( node->op2.assigntype )
-         { case ASSIGN_: q->target = *(stacktop--); break;
-           case PLUSASSIGN_: q->target += *(stacktop--); break;
-           case SUBASSIGN_: q->target -= *(stacktop--); break;
-           case MULTASSIGN_: q->target *= *(stacktop--); break;
-           case DIVASSIGN_:
+         { case ASSIGN_OP: q->target = *(stacktop--); break;
+           case PLUSASSIGN_OP: q->target += *(stacktop--); break;
+           case SUBASSIGN_OP: q->target -= *(stacktop--); break;
+           case MULTASSIGN_OP: q->target *= *(stacktop--); break;
+           case DIVASSIGN_OP:
                if ( *stacktop == 0.0 )
                { sprintf(errmsg,"Division by zero.\n");
                  sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
@@ -4396,14 +4707,14 @@ skip: ;
       }
       break;
 
-     case SET_QMODULUS_:
+    case SET_QMODULUS_NODE:
       { REAL v = GEN_QUANT(node->op1.quant_id)->modulus;
          switch ( node->op2.assigntype )
-         { case ASSIGN_: v = *(stacktop--); break;
-           case PLUSASSIGN_: v += *(stacktop--); break;
-           case SUBASSIGN_: v -= *(stacktop--); break;
-           case MULTASSIGN_: v *= *(stacktop--); break;
-           case DIVASSIGN_: 
+         { case ASSIGN_OP: v = *(stacktop--); break;
+           case PLUSASSIGN_OP: v += *(stacktop--); break;
+           case SUBASSIGN_OP: v -= *(stacktop--); break;
+           case MULTASSIGN_OP: v *= *(stacktop--); break;
+           case DIVASSIGN_OP: 
               if ( *stacktop == 0.0 )
                { sprintf(errmsg,"Division by zero.\n");
                  sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
@@ -4417,16 +4728,20 @@ skip: ;
      }
      break;
 
-     case SET_QTOLERANCE_:
+    case SET_QTOLERANCE_NODE:
       if ( *stacktop <= 0.0 )
-         kb_error(2050,"Tolerance must be positive.\n",RECOVERABLE);
+      { sprintf(errmsg,"Tolerance must be positive.\n");
+        sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                                file_names[node->file_no],node->line_no);
+         kb_error(2050,errmsg,RECOVERABLE);
+      }
       { REAL v = GEN_QUANT(node->op1.quant_id)->tolerance;
          switch ( node->op2.assigntype )
-         { case ASSIGN_: v = *(stacktop--); break;
-           case PLUSASSIGN_: v += *(stacktop--); break;
-           case SUBASSIGN_: v -= *(stacktop--); break;
-           case MULTASSIGN_: v *= *(stacktop--); break;
-           case DIVASSIGN_:
+         { case ASSIGN_OP: v = *(stacktop--); break;
+           case PLUSASSIGN_OP: v += *(stacktop--); break;
+           case SUBASSIGN_OP: v -= *(stacktop--); break;
+           case MULTASSIGN_OP: v *= *(stacktop--); break;
+           case DIVASSIGN_OP:
              if ( *stacktop == 0.0 )
                { sprintf(errmsg,"Division by zero.\n");
                  sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
@@ -4440,14 +4755,14 @@ skip: ;
      }
      break;
 
-     case SET_MMODULUS_:
+    case SET_MMODULUS_NODE:
       { REAL v = METH_INSTANCE(node->op1.meth_id)->modulus;
          switch ( node->op2.assigntype )
-         { case ASSIGN_: v = *(stacktop--); break;
-           case PLUSASSIGN_: v += *(stacktop--); break;
-           case SUBASSIGN_: v -= *(stacktop--); break;
-           case MULTASSIGN_: v *= *(stacktop--); break;
-           case DIVASSIGN_:
+         { case ASSIGN_OP: v = *(stacktop--); break;
+           case PLUSASSIGN_OP: v += *(stacktop--); break;
+           case SUBASSIGN_OP: v -= *(stacktop--); break;
+           case MULTASSIGN_OP: v *= *(stacktop--); break;
+           case DIVASSIGN_OP:
              if ( *stacktop == 0.0 )
                { sprintf(errmsg,"Division by zero.\n");
                  sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
@@ -4461,15 +4776,15 @@ skip: ;
      }
      break;
 
-     case SET_QVOLCONST_:
+    case SET_QVOLCONST_NODE:
       { struct gen_quant *q =
              GEN_QUANT(node->op1.quant_id);
          switch ( node->op2.assigntype )
-         { case ASSIGN_: q->volconst = *(stacktop--); break;
-           case PLUSASSIGN_: q->volconst += *(stacktop--); break;
-           case SUBASSIGN_: q->volconst -= *(stacktop--); break;
-           case MULTASSIGN_: q->volconst *= *(stacktop--); break;
-           case DIVASSIGN_:
+         { case ASSIGN_OP: q->volconst = *(stacktop--); break;
+           case PLUSASSIGN_OP: q->volconst += *(stacktop--); break;
+           case SUBASSIGN_OP: q->volconst -= *(stacktop--); break;
+           case MULTASSIGN_OP: q->volconst *= *(stacktop--); break;
+           case DIVASSIGN_OP:
              if ( *stacktop == 0.0 )
                { sprintf(errmsg,"Division by zero.\n");
                  sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
@@ -4484,7 +4799,7 @@ skip: ;
       }
     break;
 
-    case RUNGE_KUTTA_:
+    case RUNGE_KUTTA_NODE:
          old = runge_kutta_flag;
          runge_kutta_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(runge_kutta_flag ? "Runge-Kutta ON." :
@@ -4492,7 +4807,7 @@ skip: ;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case CHECK_INCREASE_: 
+    case CHECK_INCREASE_NODE: 
          old = check_increase_flag;
          check_increase_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(check_increase_flag?"Increase check ON.":
@@ -4500,7 +4815,7 @@ skip: ;
          outstring(old?" (was on)\n":" (was off)\n");
          break;
 
-    case HOMOTHETY_:
+    case HOMOTHETY_NODE:
          old = web.homothety;
          web.homothety = (node->op1.toggle_state==ON_) ? 1 : 0;
          if ( web.homothety && (web.skel[BODY].count == 0) )
@@ -4521,13 +4836,13 @@ skip: ;
             }
          break;
 
-    case COUNTS_: /* report count of elements and status */
+    case COUNTS_NODE: /* report count of elements and status */
          memory_report();
          break;
 
-    case EXTRAPOLATE_: extrapolate(); break;
+    case EXTRAPOLATE_NODE: extrapolate(); break;
 
-    case DIFFUSION_: /* Set diffusion */
+    case DIFFUSION_NODE: /* Set diffusion */
          old = web.diffusion_flag;
          web.diffusion_flag = (node->op1.toggle_state==ON_) ? 1 : 0;
          outstring(web.diffusion_flag ? "Diffusion ON." :
@@ -4535,7 +4850,7 @@ skip: ;
          outstring(old?" (was on)\n":" (was off)\n");
             break;
 
-    case AUTODISPLAY_: 
+    case AUTODISPLAY_NODE: 
       old = go_display_flag;
       go_display_flag = (node->op1.toggle_state == ON_) ? 1 : 0;
       outstring(go_display_flag ? "Autodisplay ON." :
@@ -4544,7 +4859,7 @@ skip: ;
       if ( go_display_flag ) update_display();
       break;
 
-    case SHOW_INNER_: 
+    case SHOW_INNER_NODE: 
       old = innerflag;
       innerflag = (node->op1.toggle_state == ON_) ? 1 : 0;
       outstring(innerflag ? "show inner ON." : "show inner OFF.");
@@ -4552,7 +4867,7 @@ skip: ;
       update_display();
       break;
 
-    case SHOW_OUTER_: 
+    case SHOW_OUTER_NODE: 
       old = outerflag;
       outerflag = (node->op1.toggle_state == ON_) ? 1 : 0;
       outstring(outerflag ? "show outer ON." : "show outer OFF.");
@@ -4560,15 +4875,15 @@ skip: ;
       update_display();
       break;
 
-    case INTERP_NORMALS_: 
+    case INTERP_NORMALS_NODE: 
       normflag = (node->op1.toggle_state == ON_) ? 1 : 0;
       break;
 
-    case COLORMAP_: 
+    case COLORMAP_NODE: 
       colorflag = (node->op1.toggle_state == ON_) ? 1 : 0;
       break;
 
-    case AMBIENT_PRESSURE_: 
+    case AMBIENT_PRESSURE_NODE: 
       web.pressure_flag = (node->op1.toggle_state == ON_) ? 1 : 0;
       if ( web.pressure_flag)
        { if ( !web.full_flag && !valid_id(web.outside_body) )
@@ -4586,7 +4901,7 @@ skip: ;
       outstring(msg);
       break;
 
-    case EFFECTIVE_AREA_:
+    case EFFECTIVE_AREA_NODE:
          if ( SDIM > 3 )
          { sprintf(errmsg,"effective_area only for dimension 3.\n");
            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
@@ -4602,7 +4917,7 @@ skip: ;
          if ( square_curvature_flag ) calc_energy();
          break;
 
-    case NORMAL_CURVATURE_:
+    case NORMAL_CURVATURE_NODE:
          if ( SDIM != 3 )
          { sprintf(errmsg,"Normal_curvature only for dimension 3.\n");
            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
@@ -4617,7 +4932,7 @@ skip: ;
          if ( square_curvature_flag ) calc_energy();
          break;
 
-    case DIV_NORMAL_CURVATURE_:
+    case DIV_NORMAL_CURVATURE_NODE:
          if ( SDIM != 3 )
          { sprintf(errmsg,"Div_normal_curvature only for dimension 3.\n");
            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
@@ -4632,30 +4947,33 @@ skip: ;
          if ( square_curvature_flag ) calc_energy();
          break;
 
-    case LONG_JIGGLE_: 
+    case LONG_JIGGLE_NODE: 
          long_jiggle();
          break;
 
-    case RAW_VERAVG_:
+    case RAW_VERAVG_NODE:
          vertex_average(NOVOLKEEP);
          recalc();
          outstring("Vertex averaging done.\n");
          break;
 
-    case RAWEST_VERAVG_:
+    case RAWEST_VERAVG_NODE:
          vertex_average(RAWEST);
          recalc();
          outstring("Vertex averaging done.\n");
          break;
 
-    case TEXT_SPOT_: /* just accumulate arguments */
+    case TEXT_SPOT_NODE: /* just accumulate arguments */
+    case TEXT_SIZE_NODE:
          break;
 
-    case DISPLAY_TEXT_:
+    case DISPLAY_TEXT_NODE:
          { char *text = *(char**)(stacktop--);
+           REAL text_size = *(stacktop--);
            REAL yspot = *(stacktop--);
            REAL xspot = *(stacktop--);
-           int length = strlen(text);
+
+           int length = (int)strlen(text);
            int text_id;
            
            for ( text_id = 0 ; text_id < MAXTEXTS ; text_id++ )
@@ -4667,23 +4985,29 @@ skip: ;
            }
              
            if ( text_id >= MAXTEXTS-1 )
-           { kb_error(4998,"Too many display texts.\n",WARNING);
+           { sprintf(errmsg,"Too many display texts.\n");
+             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                                file_names[node->file_no],node->line_no);
+             kb_error(4998,errmsg,WARNING);
              break;
            }
            
            strcpy(text_chunks[text_id].text,text);
            text_chunks[text_id].start_x = xspot;
            text_chunks[text_id].start_y = yspot;
+           text_chunks[text_id].vsize = text_size;
            display_text_count++;
            *(++stacktop) = text_id+1;
            *recalc_flag = 1;
            break;
          }
            
-    case DELETE_TEXT_:
+    case DELETE_TEXT_NODE:
       { int text_id = (int)*(stacktop--) - 1;
         if ( (text_id < 0) || (text_id >= MAXTEXTS) )
         { sprintf(errmsg,"Text id must be between 1 and %d.\n",MAXTEXTS);
+          sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                                file_names[node->file_no],node->line_no);
           kb_error(7543,errmsg,RECOVERABLE);
         }
         if ( text_chunks[text_id].text )
@@ -4695,7 +5019,7 @@ skip: ;
         break;  
       }
       
-    case REBODY_:
+    case REBODY_NODE:
       { body_id b_id;
         sprintf(msg,"New bodies: %d\n",rebody());
         outstring(msg);
@@ -4706,18 +5030,25 @@ skip: ;
             if ( get_battr(b_id) & FIXEDVOL )  
               set_body_fixvol(b_id,get_body_volume(b_id));
          break;
-      }
+      } 
 
-    case SUPPRESS_WARNING_:
+    case SUPPRESS_WARNING_NODE:
         { int wnum = (int)*(stacktop--);
-          if ( warnings_suppressed_count < MAXSUPPRESS )
-            warnings_suppressed[warnings_suppressed_count++] = wnum;
-          else
-            kb_error(4535,"Too many warnings suppressed.\n",WARNING);
+          // check for existing suppression
+          for ( i = 0 ; i < warnings_suppressed_count ; i++ )
+            if ( warnings_suppressed[i] == wnum )
+              break;
+          if ( i == warnings_suppressed_count )
+          { // need to install new suppression
+            if ( warnings_suppressed_count < MAXSUPPRESS )
+              warnings_suppressed[warnings_suppressed_count++] = wnum;
+            else
+              kb_error(4535,"Too many warnings suppressed.\n",WARNING);
+          }
         }
         break;
 
-    case UNSUPPRESS_WARNING_:
+    case UNSUPPRESS_WARNING_NODE:
         { int wnum = (int)*(stacktop--);
            for ( i = 0 ; i < warnings_suppressed_count ; i++ )
              if ( warnings_suppressed[i] == wnum )
@@ -4728,30 +5059,30 @@ skip: ;
          }
          break; 
 
-    case ALICE_:      
+    case ALICE_NODE:      
          alice();
          break;
 
-    case BURCHARD_:      
+    case BURCHARD_NODE:      
          burchard(node->op1.maxsteps);
          break;
 
-    case DUMP_:
+    case DUMP_NODE:
          if ( node->left ) do_dump(*(char**)(stacktop--));
          else do_dump(NULL);
          break;
 
-    case SET_COLORMAP_:
+    case SET_COLORMAP_NODE:
          strncpy(cmapname,*(char**)(stacktop--),sizeof(cmapname));
          break;
 
-    case RAW_CELLS_: 
+    case RAW_CELLS_NODE: 
          web.torus_body_flag = 0; web.torus_clip_flag = 0;
          torus_display_mode = TORUS_RAW_MODE;
          update_display();
          break;
 
-    case CONNECTED_CELLS_: 
+    case CONNECTED_CELLS_NODE: 
          if ( web.skel[BODY].count == 0 )
          {  sprintf(errmsg,"There are no bodies to display connectedly.\n");
             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
@@ -4763,7 +5094,7 @@ skip: ;
                   update_display(); }
          break;
 
-    case CLIPPED_CELLS_:
+    case CLIPPED_CELLS_NODE:
          if ( !web.torus_flag && !web.torus_display_period ) 
          {  sprintf(errmsg,
                "CLIPPED mode has no effect since torus model not used.\n");
@@ -4776,19 +5107,19 @@ skip: ;
          update_display();
          break;
 
-    case THICKEN_: 
+    case THICKEN_NODE: 
       thickenflag = (node->op1.toggle_state == ON_) ? 1 : 0;
          update_display();
          break;
 
-    case METRIC_CONVERT_:
+    case METRIC_CONVERT_NODE:
          metric_convert_flag = (node->op1.toggle_state == ON_) ? 1 : 0;
          if ( metric_convert_flag )
              outstring("Converting form to vector using metric.\n");
          else outstring("Not using metric to convert form to vector.\n");
          break;
 
-    case QUANTITIES_ONLY_:
+    case QUANTITIES_ONLY_NODE:
          old = quantities_only_flag;
          quantities_only_flag = (node->op1.toggle_state == ON_) ? 1 : 0;
          outstring("Using quantities only ");
@@ -4796,7 +5127,7 @@ skip: ;
          outstring(old ? "(was ON)\n" : "(was OFF)\n");
          break;
 
-    case SQUARED_GRADIENT_:
+    case SQUARED_GRADIENT_NODE:
          old = min_square_grad_flag;
          min_square_grad_flag = (node->op1.toggle_state == ON_) ? 1 : 0;
          outstring("Squared gradient minimization with Hessian ");
@@ -4804,7 +5135,7 @@ skip: ;
          outstring(old ? "(was ON)\n" : "(was OFF)\n");
          break;
 
-    case LINEAR_METRIC_:
+    case LINEAR_METRIC_NODE:
          old = hessian_linear_metric_flag;
          hessian_linear_metric_flag = (node->op1.toggle_state == ON_) ? 1 : 0;
          outstring("Linear interpolation metric with Hessian ");
@@ -4812,14 +5143,24 @@ skip: ;
          outstring(old ? "(was ON)\n" : "(was OFF)\n");
          break;
 
-    case YSMP_: 
+    case MKL_NODE:
+#ifndef MKL
+      kb_error(7761,"This Evolver not enabled for MKL.\n",RECOVERABLE);
+#endif
+      old = ysmp_flag;
+      ysmp_flag = 
+          (node->op1.toggle_state == ON_) ? MKL_FACTORING : MINDEG_FACTORING;
+      change_hessian_functions(old,ysmp_flag);
+      break;
+
+    case YSMP_NODE: 
       old = ysmp_flag;
       ysmp_flag = 
           (node->op1.toggle_state == ON_) ? YSMP_FACTORING : MINDEG_FACTORING;
       change_hessian_functions(old,ysmp_flag);
       break;
 
-    case METIS_FACTOR_:
+    case METIS_FACTOR_NODE:
          old = ysmp_flag;
 #ifndef METIS 
          kb_error(2055,"This Evolver not compiled with METIS.\n",RECOVERABLE);
@@ -4829,24 +5170,35 @@ skip: ;
 #endif
          break;
 
-     case BUNCH_KAUFMAN_:
+    case BUNCH_KAUFMAN_NODE:
           flip_toggle(&BK_flag,node->op1.toggle_state,
                  "Bunch-Kaufman version of minimal degree");
              break;
 
-      case CONTINUE_:
-      case SET_PROC_END_:
-      case SET_FUNC_END_:
-      case SET_PERM_PROC_END_:
-      case SHOW_END_:
-      case ELSE_:
-      case COND_ELSE_:
+    case SET_PROC_END_NODE:
+    case SET_FUNC_END_NODE:
+    case SET_PERM_PROC_END_NODE:
+    case SHOW_END_NODE:
+    case ELSE_NODE:
+    case COND_ELSE_NODE:
          /* just a continue node */
          break;
 
-      default:
-            sprintf(errmsg,"Bad expression eval node type: %s.",
-                tokname(node->type));
+    case MAKE_THREAD_LISTS_NODE:
+         if ( !threadflag )
+           break;
+         if ( v_partition_stage_attr < 0 )
+         { sprintf(errmsg,"make_thread_lists: stage and proc attributes don't exist.\n"); 
+           sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                                file_names[node->file_no],node->line_no);
+            kb_error(5822,errmsg,RECOVERABLE);
+         }
+         make_thread_lists();
+         break;
+
+    default:
+            sprintf(errmsg,"Bad expression eval node type %d: %s.",
+                node->type,tokname(node->type));
             if ( node->file_no >= 0 && node->file_no <= file_no_used )
               sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                  file_names[node->file_no],node->line_no);
@@ -4868,117 +5220,128 @@ skip: ;
 * purpose:  get boolean value of toggle for expression 
 */
 
-int get_toggle_value(tog)
-int tog;  /* type of toggle */
+int get_toggle_value(int tog  /* type of toggle */)
 {
   switch (tog)
-    {  case GEOMVIEW_: return geomview_flag; 
-       case BEZIER_BASIS_: return bezier_flag;
-       case SMOOTH_GRAPH_: return smooth_graph_flag;
-       case FULL_BOUNDING_BOX_: return full_bounding_box_flag;
-       case POP_DISJOIN_: return pop_disjoin_flag;
-       case POP_ENJOIN_: return pop_enjoin_flag;
-       case POP_TO_EDGE_: return pop_to_edge_flag;
-       case POP_TO_FACE_: return pop_to_face_flag;
-       case MPI_DEBUG_: return mpi_debug;
-        case AMBIENT_PRESSURE_: return web.pressure_flag;
-        case ZENER_DRAG_: return zener_drag_flag;
-        case BACKCULL_: return backcull_flag;
-        case TORUS_FILLED_: return web.full_flag;
-        case VOLGRADS_EVERY_: return volgrads_every_flag;
-        case LOGFILE_: return logfile_flag;
-        case KEYLOGFILE_: return logfile_flag;
-        case LINEAR_: return (web.modeltype == LINEAR);
-        case QUADRATIC_: return (web.modeltype == QUADRATIC);
-        case LAGRANGE_: return (web.modeltype == LAGRANGE);
-        case KUSNER_: return kusner_flag; 
-        case ESTIMATE_: return estimate_flag;
-        case DETURCK_: return unit_normal_flag;
-        case HOMOTHETY_: return web.homothety;
-        case SLICE_VIEW_: return slice_view_flag; 
-        case CLIP_VIEW_: return clip_view_flag; 
-        case SQGAUSS_: return sqgauss_flag; 
-        case AUTOPOP_: return autopop_flag;
-        case IMMEDIATE_AUTOPOP_: return immediate_autopop_flag;
-        case AUTOPOP_QUARTIC_: return autopop_quartic_flag;
-        case AUTOCHOP_: return autochop_flag;
-        case QUIET_: return quiet_flag; 
-        case HESSIAN_QUIET_: return hessian_quiet_flag; 
-        case QUIETGO_: return quiet_go_flag; 
-        case QUIETLOAD_: return quiet_load_flag; 
-        case OLD_AREA_: return old_area_flag;
-        case APPROX_CURV_: return approx_curve_flag;
-        case RUNGE_KUTTA_: return runge_kutta_flag; 
-        case CHECK_INCREASE_: return check_increase_flag; 
-        case DEBUG_: return yydebug; 
-        case MEAN_CURV_: return web.area_norm_flag; 
-        case DIFFUSION_: return web.diffusion_flag; 
-        case GRAVITY_: return web.gravflag; 
-        case CONJ_GRAD_: return conj_grad_flag; 
-        case TRANSFORMS_: return transforms_flag; 
-        case CONF_EDGE_SQCURV_: return conf_edge_curv_flag; 
-        case EFFECTIVE_AREA_: return effective_area_flag; 
-        case RAW_CELLS_: return !web.torus_body_flag && !web.torus_clip_flag; 
-        case CONNECTED_CELLS_: return web.torus_body_flag; 
-        case CLIPPED_CELLS_: return web.torus_clip_flag; 
-        case THICKEN_: return thickenflag; 
-        case YSMP_: return ysmp_flag; 
-        case LINEAR_METRIC_: return hessian_linear_metric_flag; 
-        case METRIC_CONVERT_: return metric_convert_flag; 
-        case BUNCH_KAUFMAN_: return BK_flag; 
-        case SHOW_INNER_: return innerflag; 
-        case SHOW_OUTER_: return outerflag; 
-        case COLORMAP_: return colorflag; 
-        case HESSIAN_DIFF_: return hessian_by_diff_flag; 
-        case POST_PROJECT_: return post_project_flag; 
-        case MEAN_CURV_INT_: return mean_curv_int_flag; 
-        case OPTIMIZE_: return !web.motion_flag; 
-        case NORMAL_CURVATURE_: return normal_curvature_flag; 
-        case DIV_NORMAL_CURVATURE_: return div_normal_curvature_flag; 
-        case SHADING_: return shading_flag; 
-        case FACET_COLORS_: return color_flag; 
-        case BOUNDARY_CURVATURE_: return boundary_curvature_flag; 
-        case NORMAL_MOTION_: return normal_motion_flag; 
-        case PINNING_: return check_pinning_flag; 
-        case VIEW_4D_: return view_4D_flag; 
-        case MEMDEBUG_: return memdebug; 
-        case ITDEBUG_: return itdebug; 
-        case METRIC_CONVERSION_: return metric_convert_flag; 
-        case AUTORECALC_: return autorecalc_flag; 
-        case FORCE_POS_DEF_: return make_pos_def_flag; 
-        case GV_BINARY_: return gv_binary_flag; 
-        case SELF_SIMILAR_: return self_similar_flag; 
-        case AUTODISPLAY_: return go_display_flag; 
-        case RIBIERE_CG_: return ribiere_flag; 
-        case ASSUME_ORIENTED_: return assume_oriented_flag; 
-        case DIRICHLET_MODE_: return dirichlet_flag; 
-        case SOBOLEV_MODE_: return sobolev_flag; 
-        case KRAYNIKPOPVERTEX_FLAG_: return kraynikpopvertex_flag; 
-        case KRAYNIKPOPEDGE_FLAG_: return kraynikpopedge_flag; 
-        case HESSIAN_NORMAL_: return hessian_normal_flag; 
-        case HESSIAN_SPECIAL_NORMAL_: return hessian_special_normal_flag; 
-        case HESSIAN_NORMAL_PERP_: return hessian_normal_perp_flag; 
-        case HESSIAN_NORMAL_ONE_: return hessian_normal_one_flag; 
-        case HESSIAN_DOUBLE_NORMAL_: return hessian_double_normal_flag; 
-        case INTERP_BDRY_PARAM_: return interp_bdry_param; 
-        case H_INVERSE_METRIC_: return web.h_inverse_metric_flag; 
-        case PSCOLORFLAG_: return ps_colorflag;
-        case GRIDFLAG_: return gridflag;
-        case METIS_FACTOR_: return ysmp_flag == METIS_FACTORING;
-        case CROSSINGFLAG_: return crossingflag;
-        case LABELFLAG_: return labelflag;
-        case SHOW_ALL_QUANTITIES_: return show_all_quantities;
-        case QUANTITIES_ONLY_: return quantities_only_flag;
-        case VISIBILITY_TEST_: return visibility_test;
-        case SPARSE_CONSTRAINTS_: return sparse_constraints_flag;
-        case BLAS_FLAG_: return blas_flag; 
-        case BREAK_AFTER_WARNING_ : return break_after_warning;
-        case AUGMENTED_HESSIAN_: return augmented_hessian_flag;
-        case VERBOSE_: return verbose_flag;
-        case FUNCTION_QUANTITY_SPARSE_: return quantity_function_sparse_flag;
-		case BIG_ENDIAN_: return big_endian_flag; 
-		case LITTLE_ENDIAN_ : return little_endian_flag;
-        default:
+    {  case GEOMVIEW_NODE: return geomview_flag; 
+       case VIEW_TRANSFORMS_USE_UNIQUE_NODE: 
+             return view_transforms_unique_point_flag;
+       case DETORUS_STICKY_NODE: return detorus_sticky;
+       case BEZIER_BASIS_NODE: return bezier_flag;
+       case SMOOTH_GRAPH_NODE: return smooth_graph_flag;
+       case FULL_BOUNDING_BOX_NODE: return full_bounding_box_flag;
+       case POP_DISJOIN_NODE: return pop_disjoin_flag;
+       case POP_ENJOIN_NODE: return pop_enjoin_flag;
+       case POP_TO_EDGE_NODE: return pop_to_edge_flag;
+       case POP_TO_FACE_NODE: return pop_to_face_flag;
+       case MPI_DEBUG_NODE: return mpi_debug;
+       case MPI_LOCAL_BODIES_NODE: return mpi_local_bodies_flag; 
+       case AMBIENT_PRESSURE_NODE: return web.pressure_flag;
+       case ZENER_DRAG_NODE: return zener_drag_flag;
+       case BACKCULL_NODE: return backcull_flag;
+       case TORUS_FILLED_NODE: return web.full_flag;
+       case VOLGRADS_EVERY_NODE: return volgrads_every_flag;
+       case LOGFILE_NODE: return logfile_flag;
+       case KEYLOGFILE_NODE: return logfile_flag;
+       case LINEAR_NODE: return (web.modeltype == LINEAR);
+       case QUADRATIC_NODE: return (web.modeltype == QUADRATIC);
+       case LAGRANGE_NODE: return (web.modeltype == LAGRANGE);
+       case KUSNER_NODE: return kusner_flag; 
+       case ESTIMATE_NODE: return estimate_flag;
+       case DETURCK_NODE: return unit_normal_flag;
+       case HOMOTHETY_NODE: return web.homothety;
+       case SLICE_VIEW_NODE: return slice_view_flag; 
+       case CLIP_VIEW_NODE: return clip_view_flag; 
+       case SQGAUSS_NODE: return sqgauss_flag; 
+       case AUTOPOP_NODE: return autopop_flag;
+       case IMMEDIATE_AUTOPOP_NODE: return immediate_autopop_flag;
+       case AUTOPOP_QUARTIC_NODE: return autopop_quartic_flag;
+       case AUTOCHOP_NODE: return autochop_flag;
+       case QUIET_NODE: return quiet_flag; 
+       case HESSIAN_QUIET_NODE: return hessian_quiet_flag; 
+       case QUIETGO_NODE: return quiet_go_flag; 
+       case QUIETLOAD_NODE: return quiet_load_flag; 
+       case OLD_AREA_NODE: return old_area_flag;
+       case APPROX_CURV_NODE: return approx_curve_flag;
+       case RUNGE_KUTTA_NODE: return runge_kutta_flag; 
+       case CHECK_INCREASE_NODE: return check_increase_flag; 
+       case DEBUG_NODE: return yydebug; 
+       case MEAN_CURV_NODE: return web.area_norm_flag; 
+       case DIFFUSION_NODE: return web.diffusion_flag; 
+       case GRAVITY_NODE: return web.gravflag; 
+       case CONJ_GRAD_NODE: return conj_grad_flag; 
+       case TRANSFORMS_NODE: return transforms_flag; 
+       case CONF_EDGE_SQCURV_NODE: return conf_edge_curv_flag; 
+       case EFFECTIVE_AREA_NODE: return effective_area_flag; 
+       case RAW_CELLS_NODE: return !web.torus_body_flag && !web.torus_clip_flag; 
+       case CONNECTED_CELLS_NODE: return web.torus_body_flag; 
+       case CLIPPED_CELLS_NODE: return web.torus_clip_flag; 
+       case THICKEN_NODE: return thickenflag; 
+       case YSMP_NODE: return ysmp_flag; 
+       case LINEAR_METRIC_NODE: return hessian_linear_metric_flag; 
+       case METRIC_CONVERT_NODE: return metric_convert_flag; 
+       case BUNCH_KAUFMAN_NODE: return BK_flag; 
+       case SHOW_INNER_NODE: return innerflag; 
+       case SHOW_OUTER_NODE: return outerflag; 
+       case COLORMAP_NODE: return colorflag; 
+       case HESSIAN_DIFF_NODE: return hessian_by_diff_flag; 
+       case POST_PROJECT_NODE: return post_project_flag; 
+       case MEAN_CURV_INT_NODE: return mean_curv_int_flag; 
+       case OPTIMIZE_NODE: return !web.motion_flag; 
+       case NORMAL_CURVATURE_NODE: return normal_curvature_flag; 
+       case DIV_NORMAL_CURVATURE_NODE: return div_normal_curvature_flag; 
+       case SHADING_NODE: return shading_flag; 
+       case FACET_COLORS_NODE: return color_flag; 
+       case BOUNDARY_CURVATURE_NODE: return boundary_curvature_flag; 
+       case NORMAL_MOTION_NODE: return normal_motion_flag; 
+       case PINNING_NODE: return check_pinning_flag; 
+       case VIEW_4D_NODE: return view_4D_flag; 
+       case MEMDEBUG_NODE: return memdebug; 
+       case ITDEBUG_NODE: return itdebug; 
+       case METRIC_CONVERSION_NODE: return metric_convert_flag; 
+       case AUTORECALC_NODE: return autorecalc_flag; 
+       case FORCE_POS_DEF_NODE: return make_pos_def_flag; 
+       case GV_BINARY_NODE: return gv_binary_flag; 
+       case SELF_SIMILAR_NODE: return self_similar_flag; 
+       case AUTODISPLAY_NODE: return go_display_flag; 
+       case RIBIERE_CG_NODE: return ribiere_flag; 
+       case ASSUME_ORIENTED_NODE: return assume_oriented_flag; 
+       case DIRICHLET_MODE_NODE: return dirichlet_flag; 
+       case SOBOLEV_MODE_NODE: return sobolev_flag; 
+       case KRAYNIKPOPVERTEX_FLAG_NODE: return kraynikpopvertex_flag; 
+       case KRAYNIKPOPEDGE_FLAG_NODE: return kraynikpopedge_flag; 
+       case K_ALTITUDE_FLAG_NODE: return K_altitude_flag; 
+       case HESSIAN_NORMAL_NODE: return hessian_normal_flag; 
+       case HESSIAN_SPECIAL_NORMAL_NODE: return hessian_special_normal_flag; 
+       case HESSIAN_NORMAL_PERP_NODE: return hessian_normal_perp_flag; 
+       case HESSIAN_NORMAL_ONE_NODE: return hessian_normal_one_flag; 
+       case HESSIAN_DOUBLE_NORMAL_NODE: return hessian_double_normal_flag; 
+       case INTERP_BDRY_PARAM_NODE: return interp_bdry_param; 
+       case H_INVERSE_METRIC_NODE: return web.h_inverse_metric_flag; 
+       case PSCOLORFLAG_NODE: return ps_colorflag;
+       case PS_CMYKFLAG_NODE: return ps_cmykflag;
+       case GRIDFLAG_NODE: return gridflag;
+       case FORCE_EDGESWAP_NODE: return force_edgeswap_flag;
+       case SEPTUM_FLAG_NODE: return septum_flag; 
+       case BOX_FLAG_NODE: return box_flag;
+       case SHOW_ALL_EDGES_NODE: return edgeshow_flag;
+       case METIS_FACTOR_NODE: return ysmp_flag == METIS_FACTORING;
+       case CROSSINGFLAG_NODE: return crossingflag;
+       case LABELFLAG_NODE: return labelflag;
+       case SHOW_ALL_QUANTITIES_NODE: return show_all_quantities;
+       case QUANTITIES_ONLY_NODE: return quantities_only_flag;
+       case VISIBILITY_TEST_NODE: return visibility_test;
+       case SPARSE_CONSTRAINTS_NODE: return sparse_constraints_flag;
+       case BLAS_FLAG_NODE: return blas_flag; 
+       case BREAK_AFTER_WARNING_NODE : return break_after_warning;
+       case BREAK_ON_WARNING_NODE : return break_on_warning;
+       case AUGMENTED_HESSIAN_NODE: return augmented_hessian_flag;
+       case VERBOSE_NODE: return verbose_flag;
+       case FUNCTION_QUANTITY_SPARSE_NODE: return quantity_function_sparse_flag;
+       case BIG_ENDIAN_NODE: return big_endian_flag; 
+       case LITTLE_ENDIAN_NODE : return little_endian_flag;
+       case RGB_COLORS_FLAG_NODE : return rgb_colors_flag;
+       default:
             sprintf(errmsg,"Internal error:  Toggle value omitted for toggle %d.\n",tog);
             kb_error(1236,errmsg,WARNING);
     }
@@ -4992,11 +5355,12 @@ int tog;  /* type of toggle */
 * purpose: get value of various variables visible to user.
 */
 
-REAL get_internal_variable(vartok)
-int vartok; /* token number of variable */
+REAL get_internal_variable(int vartok /* token number of variable */)
 { 
   switch(vartok)
   { 
+    case V_DETORUS_EPSILON: return dt_eps; 
+    case V_BOUNDING_BOX_COLOR: return bounding_box_color;
     case V_HIGH_BOUNDARY: return web.highbdry;
     case V_HIGH_CONSTRAINT: return web.highcon;
     case V_RANDOM: return kb_drand();
@@ -5067,7 +5431,7 @@ int vartok; /* token number of variable */
       return hessian_slant_cutoff; 
     case V_HESS_EPSILON:
       return hessian_epsilon; 
-    case GRAV_CONST_:
+    case GRAV_CONST_NODE:
       return web.grav_const; 
     case V_EQUI_COUNT:
       return (REAL)web.equi_count; 
@@ -5140,13 +5504,25 @@ int vartok; /* token number of variable */
       return (REAL)eigen_neg; 
     case V_EIGENZERO:
       return (REAL)eigen_zero; 
-    case V_CHECK_COUNT_:
+    case V_CHECK_COUNT:
       return (REAL)check_count; 
-    case V_VISIBILITY_DEBUG_:
+    case V_BAD_NEXT_PREV_COUNT:
+      return (REAL)bad_next_prev_count; 
+    case V_INCONSISTENT_BODIES_COUNT:
+      return (REAL)inconsistent_bodies_count; 
+    case V_EDGE_LOOP_COUNT:
+      return (REAL)edge_loop_count; 
+    case V_EDGES_SAME_VERTICES_COUNT:
+      return (REAL)edges_same_vertices_count; 
+    case V_FACETS_SAME_VERTICES_COUNT:
+      return (REAL)facets_same_vertices_count; 
+    case V_BAD_ERRORS_COUNT:
+      return (REAL)bad_errors_count; 
+    case V_VISIBILITY_DEBUG:
       return (REAL)visdebuglevel; 
-    case V_SCROLLBUFFERSIZE_:
+    case V_SCROLLBUFFERSIZE:
       return (REAL)scrollbuffersize;
-    case V_BREAKFLAG_:
+    case V_BREAKFLAG:
       return (REAL)breakflag; 
     case V_PICKVNUM:
       return (REAL)pickvnum; 
@@ -5172,15 +5548,16 @@ int vartok; /* token number of variable */
       return brightness; 
     case V_LAST_ERROR: return last_error;
     case V_BACKGROUND: return background_color;
-    case V_PS_LABELSIZE_: return ps_labelsize;
-    case V_PS_STRINGWIDTH_: return ps_stringwidth;
-    case V_PS_FIXEDEDGEWIDTH_: return ps_fixededgewidth;
-    case V_PS_TRIPLEEDGEWIDTH_: return ps_tripleedgewidth;
-    case V_PS_CONEDGEWIDTH_: return ps_conedgewidth;
-    case V_PS_BAREEDGEWIDTH_: return ps_bareedgewidth;
-    case V_PS_GRIDEDGEWIDTH_: return ps_gridedgewidth;
-    case EVERYTHING_QUANTITIES_: return everything_quantities_flag;
+    case V_PS_LABELSIZE: return ps_labelsize;
+    case V_PS_STRINGWIDTH: return ps_stringwidth;
+    case V_PS_FIXEDEDGEWIDTH: return ps_fixededgewidth;
+    case V_PS_TRIPLEEDGEWIDTH: return ps_tripleedgewidth;
+    case V_PS_CONEDGEWIDTH: return ps_conedgewidth;
+    case V_PS_BAREEDGEWIDTH: return ps_bareedgewidth;
+    case V_PS_GRIDEDGEWIDTH: return ps_gridedgewidth;
+    case V_EVERYTHING_QUANTITIES: return everything_quantities_flag;
     case V_AUTOCHOP_LENGTH: return autochop_length;
+    case GRAV_CONST_TOK: return web.grav_const;
     case V_TRANSFORM_COUNT:
       return transform_count == 0 ? 1 : transform_count;
     case V_CLOCK:
@@ -5206,9 +5583,9 @@ int vartok; /* token number of variable */
       break;
     
     case V_CPU_COUNTER:
-      { int cycles[2]; 
+      { long long int cycles; 
         PROF_NOW(cycles);
-        return PROF_CYCLES(cycles);
+        return (REAL)PROF_CYCLES(cycles);
       }
 
     case V_MEMARENA:
@@ -5222,13 +5599,21 @@ int vartok; /* token number of variable */
   return  (char*)sbrk(0)-(char*)&evolver_version;
 #else
 #ifdef MSC
-      { struct _heapinfo hinfo;
-        long mem_use=0,mem_free=0;
+      { 
+
+          /*
+        struct _heapinfo hinfo;
+        size_t mem_use=0,mem_free=0;
         hinfo._pentry = NULL;
         while ( _heapwalk(&hinfo) == _HEAPOK )
            if (hinfo._useflag) { mem_use+= hinfo._size; }
            else {  mem_free += hinfo._size; }
         return (REAL)(mem_use+mem_free);
+        */
+        PROCESS_MEMORY_COUNTERS meminfo;
+        meminfo.cb = sizeof(meminfo);
+        GetProcessMemoryInfo(GetCurrentProcess(),&meminfo,sizeof(meminfo));
+        return (REAL)meminfo.WorkingSetSize;
       }          
 
 #else
@@ -5258,7 +5643,7 @@ int vartok; /* token number of variable */
 #else
 #ifdef WIN32
       { struct _heapinfo hinfo;
-        long mem_use=0,mem_free=0;
+        size_t mem_use=0,mem_free=0;
         hinfo._pentry = NULL;
         while ( _heapwalk(&hinfo) == _HEAPOK )
            if (hinfo._useflag) { mem_use+= hinfo._size; }
@@ -5278,7 +5663,8 @@ int vartok; /* token number of variable */
 
   }
   return 0.0;
-}
+
+} // end get_internal_variable()
 
 /**********************************************************************
 *
@@ -5289,9 +5675,10 @@ int vartok; /* token number of variable */
 *
 */
 
-void tree_copy(dest,src)
-struct expnode *dest;
-struct treenode *src;
+void tree_copy(
+  struct expnode *dest,
+  struct treenode *src
+)
 {
   struct treenode *enode;
   size_t count,n;
@@ -5310,7 +5697,7 @@ struct treenode *src;
   dest->flag |= USERCOPY;
   memcpy((char*)(dest->start+2),(char*)enode,count*sizeof(struct treenode));
   dest->root = dest->start + count + 1;
-  dest->start[1].type = SETUP_FRAME_;
+  dest->start[1].type = SETUP_FRAME_NODE;
   /* make copies of strings and locallists */
   for ( enode=dest->start+2, n = 0 ; n < count ; enode++,n++ )
   { if ( enode->flags & HAS_STRING )
@@ -5340,7 +5727,7 @@ struct treenode *src;
   if ( dest->start[0].right ) dest->start[0].right += (int)count+1;
 
   /* FINISH node */
-  dest->start[count+2].type = FINISHED;
+  dest->start[count+2].type = FINISHED_NODE;
 
   stack_usage(dest);
 }  /* end tree_copy() */
@@ -5355,9 +5742,10 @@ struct treenode *src;
 *
 */
 
-void perm_tree_copy(dest,src)
-struct expnode *dest;
-struct treenode *src;
+void perm_tree_copy(
+  struct expnode *dest,
+  struct treenode *src
+)
 {
   struct treenode *enode;
   size_t count,n;
@@ -5375,7 +5763,7 @@ struct treenode *src;
   dest->flag |= USERCOPY;
   memcpy((char*)(dest->start+2),(char*)enode,count*sizeof(struct treenode));
   dest->root = dest->start + count + 1;
-  dest->start[1].type = SETUP_FRAME_;
+  dest->start[1].type = SETUP_FRAME_NODE;
   /* make copies of strings */
   for ( enode=dest->start+2, n = 0 ; n < count ; enode++,n++ )
   { if ( enode->flags & HAS_STRING )
@@ -5392,10 +5780,11 @@ struct treenode *src;
   dest->start[0].flags |= PERMNODE;
 
   /* FINISH node */
-  dest->start[count+2].type = FINISHED;
+  dest->start[count+2].type = FINISHED_NODE;
 
   stack_usage(dest);
-}
+
+} // end perm_tree_copy()
 
 
 /*******************************************************************
@@ -5405,8 +5794,7 @@ struct treenode *src;
 * purpose:  converts escape sequences to ASCII in place  
 *
 */
-void reduce_string(s) 
-char *s;
+void reduce_string(char *s)
 { char *c = s;
   while ( *s ) /* reduce escape sequences */
   if ( *s == '\\' )
@@ -5424,7 +5812,8 @@ char *s;
   else if (*s == '\n' ) s++;  /* omit newlines */
   else *(c++) = *(s++);
   *c = '\0';
-}
+
+} // end reduce_string()
 
 /***********************************************************************
 *
@@ -5434,33 +5823,15 @@ char *s;
 *          Can set to NULLID.
 */
 
-void set_body(id,b_id)
-element_id id; /* edge or facet, inverted for backbody */
-body_id b_id;
+void set_body(
+  element_id id, /* edge or facet, inverted for backbody */
+  body_id b_id
+)
 {
   if ( id_type(id) == FACET )
   {
-    body_id bb_id = get_facet_body(id);
-    int newp = valid_id(b_id) ? get_body_volmeth(b_id) : 0;
-    facetedge_id fe,start_fe;
-
     set_facet_body(id,b_id);
 
-    if ( (web.representation == STRING) && everything_quantities_flag )
-    { /* fix up edge volume quantities */
-      fe = start_fe = get_facet_fe(id);
-      do
-      { edge_id e_id = get_fe_edge(fe);
-        if ( valid_id(bb_id) )
-        { int oldp = get_body_volmeth(bb_id);
-          unapply_method(e_id,oldp);
-        }
-        if ( newp )
-          apply_method_num(e_id,newp);
-        else set_facet_area(id,0.0);
-        fe = get_next_edge(fe);
-      } while ( valid_id(fe) && !equal_id(fe,start_fe) );
-    }
     return;
   }
 
@@ -5597,8 +5968,10 @@ body_id b_id;
 *
 * purpose: Switch sets of Hessian functions.
 */
-void change_hessian_functions(oldh,newh)
-int oldh,newh;
+void change_hessian_functions(
+  int oldh,
+  int newh
+  )
 {
   if ( oldh == newh ) return;
   switch ( newh )
@@ -5618,6 +5991,7 @@ int oldh,newh;
          {  case YSMP_FACTORING: outstring("(was YSMP)\n"); break;
             case MINDEG_FACTORING: outstring("(was alt min deg)\n"); break;
             case METIS_FACTORING: outstring("(was metis)\n"); break;
+            case MKL_FACTORING: outstring("(was MKL)\n"); break;
          }
       }
       break;
@@ -5637,10 +6011,8 @@ int oldh,newh;
          {  case YSMP_FACTORING: outstring("(was YSMP)\n"); break;
             case MINDEG_FACTORING: outstring("(was alt min deg)\n"); break;
             case METIS_FACTORING: outstring("(was metis)\n"); break;
+            case MKL_FACTORING: outstring("(was MKL)\n"); break;
          }
-#if defined(TC) && defined(LONGDOUBLE)
-         erroutstring("WARNING: YSMP is buggy in this long double version.\n");
-#endif
       }
       break;
     case METIS_FACTORING:
@@ -5665,8 +6037,30 @@ tree stuff not working
          {  case YSMP_FACTORING: outstring("(was YSMP)\n"); break;
             case MINDEG_FACTORING: outstring("(was alt min deg)\n"); break;
             case METIS_FACTORING: outstring("(was metis)\n"); break;
+            case MKL_FACTORING: outstring("(was MKL)\n"); break;
          }
      }
+     case MKL_FACTORING:
+      { 
+         sp_mul_func = bk_mul;
+         sp_AIJ_setup_func= bk_AIJ_setup;
+         sp_constraint_setup_func = bk_constraint_setup;
+         sp_hess_project_setup_func= BK_hess_project_setup;
+         sp_factor_func = mkl_factor;
+         sp_CHinvC_func = sp_CHinvC;
+         sp_solve_func = mkl_solve;
+         sp_solve_multi_func = mkl_solve_multi;
+         sp_ordering_func = NULL;
+         outstring("Using MKL. ");
+         switch ( oldh ) 
+         {  case YSMP_FACTORING: outstring("(was YSMP)\n"); break;
+            case MINDEG_FACTORING: outstring("(was alt min deg)\n"); break;
+            case METIS_FACTORING: outstring("(was metis)\n"); break;
+            case MKL_FACTORING: outstring("(was MKL)\n"); break;
+         }
+      }
+      break;
+ 
   }
   ysmp_flag = newh;
 }  /* end change_hessian_functions() */

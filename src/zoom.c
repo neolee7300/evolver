@@ -21,9 +21,10 @@
 *            a given distance and fixing in place the jagged edges.
 */
 
-void zoom_vertex(v_id,radius)
-vertex_id v_id;  /* vertex to zoom on */
-REAL radius;      /* cutoff distance from v_id */
+void zoom_vertex(
+  vertex_id v_id,  /* vertex to zoom on */
+  REAL radius      /* cutoff distance from v_id */
+)
 {
   vertex_id vv_id;
   edge_id e_id;
@@ -121,6 +122,6 @@ REAL radius;      /* cutoff distance from v_id */
      FOR_ALL_FACETEDGES(fe_id)
         if ( get_attr(fe_id) & DISSOLVED ) free_element(fe_id);
 
-}
+} // end zoom_vertex()
 
 

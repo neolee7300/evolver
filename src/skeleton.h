@@ -28,7 +28,8 @@ struct expnode {
                  int flag;    /* USERCOPY if user must free; HAS_STRING */
                  int stack_max;     /* maximum stack usage (excluding locals)*/
                  char name[EXPNAMESIZE];  /* for error messages */
-                 REAL elapsed_time;
+                 REAL elapsed_time;  // for profiling
+                 int call_count;  // for profiling
                };
 
 /* flags, also used for treenode? */
@@ -49,6 +50,8 @@ struct skeleton {
      int            alloc;      /* number actually in use             */
      element_id     free;       /* start of free list                 */
      element_id     freelast;   /* end of free list                   */
+     int            sparse_spot; /* used by sparse_ibase_flag         */
+
      /* following used if hash storage in effect */
      struct element *freehead;  /* start of freelist                  */
      int            free_spot;  /* for scanning for empties           */
@@ -72,7 +75,7 @@ struct skeleton {
 */
 
 typedef int MAP;           /* constraint, etc, bitmap type */
-typedef long int ATTR;     /* attribute bitmap type */
+typedef long long int ATTR;     /* attribute bitmap type */
 typedef short int tagtype; /* element tag type */
 typedef short ETYPE;       /* element type type */
 typedef long int WRAPTYPE; /* symmetry group element */
@@ -102,6 +105,7 @@ typedef int NTYPE; /* for node indexes, types, etc. */
 
 struct element {
   COMMON_STUFF
+  int lock;
   };
 
 /*****************************************************************
@@ -133,7 +137,6 @@ struct facetedge
 struct vertex
   { 
      COMMON_STUFF
-     REAL star;     /* area of surrounding facets */
      edge_id e_id;  /* link to global structure */
                     /* may really be facet in Lagrange model */
      facet_id f_id; /* link to global structure in simplex model */
@@ -150,6 +153,7 @@ struct vertex
 #define V_CONSTR_LIST_ATTR 5
 #define V_METHOD_LIST_ATTR 6
 #define V_NORMAL_ATTR      7
+#define V_CONSTRAINT_NORMAL_ATTR      8
 
 extern int V_BOUNDARY_ATTR;
  
@@ -165,7 +169,6 @@ struct edge
      edge_id next_vedge[2]; /* link to next edge around vertex */
      REAL density;          /* energy per unit length */
      REAL length;           /* edge length; be careful of validity */
-     REAL star;             /* total area of adjacent facets */
      short color;           /* for display */
   };
 
@@ -202,7 +205,6 @@ struct facet
 #define F_NEXT_BFACET_ATTR   5
 
 extern int F_BOUNDARY_ATTR;
-extern int F_TAG_ATTR; 
 extern int F_PHASE_ATTR;
 
 
@@ -277,7 +279,6 @@ struct constraint
 #define NONNEGATIVE  0x0002
 #define GLOBAL       0x0004
 #define B_CONVEX     0x0008
-#define QFIXED       0x0010
 #define IN_USE       0x0020
 #define CON_ENERGY   0x0040
 #define CON_CONTENT  0x0080
@@ -566,9 +567,6 @@ extern conmap_t nullcon[2];  /* default empty constraint list */
 #define get_vertex_edge(v_id)             (vptr(v_id)->e_id)
 #define get_vertex_facet(v_id)      (vptr(v_id)->f_id)
 #define set_vertex_facet(v_id,ff_id)       (vptr(v_id)->f_id=ff_id)
-#define get_vertex_star(v_id)             (vptr(v_id)->star)
-#define set_vertex_star(v_id,a)           (vptr(v_id)->star = (a))
-#define add_vertex_star(v_id,a)           (vptr(v_id)->star += (a))
 #define set_vertex_valence(v_id,n)        (vptr(v_id)->valence = (n))
 #define add_vertex_valence(v_id,n)        (vptr(v_id)->valence += (n))
 #define get_vertex_valence(v_id)          (vptr(v_id)->valence)
@@ -580,9 +578,6 @@ extern conmap_t nullcon[2];  /* default empty constraint list */
 #define set_edge_length(e_id,x)     (eptr(e_id)->length = (x))
 #define get_edge_density(e_id)      (eptr(e_id)->density)
 #define set_edge_density(e_id,den)  (eptr(e_id)->density = (den))
-#define get_edge_star(e_id)         (eptr(e_id)->star)
-#define set_edge_star(e_id,a)       (eptr(e_id)->star = (a))
-#define add_edge_star(e_id,a)       (eptr(e_id)->star += (a))
 
 #define get_facet_vertices(f_id)   F_ELID(f_id,F_VERTICES_ATTR)
 #define get_edge_vertices(e_id)    E_ELID(e_id,E_VERTICES_ATTR) 
@@ -590,7 +585,7 @@ extern conmap_t nullcon[2];  /* default empty constraint list */
 #define get_facet_density(f_id)      (fptr(f_id)->density)
 #define set_facet_density(f_id,den)  (fptr(f_id)->density = (den))
 
-#define get_facet_area(f_id)    (fptr(f_id)->area)
+#define get_facet_area(f_id)    (recalc_facet_area(f_id),fptr(f_id)->area)
 #define set_facet_area(f_id,a)  (fptr(f_id)->area = (a))
 #define add_facet_area(f_id,a)  (fptr(f_id)->area += inverted(f_id)?-(a):(a))
 

@@ -14,7 +14,7 @@
 
 #include "include.h"
 
-REAL LambertW ARGS((REAL));
+REAL LambertW(REAL);
 
 /************************************************************************
      Named method: SVK (Saint-Venant - Kirchhoff) potential
@@ -41,9 +41,10 @@ extern int form_factors_attr; /* number of form_factors extra attribute */
 *  purpose: Make sure needed extra attributes are present.
 *              
 */
-void SVK_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void SVK_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 { 
   if ( web.modeltype != LINEAR )
      kb_error(2811,"Saint-Veant - Kirchhoff method only for LINEAR model.\n",RECOVERABLE);
@@ -75,18 +76,20 @@ struct method_instance *mi;
   if ( EXTRAS(FACET)[form_factors_attr].array_spec.datacount != 3 )
      kb_error(2818,"Facet extra attribute form_factors must have size 3.\n",
         RECOVERABLE);
-}
+} // end SVK_init()
+
 /************************************************************************
 *
 * function: SVK_all()
 *
 * purpose: energy, gradient, and hessian for linear_elastic method.
 */
-REAL SVK_all ARGS((struct qinfo *,int));
+REAL SVK_all (struct qinfo *,int);
 
-REAL SVK_all(f_info,mode)
-struct qinfo *f_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL SVK_all(
+  struct qinfo *f_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 {
   REAL *s;  /* pointer to extra attributes */
   REAL **side; 
@@ -275,7 +278,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
         }
 
   return energy;
-  }
+} // end SVK_all()
 
 /**************************************************************
 *
@@ -286,8 +289,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 *  input: info about vertex is in qinfo structure.
 *
 */
-REAL SVK_energy(f_info)
-struct qinfo *f_info;
+REAL SVK_energy(struct qinfo *f_info)
 {
  return SVK_all(f_info,METHOD_VALUE);
 }
@@ -300,8 +302,7 @@ struct qinfo *f_info;
 *  input: info about vertex is in qinfo structure.
 *
 */
-REAL SVK_gradient(f_info)
-struct qinfo *f_info;
+REAL SVK_gradient(struct qinfo *f_info)
 {
  return SVK_all(f_info,METHOD_GRADIENT);
 }
@@ -314,8 +315,7 @@ struct qinfo *f_info;
 *  input: info about vertex is in qinfo structure.
 *
 */
-REAL SVK_hessian(f_info)
-struct qinfo *f_info;
+REAL SVK_hessian(struct qinfo *f_info)
 {
  return SVK_all(f_info,METHOD_HESSIAN);
 }
@@ -335,9 +335,10 @@ struct qinfo *f_info;
 *  purpose: Make sure needed extra attributes are present.
 *              
 */
-void Neo_Hookean_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void Neo_Hookean_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 { 
 
   if ( web.modeltype != LINEAR )
@@ -362,18 +363,20 @@ struct method_instance *mi;
   if ( EXTRAS(FACET)[form_factors_attr].array_spec.datacount != 3 )
      kb_error(2850,"Facet extra attribute form_factors must have size 3.\n",
         RECOVERABLE);
-}
+} // end Neo_Hookean_init()
+
 /************************************************************************
 *
 * function: neo_Hookean_all()
 *
 * purpose: energy, gradient, and hessian for neo_Hookean method.
 */
-REAL Neo_Hookean_all ARGS((struct qinfo *,int));
+REAL Neo_Hookean_all (struct qinfo *,int);
 
-REAL Neo_Hookean_all(f_info,mode)
-struct qinfo *f_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL Neo_Hookean_all(
+  struct qinfo *f_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 {
   REAL *s;  /* pointer to extra attributes */
   REAL **side; 
@@ -383,7 +386,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
   REAL area;  /* reference area of facet */
   REAL mu; /* coefficient mu */
   REAL f11,f12,f22;
-  REAL c11,c12,c21,c22, c33;
+  REAL c11,c12,c21,c22;
   REAL energy;
   REAL dc11dv[FACET_VERTS][MAXCOORD];
   REAL dc12dv[FACET_VERTS][MAXCOORD];
@@ -439,8 +442,6 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
   /* plane stress condition */
   LW = LambertW(2.0*mu/detr/lambda*exp(2.0*mu/lambda));
  
-  c33 = exp((-LW*lambda+2.0*mu)/lambda)/detr;
-  
   tmp1 = log(exp(-LW+2.0*mu/lambda));
   tmp2 = exp(-(LW*lambda-2.0*mu)/lambda);
   logtmp2 = log(tmp2);
@@ -741,7 +742,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
         }
 
   return energy;
-  }
+} // end Neo_Hookean_all()
 
 /* Lambert W function. 
    Was ~/C/LambertW.c written K M Briggs Keith dot Briggs at bt dot com 97 May 21.  
@@ -764,14 +765,14 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
      gcc -O3 -c LambertW.c 
 */
 
-REAL LambertW(z)
-REAL z;
- {
+REAL LambertW(REAL z)
+{
   int i; 
   const REAL eps=4.0e-16, em1=0.3678794411714423215955237701614608; 
   REAL p,e,t,w;
   if (z<-em1 || !is_finite(z)) { 
-    fprintf(stderr,"LambertW: bad argument %g, exiting.\n",z); exit(1); 
+    fprintf(stderr,"LambertW: bad argument %g, exiting.\n",(DOUBLE)z); 
+    exit(1); 
   }
 
   if (0.0==z) return 0.0;
@@ -786,7 +787,8 @@ REAL z;
      -4.175335600258177138854984177460*q3
      +5.858023729874774148815053846119*r*q3
      -8.401032217523977370984161688514*q3*q;  /* error approx 1e-16 */
-     fprintf(stderr,"LambertW expression 1: W(%15.12g) = %15.12g \n",z,w); 
+     fprintf(stderr,"LambertW expression 1: W(%15.12g) = %15.12g \n",
+            (DOUBLE)z,(DOUBLE)w); 
 	 return w;
 
   }
@@ -806,11 +808,11 @@ REAL z;
     if (fabs(t)<eps*(1.0+fabs(w))) return w; /* rel-abs error */
   }
   /* should never get here */
-  sprintf(errmsg,"LambertW: No convergence at z=%g, exiting.\n",z); 
+  sprintf(errmsg,"LambertW: No convergence at z=%g, exiting.\n",(DOUBLE)z); 
   kb_error(3747,errmsg,RECOVERABLE);
 
   return 0; /* keep compilers happy */
-}
+} // end LambertW()
 
 /**************************************************************
 *
@@ -821,11 +823,11 @@ REAL z;
 *  input: info about vertex is in qinfo structure.
 *
 */
-REAL Neo_Hookean_energy(f_info)
-struct qinfo *f_info;
+REAL Neo_Hookean_energy(struct qinfo *f_info)
 {
  return Neo_Hookean_all(f_info,METHOD_VALUE);
 }
+
 /**************************************************************
 *
 *  function: Neo_Hookean_gradient()
@@ -835,11 +837,11 @@ struct qinfo *f_info;
 *  input: info about vertex is in qinfo structure.
 *
 */
-REAL Neo_Hookean_gradient(f_info)
-struct qinfo *f_info;
+REAL Neo_Hookean_gradient(struct qinfo *f_info)
 {
  return Neo_Hookean_all(f_info,METHOD_GRADIENT);
 }
+
 /**************************************************************
 *
 *  function: Neo_Hookean_hessian()
@@ -849,8 +851,7 @@ struct qinfo *f_info;
 *  input: info about vertex is in qinfo structure.
 *
 */
-REAL Neo_Hookean_hessian(f_info)
-struct qinfo *f_info;
+REAL Neo_Hookean_hessian(struct qinfo *f_info)
 {
  return Neo_Hookean_all(f_info,METHOD_HESSIAN);
 }
@@ -891,9 +892,10 @@ static int elastic_base_attr; /* number of form_factors extra attribute */
 *
 */
 
-void general_linear_elastic_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void general_linear_elastic_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 { struct extra *ex;
 
   if ( web.modeltype != LINEAR )
@@ -924,7 +926,7 @@ struct method_instance *mi;
     kb_error(3205,
       "Facet extra attribute elastic_coeff must have 1 dimension and size 6.\n",
         RECOVERABLE);
-}
+} // end general_linear_elastic_init()
 
 /************************************************************************
 *
@@ -932,11 +934,11 @@ struct method_instance *mi;
 *
 * purpose: energy, gradient, and hessian for linear_elastic method.
 */
-REAL general_linear_elastic_all ARGS((struct qinfo *,int));
 
-REAL general_linear_elastic_all(f_info,mode)
-struct qinfo *f_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL general_linear_elastic_all(
+  struct qinfo *f_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 {
   REAL s[2][2],*sptr;  /* pointer to extra attributes */
   REAL **side; 
@@ -1170,8 +1172,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 *
 */
 
-REAL general_linear_elastic_energy(f_info)
-struct qinfo *f_info;
+REAL general_linear_elastic_energy(struct qinfo *f_info)
 {
  return general_linear_elastic_all(f_info,METHOD_VALUE);
 }
@@ -1188,8 +1189,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL general_linear_elastic_gradient(f_info)
-struct qinfo *f_info;
+REAL general_linear_elastic_gradient(struct qinfo *f_info)
 {
  return general_linear_elastic_all(f_info,METHOD_GRADIENT);
 }
@@ -1205,8 +1205,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL general_linear_elastic_hessian(f_info)
-struct qinfo *f_info;
+REAL general_linear_elastic_hessian(struct qinfo *f_info)
 {
  return general_linear_elastic_all(f_info,METHOD_HESSIAN);
 }
@@ -1243,9 +1242,10 @@ extern int form_factors_attr; /* number of form_factors extra attribute */
 *
 */
 
-void dirichlet_elastic_init(mode,mi)
-int mode; /* energy or gradient or hessian */
-struct method_instance *mi;
+void dirichlet_elastic_init(
+  int mode, /* energy or gradient or hessian */
+  struct method_instance *mi
+)
 { 
 
   if ( web.modeltype != LINEAR )
@@ -1262,7 +1262,7 @@ struct method_instance *mi;
   if ( EXTRAS(FACET)[form_factors_attr].array_spec.datacount < 3 )
      kb_error(4153,"Facet extra attribute form_factors must have size 3.\n",
         RECOVERABLE);
-}
+} // end dirichlet_elastic_init()
 
 /************************************************************************
 *
@@ -1270,11 +1270,12 @@ struct method_instance *mi;
 *
 * purpose: energy, gradient, and hessian for dirichlet_elastic method.
 */
-REAL dirichlet_elastic_all ARGS((struct qinfo *,int));
+REAL dirichlet_elastic_all (struct qinfo *,int);
 
-REAL dirichlet_elastic_all(f_info,mode)
-struct qinfo *f_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL dirichlet_elastic_all(
+  struct qinfo *f_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 {
   REAL *s;  /* pointer to extra attributes */
   REAL **side; 
@@ -1370,7 +1371,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
          }
 
   return energy;
-}
+} // end dirichlet_elastic_all()
 
 /**************************************************************
 *
@@ -1382,8 +1383,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 *
 */
 
-REAL dirichlet_elastic_energy(f_info)
-struct qinfo *f_info;
+REAL dirichlet_elastic_energy(struct qinfo *f_info)
 {
  return dirichlet_elastic_all(f_info,METHOD_VALUE);
 }
@@ -1400,8 +1400,7 @@ struct qinfo *f_info;
 *
 */
 
-REAL dirichlet_elastic_gradient(f_info)
-struct qinfo *f_info;
+REAL dirichlet_elastic_gradient(struct qinfo *f_info)
 {
  return dirichlet_elastic_all(f_info,METHOD_GRADIENT);
 }
@@ -1417,9 +1416,63 @@ struct qinfo *f_info;
 *
 */
 
-REAL dirichlet_elastic_hessian(f_info)
-struct qinfo *f_info;
+REAL dirichlet_elastic_hessian(struct qinfo *f_info)
 {
  return dirichlet_elastic_all(f_info,METHOD_HESSIAN);
 }
 
+/***********************************************************************
+*
+* function: bouzidi_init()
+*
+* purpose: initial checks for bouzidi method
+*/
+
+void bouzidi_init(
+  int mode,
+  struct method_instance *mi
+)
+{ 
+  if ( web.representation != SOAPFILM )
+     kb_error(4580,"bouzidi method: model is not SOAPFILM.\n",RECOVERABLE);
+  if ( web.modeltype != LINEAR )
+     kb_error(4581,"bouzidi method: model is not LINEAR.\n",RECOVERABLE);
+
+
+} // end bouzidi_init()
+
+/***********************************************************************
+*
+* function: bouzidi_value()
+*
+* purpose: dummy energy
+*
+* Note: v_info->x[] has 6 sets of vertex coordinates, the three facet
+*       vertices followed by the three outlying neighbors.
+*/
+
+REAL bouzidi_value(struct qinfo *f_info)
+{ return 1.0;
+}
+
+/***********************************************************************
+*
+* function: bouzidi_gradient()
+*
+* purpose: dummy gradient
+*/
+
+REAL bouzidi_gradient(struct qinfo *f_info)
+{ return 0.0;
+}
+
+/***********************************************************************
+*
+* function: bouzidi_hessian()
+*
+* purpose: dummy hessian
+*/
+
+REAL bouzidi_hessian(struct qinfo *f_info)
+{ return 0.0;
+}

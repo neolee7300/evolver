@@ -12,24 +12,27 @@
 
 #include "include.h"
 
-struct gen_quant *Gen_quants;
-struct method_instance *Meth_inst;
 int compound_quant_list_head = -1;
 
 /* new system of general quantity allocation */
-struct gen_quant **gen_quant_list;
+struct gen_quant *gen_quant_list;
 struct gen_quant *gen_quant_free;
 int gen_quant_list_max;
 int gen_quant_free_left;
 
 /* new system of general instance allocation */
-struct method_instance **meth_inst_list;
+struct method_instance *meth_inst_list;
 int meth_inst_list_max;
 struct method_instance *meth_inst_free;
 int meth_inst_free_left;
 
+// For datafile estimates of needed storage
+size_t quantities_predicted;
+size_t method_instances_predicted;
+
 /* element setup routines */
-void (*q_setup[NUMELEMENTS]) ARGS((struct linsys *,QINFO,int)) =
+typedef void (*setup_fcn_ptr)(struct linsys *,QINFO,int);
+void (*q_setup[NUMELEMENTS]) (struct linsys *,QINFO,int) =
  { q_vertex_setup,q_edge_setup,q_facet_setup,q_body_setup,q_facetedge_setup};
 
 struct gen_quant_method basic_gen_methods[] =
@@ -110,6 +113,9 @@ struct gen_quant_method basic_gen_methods[] =
   {"facet_general_integral",FACET,NEED_SIDE|NEED_NORMAL|NEED_GAUSS,
       SPEC_SCALAR|SPEC_EXTRADIM, facet_general_init, facet_general_value, 
       facet_general_grad, facet_general_hess,NULL},
+  {"facet_general_hi_d_integral",FACET,NEED_SIDE|NEED_NORMAL|NEED_GAUSS,
+      SPEC_SCALAR|SPEC_EXTRADIM2, facet_general_hi_d_init, facet_general_hi_d_value, 
+      facet_general_hi_d_grad, facet_general_hi_d_hess,NULL},
   {"metric_facet_area",FACET,NEED_GAUSS|NEED_SIDE,NOSPEC, metric_area_init, 
       metric_area_value, metric_area_grad, metric_area_hess,NULL},
   {"metric_edge_length",EDGE,NEED_GAUSS,NOSPEC, metric_area_init, metric_area_value, 
@@ -147,7 +153,7 @@ struct gen_quant_method basic_gen_methods[] =
   {"sqcurve_string",VERTEX,NEED_WINGS,NOSPEC,sqcurve_string_init,
       sqcurve_string_value, sqcurve_string_grad,sqcurve_string_hess,NULL},
   {"sqcurve_string_marked",VERTEX,NEED_MARKED_WINGS,NOSPEC,sqcurve_string_marked_init,
-      sqcurve_string_value, sqcurve_string_grad,sqcurve_string_hess,NULL},
+      sqcurve_string_marked_value, sqcurve_string_marked_grad,sqcurve_string_marked_hess,NULL},
   {"sqcurve2_string",VERTEX,NEED_WINGS,NOSPEC,sqcurve2_string_init,
       sqcurve2_string_value, sqcurve2_string_grad,NULL,NULL},
   {"sqcurve3_string",VERTEX,NEED_WINGS,NOSPEC,sqcurve3_string_init,
@@ -300,6 +306,8 @@ struct gen_quant_method basic_gen_methods[] =
   {"true_writhe",EDGE,0,NOSPEC,NULL, true_writhe, null_q_grad,null_q_hess,NULL},
   {"true_average_crossings",EDGE,0,NOSPEC, NULL,
       true_average_crossing,null_q_grad,null_q_hess,NULL},
+  {"mughal_far_field",EDGE,0,NOSPEC,mughal_far_field_init,
+      mughal_far_field_energy, mughal_far_field_gradient,null_q_hess,NULL},
   {"ackerman",VERTEX,0,NOSPEC,ackerman_init,ackerman_energy,
       ackerman_forces,null_q_hess,NULL},
   {"carter_energy",FACET,NEED_SIDE,NOSPEC,carter_energy_init,
@@ -308,6 +316,10 @@ struct gen_quant_method basic_gen_methods[] =
       curvature_binormal_energy, curvature_binormal_force ,null_q_hess,NULL},
   {"ddd_gamma_sq",EDGE,NEED_STRING_STAR,NOSPEC,ddd_gamma_sq_init,
       ddd_gamma_sq_energy, ddd_gamma_sq_gradient ,null_q_hess,NULL},
+  {"sq_torsion",EDGE,NEED_SIDE|NEED_MARKED_WINGS,NOSPEC,sq_torsion_init,
+      sq_torsion_energy, sq_torsion_gradient ,null_q_hess,NULL},
+   {"bouzidi",FACET,NEED_SURROUNDING_VERTICES,NOSPEC, bouzidi_init,
+      bouzidi_value, bouzidi_gradient, bouzidi_hessian,NULL},
   { " ",0,0,0,NULL,NULL,NULL,NULL,NULL}    /* to signal end of array */
 };
 
@@ -328,26 +340,22 @@ void quantity_init()
      permanent memory freeing at the start of each new surface */
   gen_quant_count = 0;
   gen_quant_list_max = 0;
-  gen_quant_free_left = 0;
-  gen_quant_free = NULL;
+  gen_quant_free_head = -1;
+  gen_quant_list = NULL;
 
-  meth_inst_count = 0;
+  meth_inst_list = NULL;
   meth_inst_list_max = 0;
-  meth_inst_free_left = 0;
-  meth_inst_free = NULL;
+  meth_inst_count = 0;
+  meth_inst_free_head = -1;
 
   compound_quant_list_head = -1;
-
-  meth_inst_count = LOW_INST;  /* skip 0, so all indexes signable */
-  meth_inst_alloc = 20;
-  dy_meth_inst = dy_calloc(meth_inst_alloc,sizeof(struct method_instance));
 
   for ( k = 0 ; k < NUMELEMENTS ; k++ ) 
   { quant_flags[k] = 0;
     global_meth_inst_count[k] = 0;
   }
   memset((char*)global_meth_inst,0,sizeof(global_meth_inst));
-}
+} // end quantity_init()
 
 /*************************************************************************
 *
@@ -358,8 +366,7 @@ void quantity_init()
 * return: quantity number, or -1 if not found.
 */
 
-int find_quantity(name)
-char *name;
+int find_quantity(char *name)
 { int q;
 
   q = lookup_global_hash(name,0,QUANTITYNAME,HASH_LOOK);
@@ -367,7 +374,7 @@ char *name;
     return q & INDEXMASK;
 
   return -1;
-}
+} // end find_quantity()
 
 /*************************************************************************
 *
@@ -378,8 +385,7 @@ char *name;
 * return: instance number, or -1 if not found.
 */
 
-int find_method_instance(name)
-char *name;
+int find_method_instance(char *name)
 { int n;
   
   n = lookup_global_hash(name,0,METHODNAME,HASH_LOOK);
@@ -387,7 +393,65 @@ char *name;
     return n & INDEXMASK;
 
   return -1;
-}
+} // end find_method_instance()
+
+/*************************************************************************
+*
+* function: new_quantity_alloc()
+*
+* purpose: return number of free quantity, expanding list if 
+*          necessary.
+*/
+
+int new_quantity_alloc()
+{ int retval;
+
+  if ( gen_quant_free_head < 0 )
+  { int old_max = gen_quant_list_max;
+    int i;
+
+    if ( gen_quant_list_max == 0 )
+    { if ( quantities_predicted )
+        gen_quant_list_max = quantities_predicted;
+     else
+       gen_quant_list_max = 1000;
+    }
+    else gen_quant_list_max *= 2;
+    gen_quant_list = (struct gen_quant*)kb_realloc((char*)gen_quant_list,
+         gen_quant_list_max*sizeof(struct gen_quant));
+    gen_quant_free_head = old_max;
+    for ( i = old_max ; i < gen_quant_list_max-1 ; i++ )
+       GEN_QUANT(i)->next = i+1;
+    GEN_QUANT(gen_quant_list_max-1)->next = -1;
+  }
+
+  retval = (int)gen_quant_free_head;
+  gen_quant_free_head = GEN_QUANT(retval)->next;
+  memset(GEN_QUANT(retval),0,sizeof(struct gen_quant));
+
+  if ( retval >= gen_quant_count )
+    gen_quant_count = retval+1;
+
+  return retval;
+ 
+} // end new_quantity_alloc()
+
+/*************************************************************************
+*  Function: free_quantity()
+*
+*  Purpose: Put quantity back on free list, after speculative 
+*           allocation or body dissolve, say.
+*/
+
+void free_quantity(struct gen_quant *q)
+{ if ( q->flags & Q_DELETED )
+    return;
+  q->next = (int)gen_quant_free_head;
+  q->flags = Q_DELETED;
+  lookup_global_hash(q->name,0,QUANTITYNAME,HASH_DELETE);
+  q->name[0] = 0;
+  gen_quant_free_head = (int)(q - gen_quant_list);
+} // end free_quantity()
 
 /*************************************************************************
 *
@@ -398,9 +462,10 @@ char *name;
 *            If already exists, returns number, does not re-initialize.
 */
 
-int new_quantity(name,mode)
-char *name;  /* identifying name for this quantity */
-int mode; /* Q_ENERGY, Q_FIXED, Q_CONSERVED, or Q_INFO */
+int new_quantity(
+  char *name,  /* identifying name for this quantity */
+  int mode /* Q_ENERGY, Q_FIXED, Q_CONSERVED, or Q_INFO */
+)
 { int q=0;  /* new structure */
   int g;  /* hash return */
  
@@ -421,42 +486,78 @@ int mode; /* Q_ENERGY, Q_FIXED, Q_CONSERVED, or Q_INFO */
     }
   }
   else /* need to allocate new structure */
-  { /* check to see if any free ones left */
-    if ( gen_quant_free_left <= 0 )
-    { gen_quant_free_left = 100;
-      gen_quant_free = (struct gen_quant*)mycalloc(gen_quant_free_left,
-                        sizeof(struct gen_quant));
-    }
-    if ( gen_quant_count >= gen_quant_list_max )
-    { if ( gen_quant_list_max == 0 )
-      { gen_quant_list_max = 1000;
-        gen_quant_list = (struct gen_quant**)mycalloc(gen_quant_list_max,
-             sizeof(struct gen_quant*));
-      }
-      else
-      { gen_quant_list = (struct gen_quant **)kb_realloc((char*)gen_quant_list,
-           2*gen_quant_list_max*sizeof(struct gen_quant*));
-        gen_quant_list_max *= 2;
-     }
-    }
-    
+  { 
     /* initialize */
-    q = gen_quant_count; 
-    gen_quant_list[q] = gen_quant_free;
+    q = new_quantity_alloc(); 
     g = lookup_global_hash(name,q,QUANTITYNAME,HASH_ADD);
     GEN_QUANT(q)->num = q;
     GEN_QUANT(q)->modulus = 1.0;
     GEN_QUANT(q)->timestamp = -1;
     GEN_QUANT(q)->tolerance = -1.0;
     strncpy(GEN_QUANT(q)->name,name,sizeof(GEN_QUANT(q)->name));
-  
-    gen_quant_count++;  /* so seen by global_hash_expand */
-    gen_quant_free++; 
-    gen_quant_free_left--;  
   }
     
   GEN_QUANT(q)->flags = mode;
   return q;
+} // end new_quantity()
+
+/*************************************************************************
+*
+* function: new_method_instance_alloc()
+*
+* purpose: return number of free method instance, expanding list if 
+*          necessary.
+*/
+
+int new_method_instance_alloc()
+{ int retval;
+
+  if ( meth_inst_free_head <= 0 )
+  { int old_max = meth_inst_list_max;
+    int i;
+
+    if ( meth_inst_list_max == 0 )
+    { if ( method_instances_predicted )
+         meth_inst_list_max = method_instances_predicted;
+      else
+         meth_inst_list_max = 1000;
+    }
+    else meth_inst_list_max *= 2;
+    meth_inst_list = (struct method_instance*)kb_realloc((char*)meth_inst_list,
+         meth_inst_list_max*sizeof(struct method_instance));
+    meth_inst_free_head = (old_max == 0) ? LOW_INST : old_max;
+    for ( i = old_max ; i < meth_inst_list_max-1 ; i++ )
+       METH_INSTANCE(i)->next = i+1;
+  }
+
+  retval = (int)meth_inst_free_head;
+  meth_inst_free_head = METH_INSTANCE(retval)->next;
+  memset(METH_INSTANCE(retval),0,sizeof(struct method_instance));
+
+  if ( retval >= meth_inst_count )
+    meth_inst_count = retval+1;
+
+  return retval;
+ 
+} // end new_method_instance_alloc()
+
+/*************************************************************************
+*  Function: free_method_instance()
+*
+*  Purpose: Put method instance back on free list, after speculative 
+*           allocation or body dissolve, say.
+*/
+
+void free_method_instance(struct method_instance *mi)
+{ if ( mi->flags & Q_DELETED )
+    return;
+  mi->next = (int)meth_inst_free_head;
+  mi->flags = Q_DELETED;
+  if ( mi->name[0] )
+  { lookup_global_hash(mi->name,0,METHODNAME,HASH_DELETE);
+    mi->name[0] = 0;
+  }
+  meth_inst_free_head = (int)(mi - meth_inst_list);
 }
 
 /*************************************************************************
@@ -470,11 +571,14 @@ int mode; /* Q_ENERGY, Q_FIXED, Q_CONSERVED, or Q_INFO */
 *                
 */
 
-int new_method_instance(meth_name,inst_name)
-char *meth_name,*inst_name;
-{ struct method_instance * m; /*  new instance */
+int new_method_instance(
+  char *meth_name,
+  char *inst_name
+)
+{ struct method_instance *m; /*  new instance */
+
   struct gen_quant_method *gm=NULL;
-  int n=0,nb;
+  int j,n=0,nb;
   int inst_num; /* number of new instance */
   int g; /* hash return */
 
@@ -490,34 +594,14 @@ char *meth_name,*inst_name;
     }
   }
   
-  /* make sure there is room for new instance */
-  if ( meth_inst_free_left <= 0 )
-  { meth_inst_free_left = 100;
-    meth_inst_free = (struct method_instance*)mycalloc(meth_inst_free_left,
-                        sizeof(struct method_instance));
-  }
-  if ( meth_inst_count >= meth_inst_list_max )
-  { if ( meth_inst_list_max == 0 )
-    { meth_inst_list_max = 1000;
-      meth_inst_list = (struct method_instance**)mycalloc(meth_inst_list_max,
-             sizeof(struct method_instance*));
-    }
-    else
-    { meth_inst_list = 
-        (struct method_instance **)kb_realloc((char*)meth_inst_list,
-           2*meth_inst_list_max*sizeof(struct method_instance*));
-      meth_inst_list_max *= 2;
-    }
-  }
-
-  inst_num = meth_inst_count;
-  meth_inst_list[inst_num] = meth_inst_free;
+  inst_num = new_method_instance_alloc();
   m = METH_INSTANCE(inst_num);
   memset(m,0,sizeof(struct method_instance));
   m->self_id = METHBASE + inst_num;
   m->modulus = 1.0;
   m->gen_method = n;
-  m->quant = -1; /* not attached to quantity yet */
+  for ( j = 0 ; j < MMAXQUANTS ; j++ )
+    m->quants[j] = -1; /* not attached to quantity yet */
   m->timestamp = -1;
   if ( gm ) 
   { m->type = gm->type;
@@ -534,6 +618,8 @@ char *meth_name,*inst_name;
   if ( g != 0 )
   { int inum = g & INDEXMASK;
     
+    // Oops. So deallocate
+
     if ( datafile_flag == IN_DATAFILE )
     { if ( (METH_INSTANCE(inum)->flags & Q_FORWARD_DEF) || addload_flag )
       { *METH_INSTANCE(inum) = *m; /* copy over initialization */
@@ -543,18 +629,82 @@ char *meth_name,*inst_name;
       else
       { sprintf(errmsg,"'%s' already declared.\n",inst_name);
         memset((char*)m,0,sizeof(struct method_instance));    
-        kb_error(1558,errmsg,RECOVERABLE);
+        kb_error(2503,errmsg,RECOVERABLE);
       }
     }
-  }
-  else
-  { meth_inst_count++; 
-    meth_inst_free++; 
-    meth_inst_free_left--;  
+    m->name[0] = 0;  // so don't delete name from hash table
+    free_method_instance(m);
   }
 
   return inst_num;
-}
+
+} // end new_method_instance()
+
+/*************************************************************************
+*
+*  function: dup_method_instance()
+*
+*  purpose:  set up new method instance which is a duplicate of an.
+*           existing method instance.  Meant for user-defined
+*           area_method or volume_method applied to multiple bodies.
+*
+*  return:    index of new instance in METH_INST list, or -1 if old not found
+*                
+*/
+
+int dup_method_instance(
+  char *old_inst_name, // input
+  char *new_inst_name  // input
+)
+{ struct method_instance *m; /*  new instance */
+  int j;
+  int inst_num; /* number of new instance */
+  int g; /* hash return */
+  int old_inst_num;
+
+  // find old instance
+  g = lookup_global_hash(old_inst_name,0,METHODNAME,HASH_LOOK);
+  if ( g != 0 )
+    old_inst_num = g & INDEXMASK;
+  else
+    return -1;
+ 
+  inst_num = new_method_instance_alloc();
+  m = METH_INSTANCE(inst_num);
+  *m = *METH_INSTANCE(old_inst_num);
+  m->self_id = METHBASE + inst_num;
+  for ( j = 0 ; j < MMAXQUANTS ; j++ )
+    m->quants[j] = -1; /* not attached to quantity yet */
+  m->timestamp = -1;
+  if ( strlen(new_inst_name) >= MNAMESIZE )
+  { sprintf(errmsg,"Method name too long: %s\n",new_inst_name);
+    kb_error(2504,errmsg,RECOVERABLE);
+  }
+  strncpy(m->name,new_inst_name,sizeof(m->name));
+
+  g = lookup_global_hash(new_inst_name,inst_num,METHODNAME,HASH_ADD);
+  if ( g != 0 )
+  { int inum = g & INDEXMASK;
+    
+    // Oops. So deallocate
+
+    if ( datafile_flag == IN_DATAFILE )
+    { if ( (METH_INSTANCE(inum)->flags & Q_FORWARD_DEF) || addload_flag )
+      { *METH_INSTANCE(inum) = *m; /* copy over initialization */
+        inst_num = inum;
+        METH_INSTANCE(inum)->self_id = METHBASE + inst_num;
+      }
+      else
+      { sprintf(errmsg,"'%s' already declared.\n",new_inst_name);    
+        kb_error(1558,errmsg,RECOVERABLE);
+      }
+    }
+    free_method_instance(m);
+  }
+
+  return inst_num;
+
+} // end dup_method_instance()
 
 /*********************************************************************
 *
@@ -564,9 +714,10 @@ char *meth_name,*inst_name;
 *              and quantity.  Global energy only.
 */
 
-int add_standard_quantity(meth_name,modulus)
-char *meth_name;  /* name of method (not instance) */
-REAL modulus;
+int add_standard_quantity(
+  char *meth_name,  /* name of method (not instance) */
+  REAL modulus
+)
 {
   int mi;
   int q;
@@ -583,20 +734,22 @@ REAL modulus;
   GEN_QUANT(q)->flags |= STANDARD_QUANTITY;
  
   return q;
-}
+} // end add_standard_quantity()
 
 /*********************************************************************
 *
 * function: attach_method()
 *
-* purpose: attach method instance to quantity
+* purpose: attach named method instance to quantity
 *
 * return: instance number
 */
 
-int attach_method(quantnum,meth_name)
-int quantnum;
-char *meth_name;
+
+int attach_method(
+  int quantnum,
+  char *meth_name
+)
 { 
   int inst_num;
 
@@ -606,11 +759,20 @@ char *meth_name;
     kb_error(1562,errmsg,DATAFILE_ERROR); return -1; 
   }
   return attach_method_num(quantnum,inst_num);
-}
+} // end attach_method()
 
-int attach_method_num(quantnum,inst_num)
-int quantnum;
-int inst_num;
+/*********************************************************************
+*
+* function: attach_method_num()
+*
+* purpose: attach method instance to quantity by number
+*
+* return: instance number
+*/
+int attach_method_num(
+  int quantnum,
+  int inst_num
+)
 { struct method_instance *m = METH_INSTANCE(inst_num);
   struct gen_quant_method *gm;
   struct gen_quant *quant = GEN_QUANT(quantnum);
@@ -621,12 +783,20 @@ int inst_num;
     "Internal error: Unknown method number in attach_method_num().\n",
      RECOVERABLE);
 
-  if ( (m->quant >= 0) && (m->quant != quantnum) )
-  { sprintf(errmsg,"%s: Sorry, but for now, a method instance can only belong to one quantity.\n",m->name);
+  for ( i = 0 ; i < MMAXQUANTS ; i++ )
+  { if ( m->quants[i] == quantnum )
+      break;
+    if ( m->quants[i] == -1 )
+    {  m->quants[i] = quant->num;
+       break;
+    }
+  }
+  if ( i == MMAXQUANTS )
+  { sprintf(errmsg,"%s: Sorry, but for now, a method instance can only belong to %d quantities.\n",
+       m->name, MMAXQUANTS);
     kb_error(1564,errmsg,DATAFILE_ERROR);
   }
 
-  m->quant = quant->num;
   gm = basic_gen_methods + m->gen_method;
   if ( (gm->gradient==NULL) && (quant->flags & (Q_ENERGY|Q_FIXED|Q_CONSERVED)) )
   { sprintf(errmsg,"Sorry; method %s does not have a gradient available.\n",gm->name);
@@ -636,17 +806,17 @@ int inst_num;
     if ( quant->meth_inst[i] == inst_num ) 
       goto attach_method_num_exit;
 
-  if ( quant->meth_inst == NULL )
-    quant->meth_inst = quant->meth_inst_space;
-  else
-  if ( quant->method_count >= MAXMETH )
-  { if ( quant->meth_inst == quant->meth_inst_space )
-    { quant->meth_inst = (int*)mycalloc(quant->method_count+1,sizeof(int));
-      memcpy(quant->meth_inst,quant->meth_inst_space,MAXMETH*sizeof(int));
+
+  if ( quant->method_count >= quant->meth_inst_alloc )
+  { if ( quant->meth_inst_alloc == 0 )
+    { quant->meth_inst_alloc = 4;
+      quant->meth_inst = (int*)mycalloc(quant->meth_inst_alloc,sizeof(int));
     }
     else
+    { quant->meth_inst_alloc *= 2;
       quant->meth_inst = (int*)kb_realloc((char*)(quant->meth_inst),
-         (quant->method_count+1)*sizeof(int));
+         (quant->meth_inst_alloc)*sizeof(int));
+    }
   }
 
   quant->meth_inst[quant->method_count++] = inst_num; 
@@ -655,7 +825,7 @@ int inst_num;
 
 attach_method_num_exit:
   return inst_num;
-}
+} // end attach_method_num()
 
 /*********************************************************************
 *
@@ -667,9 +837,10 @@ attach_method_num_exit:
 *              for null element, assumed to be global method of type
 */
 
-void apply_method(id,method_name)
-element_id id;
-char *method_name;
+void apply_method(
+  element_id id,
+  char *method_name
+)
 { 
   int inst_num;
 
@@ -691,7 +862,7 @@ char *method_name;
 */
 
   apply_method_num(id,inst_num);
-}
+} // end apply_method()
 
 
 /*********************************************************************
@@ -706,9 +877,10 @@ char *method_name;
 *              it is deleted, due to cancellation.
 */
 
-void apply_method_num(id,inst_num)
-element_id id;
-int inst_num;  /* method instance number */
+void apply_method_num(
+  element_id id,
+  int inst_num  /* method instance number */
+)
 { 
   struct method_instance *m;
   struct element *e_ptr;
@@ -727,7 +899,7 @@ int inst_num;  /* method instance number */
   { /* trying to apply global method to single element */
     if ( inverted(id) )
     
-    { kb_error(4569,"Cannot apply signed method/quantity to individual element.\n",DATAFILE_ERROR);
+    { kb_error(4571,"Cannot apply signed method/quantity to individual element.\n",DATAFILE_ERROR);
     }
     return;
   }
@@ -747,7 +919,7 @@ int inst_num;  /* method instance number */
     {  if ( instlist[i] == inst_num ) return;
        if ( instlist[i] == -inst_num )
        { /* cancels out */
-         instlist[i] = instlist[--e_ptr->method_count];	
+         instlist[i] = instlist[--e_ptr->method_count];
          return;
        }
     } 
@@ -771,12 +943,17 @@ int inst_num;  /* method instance number */
          break;
     if ( i >= global_meth_inst_count[type] )
     { /* add it */
-      if ( global_meth_inst_count[type] >= MAXGLOBINST )
-        kb_error(1568,"Too many global method instances.\n",DATAFILE_ERROR);
-      else global_meth_inst[type][global_meth_inst_count[type]++] = inst_num;
+      if ( global_meth_inst_count[type] >= global_meth_inst_alloc[type] )
+      { if ( global_meth_inst_alloc[type] == 0 )
+           global_meth_inst_alloc[type] = 100;
+        else global_meth_inst_alloc[type] *= 2;
+        global_meth_inst[type] = (int*)kb_realloc((char*)global_meth_inst[type],
+          global_meth_inst_alloc[type]*sizeof(int));
+      }
+      global_meth_inst[type][global_meth_inst_count[type]++] = inst_num;
     }
-  } 
-}
+  }  
+} // end apply_method_num()
 
 
 /*********************************************************************
@@ -787,9 +964,10 @@ int inst_num;  /* method instance number */
 *              
 */
 
-void unapply_method(id,inst_num)
-element_id id;
-int inst_num;  /* index in method instance list */
+void unapply_method(
+  element_id id,
+  int inst_num  /* index in method instance list */
+)
 { struct element *e_ptr;
   int i;
   int type = id_type(id);
@@ -806,7 +984,7 @@ int inst_num;  /* index in method instance list */
         break;
       }
   }
-}
+} // end unapply_method()
 
 /********************************************************************
 *
@@ -815,9 +993,10 @@ int inst_num;  /* index in method instance list */
 * purpose: apply quantity methods to element, if appropriate
 */
 
-void apply_quantity(id,quantnum)
-element_id id;
-int quantnum;
+void apply_quantity(
+  element_id id,
+  int quantnum
+)
 { struct gen_quant *g = GEN_QUANT(quantnum);
   int i;
   int count = 0;
@@ -836,7 +1015,7 @@ int quantnum;
          g->name);
      kb_error(1569,errmsg, WARNING);
   }
-}
+} // end apply_quantity()
 
 
 /********************************************************************
@@ -846,9 +1025,10 @@ int quantnum;
 * purpose: disable quantity methods to element, if appropriate
 */
 
-void unapply_quantity(id,quantnum)
-element_id id;
-int quantnum;
+void unapply_quantity(
+  element_id id,
+  int quantnum
+)
 { struct gen_quant *g = GEN_QUANT(quantnum);
   int i;
   for ( i = 0 ; i < g->method_count ; i++ )
@@ -858,7 +1038,7 @@ int quantnum;
          { unapply_method(id,g->meth_inst[i]);
          }
     }
-}
+} // end unapply_quantity()
 
 /*************************************************************************
 *
@@ -868,12 +1048,15 @@ int quantnum;
 *
 */
 
-
-void q_info_init(q_info,mode)
-struct qinfo *q_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+void q_info_init(
+  struct qinfo *q_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 { int m,i;
   int maxgauss = (gauss1D_num > gauss2D_num) ? gauss1D_num : gauss2D_num;
+
+  if ( q_info->xx )
+    q_info_free(q_info);
 
   if ( web.dimension >= SOAPFILM )
   {
@@ -911,24 +1094,24 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
   if ( web.torus_flag && (web.representation == SOAPFILM) )
   { /* allocate some working space for facet_volume method */
     int ectrl = web.lagrange_order + 1;
-    q_info->uu[0] = (REAL **)temp_calloc(ectrl*3,sizeof(REAL*));
+    q_info->uu[0] = (REAL **)mycalloc(ectrl*3,sizeof(REAL*));
     q_info->uu[1] = q_info->uu[0]+ectrl; q_info->uu[2] = q_info->uu[1]+ectrl;
     if ( (mode == METHOD_GRADIENT) || (mode == METHOD_HESSIAN) )
-    { q_info->uugrad[0] = (REAL **)temp_calloc(ectrl*3,sizeof(REAL*));
+    { q_info->uugrad[0] = (REAL **)mycalloc(ectrl*3,sizeof(REAL*));
       q_info->uugrad[1] = q_info->uugrad[0]+ectrl; 
       q_info->uugrad[2] = q_info->uugrad[1]+ectrl;
     }
     if ( mode == METHOD_HESSIAN )
-    { q_info->uuhess[0] = (REAL ****)temp_calloc(ectrl*3,sizeof(REAL***));
+    { q_info->uuhess[0] = (REAL ****)mycalloc(ectrl*3,sizeof(REAL***));
       q_info->uuhess[1] = q_info->uuhess[0]+ectrl; 
       q_info->uuhess[2] = q_info->uuhess[1]+ectrl;
-      q_info->uuhess[0][0] = (REAL***)temp_calloc(3*ectrl*ectrl,sizeof(REAL**));
+      q_info->uuhess[0][0] = (REAL***)mycalloc(3*ectrl*ectrl,sizeof(REAL**));
       for ( i = 0 ; i < 3 ; i++ )
         for ( m = 0 ; m < ectrl ; m++ )
            q_info->uuhess[i][m] = q_info->uuhess[0][0] + i*ectrl*ectrl + m*ectrl;
     }
   }     
-}
+} // end q_info_init()
 
 /***********************************************************************
 *
@@ -938,8 +1121,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 *
 */
 
-void q_info_free(q_info)
-struct qinfo *q_info;
+void q_info_free(struct qinfo *q_info)
 {
   free_matrix(q_info->xx);
   free_matrix3(q_info->sides);
@@ -947,20 +1129,81 @@ struct qinfo *q_info;
   free_matrix(q_info->grad);
   free_matrix(q_info->gauss_pt);
   if ( q_info->uu[0] ) 
-  { temp_free((char*)q_info->uu[0]);
-    temp_free((char*)q_info->uugrad[0]);
+  { myfree((char*)q_info->uu[0]);
+    myfree((char*)q_info->uugrad[0]);
   }
   if ( q_info->uuhess[0] )
-  { temp_free((char*)q_info->uuhess[0][0]);
-    temp_free((char*)q_info->uuhess[0]);
+  { myfree((char*)q_info->uuhess[0][0]);
+    myfree((char*)q_info->uuhess[0]);
   }
   if ( q_info->u )
   { free_matrix(q_info->u);
     free_matrix(q_info->ugrad);
     free_matrix4(q_info->uhess);
   }
-}
+  memset(q_info,0,sizeof(struct qinfo));
+} // end q_info_free()
 
+/***************************************************************************
+*
+* function: setup_q_info()
+*
+* purpose: allocate q_info arrays in each thread. Run from main thread.
+*          Do after each model change.
+*
+*/
+void setup_q_info()
+{ struct qinfo *q_info;
+
+  // Main thread
+  q_info = &(default_thread_data.q_info);
+  q_info_init(q_info,METHOD_HESSIAN);
+  
+  // Worker threads
+  if ( threadflag )
+  { int i;
+    for ( i = 0 ; i < nprocs ; i++ )
+    { q_info = &(thread_data_ptrs[i]->q_info);
+      if ( q_info->xx )
+        q_info_free(q_info);
+      q_info_init(q_info,METHOD_HESSIAN);
+    }
+  }
+   
+  // Graphics thread thread, for "show" evaluation
+  q_info = &(glutgraph_thread_data.q_info);
+  q_info_init(q_info,METHOD_VALUE);
+
+} // end setup_q_info()
+
+/***************************************************************************
+*
+* function: free_all_q_info()
+*
+* purpose: Zero out q_info structures; do when freeing my heap.
+*
+*/
+void free_all_q_info()
+{ struct qinfo *q_info;
+
+  // Main thread
+  q_info = &(default_thread_data.q_info);
+  memset(q_info,0,sizeof(struct qinfo));
+  
+  // Worker threads
+  if ( threadflag )
+  { int i;
+    for ( i = 0 ; i < nprocs ; i++ )
+    { q_info = &(thread_data_ptrs[i]->q_info);
+      memset(q_info,0,sizeof(struct qinfo));
+    }
+  }
+  
+  // Graphics thread
+  q_info = &(glutgraph_thread_data.q_info);
+  memset(q_info,0,sizeof(struct qinfo));
+
+} // end setup_q_info()
 
 /***************************************************************************
 *
@@ -969,8 +1212,7 @@ struct qinfo *q_info;
 * purpose: find set of q_info needs for active methods. To be called
 *    by quantity calc functions after inspecting quantities.
 */
-int global_meth_needs(type)
-int type;
+int global_meth_needs(int type)
 { int k;
   int needs = 0;
  
@@ -981,7 +1223,7 @@ int type;
        needs |= basic_gen_methods[METH_INSTANCE(mi)->gen_method].flags;
   }
   return needs;
-}
+} // end global_meth_needs()
 
 #ifdef KSR
 
@@ -1025,24 +1267,32 @@ int *v_procnum; /* processors for vertex, index by ord */
 long el_list_timestamp[NUMELEMENTS] = { -1,-1,-1,-1,-1 };
   /* to see if need remake list */
 
-int vertex_comp(a,b)
-vertex_id *a,*b;
+int vertex_comp(
+  vertex_id *a,
+  vertex_id *b
+)
 { REAL xa = get_coord(*a)[SDIM-1];
   REAL xb = get_coord(*b)[SDIM-1];
   if ( xa < xb ) return -1;
   if ( xa > xb ) return 1;
   return 0;
-}
-int edge_comp(a,b)
-edge_id *a,*b;
+} // end vertex_comp()
+
+int edge_comp(
+  edge_id *a,
+  edge_id *b
+)
 { REAL xa = get_coord(get_edge_tailv(*a))[SDIM-1];
   REAL xb = get_coord(get_edge_tailv(*b))[SDIM-1];
   if ( xa < xb ) return -1;
   if ( xa > xb ) return 1;
   return 0;
-}
-int facet_comp(a,b)
-facet_id *a,*b;
+} // end edge_comp()
+
+int facet_comp(
+  facet_id *a,
+  facet_id *b
+)
 { REAL xa,xb;
   if ( web.representation == SIMPLEX )
   { xa = get_coord(get_facet_vertices(*a)[0])[SDIM-1];
@@ -1055,10 +1305,9 @@ facet_id *a,*b;
   if ( xa < xb ) return -1;
   if ( xa > xb ) return 1;
   return 0;
-}
+} // end facet_comp()
 
-void make_el_list(type)
-int type;  /* element type */
+void make_el_list(int type  /* element type */ )
 { element_id id,*tlist; 
   int pnum,i,bin,end,start;
   if ( el_list[type] ) myfree((char*)el_list[type]);
@@ -1097,7 +1346,8 @@ int type;  /* element type */
   }
 
   el_list_timestamp[type] = top_timestamp;
-}
+} // end make_el_list()
+
 /***********************************************************************
 *
 *  function: multi_calc_quants()
@@ -1108,23 +1358,20 @@ int type;  /* element type */
 *
 */
 
-void multi_calc_quants(type)
-int type;    /* element type */
+void multi_calc_quants(int type /* element type */)
 {
   int k;
   struct element *e_ptr;
   struct gen_quant_method *gm;
   int mi;
   REAL val;
-  struct qinfo q_info;  /* data passing structure */
+  struct qinfo *q_info = &(GET_THREAD_DATA->q_info);  /* data passing structure */
   int meth_offset = EXTRAS(type)[web.meth_attr[type]].offset; 
   int me = GET_THREAD_ID;  /* which process I am */
   int global_needs;
 
 #ifdef THREADS
-__int32 multi_calc_quants_elapsed_time[2];
-multi_calc_quants_elapsed_time[0] = 0;
-multi_calc_quants_elapsed_time[1] = 0;
+ long long int multi_calc_quants_elapsed_time = 0;
 #endif
   
 #ifdef SIGUSR1
@@ -1132,10 +1379,9 @@ multi_calc_quants_elapsed_time[1] = 0;
 #endif
   signal(SIGINT,catcher);    /* to catch user interrupt */     
   m_breakflag[me] = 0;
-  if ( setjmp(m_jumpbuf[me]) ) { q_info_free(&q_info); return; }
+  if ( setjmp(m_jumpbuf[me]) ) { return; }
 
 PROF_START(multi_calc_quants)
-  q_info_init(&q_info,METHOD_VALUE); 
 
   global_needs = global_meth_needs(type);
 
@@ -1143,8 +1389,8 @@ PROF_START(multi_calc_quants)
   { int setup_flag = 0;
     int needs;  /* particular setup needs for current mode */
    
-    q_info.id = *idptr;
-    e_ptr = elptr(q_info.id);
+    q_info->id = *idptr;
+    e_ptr = elptr(q_info->id);
     /* get setup flags */
     needs = global_needs;
     for ( k = 0 ; k < e_ptr->method_count ; k++ )
@@ -1162,12 +1408,12 @@ PROF_START(multi_calc_quants)
                   && (METH_INSTANCE(mi)->type == type) )
       { 
         if ( !setup_flag ) 
-        { (*q_setup[type])(NULL,&q_info,needs); setup_flag = 1; }
-        q_info.method = mi;
+        { (*q_setup[type])(NULL,q_info,needs); setup_flag = 1; }
+        q_info->method = mi;
         gm = basic_gen_methods + METH_INSTANCE(mi)->gen_method;
-        val = (*gm->value)(&q_info);
+        val = (*gm->value)(q_info);
         if ( METH_INSTANCE(mi)->flags & ELEMENT_MODULUS_FLAG )
-            val *= *(REAL*)get_extra(q_info.id,METH_INSTANCE(mi)->elmodulus);
+            val *= *(REAL*)get_extra(q_info->id,METH_INSTANCE(mi)->elmodulus);
         METH_INSTANCE(mi)->procvalue[me] += val;
         METH_INSTANCE(mi)->procabstotal[me] += fabs(val);
       }
@@ -1175,16 +1421,16 @@ PROF_START(multi_calc_quants)
     for ( k = 0 ; k < e_ptr->method_count ; k++ )
     { int mm;
       mm = ((int*)((char*)e_ptr+meth_offset))[k];
-      q_info.method = mi = abs(mm);
+      q_info->method = mi = abs(mm);
       if ( (METH_INSTANCE(mi)->flags & Q_DOTHIS) 
              && (METH_INSTANCE(mi)->type == type) )
       {
         if ( !setup_flag )  
-        { (*q_setup[type])(NULL,&q_info,needs); setup_flag = 1; }
+        { (*q_setup[type])(NULL,q_info,needs); setup_flag = 1; }
         gm = basic_gen_methods + METH_INSTANCE(mi)->gen_method;
-        val = (*gm->value)(&q_info);
+        val = (*gm->value)(q_info);
         if ( METH_INSTANCE(mi)->flags & ELEMENT_MODULUS_FLAG )
-            val *= *(REAL*)get_extra(q_info.id,METH_INSTANCE(mi)->elmodulus);
+            val *= *(REAL*)get_extra(q_info->id,METH_INSTANCE(mi)->elmodulus);
         METH_INSTANCE(mi)->procvalue[me] += (mm < 0 ) ? -val : val;
         METH_INSTANCE(mi)->procabstotal[me] += fabs(val);
       }
@@ -1192,14 +1438,13 @@ PROF_START(multi_calc_quants)
   }
 ) /* end THREAD_FOR_ALL_NEW macro */
 
-  q_info_free(&q_info);
 PROF_FINISH(multi_calc_quants)
 /*
   if ( verbose_flag )
   { PROF_PRINT(multi_calc_quants)
   }
 */
-}
+} // end multi_calc_quants()
 #endif
 
 /***********************************************************************
@@ -1211,20 +1456,19 @@ PROF_FINISH(multi_calc_quants)
 *
 */
 
-REAL calc_quants(mode)
-int mode;  /* energy, constraint, and/or info flag bits */
-{ int k;
+REAL calc_quants(int mode  /* energy, constraint, and/or info flag bits */)
+{ int k,j;
   struct element *e_ptr;
   struct gen_quant *q = NULL;
   int type; /* element type */
   struct method_instance * mi;
   struct gen_quant_method *gm;
   REAL energy = 0.0;
-  struct qinfo q_info;  /* data passing structure */
+  struct qinfo *q_info = &(GET_THREAD_DATA->q_info);  /* data passing structure */
   int todo = 0; /* whether any to do */
   int global_needs;
 #ifdef PROFILING_ENABLED
-  __int32 value_elapsed_time[2];
+  __int64 value_elapsed_time;
 #endif
 
   PROF_START(calc_quants);
@@ -1232,35 +1476,45 @@ int mode;  /* energy, constraint, and/or info flag bits */
   if ( calc_quant_flag ) return 0.0;
   calc_quant_flag = 1; /* so no recursive evaluation */
 
+  if ( q_info->xx == NULL )
+    q_info_init(q_info,METHOD_VALUE);
+
   /* method initialization */
   for ( type = 0 ; type < NUMELEMENTS ; type++ ) quant_flags[type] = 0;
   for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
   { mi = METH_INSTANCE(k); /* since some init may move things */
+    if ( mi->flags & Q_DELETED ) continue;
     gm = basic_gen_methods + mi->gen_method;
-    if ( mi->quant >= 0 ) q = GEN_QUANT(mi->quant);
-    if ( (!(mi->flags&Q_COMPOUND) && (mi->quant >= 0) &&  
+    mi->flags |= Q_DOTHIS;
+    for ( j = 0 ; j < MMAXQUANTS ; j++ )
+    { if ( mi->quants[j] == -1 )
+        continue;
+      q = GEN_QUANT(mi->quants[j]);
+      if ( (!(mi->flags&Q_COMPOUND) &&  
                    ((q->modulus == 0.0) || !(q->flags & mode)))
           || (mi->modulus == 0.0) /* || (mi->timestamp == global_timestamp) */ )
-    { mi->flags &= ~Q_DOTHIS;
-      if ( q->flags & mode ) mi->timestamp = global_timestamp;
-    }
-    else
-    { int kk;
-	  mi->flags |= Q_DOTHIS;
-      mi->newvalue = 0.0;
-      for ( kk = 0 ; kk < MAXADDENDS ; kk++ ) mi->value_addends[kk] = 0.0;
-      mi->abstotal = 0.0;
-      mi->timestamp = global_timestamp;
-      quant_flags[basic_gen_methods[mi->gen_method].type] |= mode;
-      if ( gm->init ) 
+      { mi->flags &= ~Q_DOTHIS;
+        if ( q->flags & mode ) 
+           mi->timestamp = global_timestamp;
+      }
+      else
+      { int kk;
+	    mi->flags |= Q_DOTHIS;
+        mi->newvalue = 0.0;
+        for ( kk = 0 ; kk < MAXADDENDS ; kk++ ) 
+           mi->value_addends[kk] = 0.0;
+        mi->abstotal = 0.0;
+        mi->timestamp = global_timestamp;
+        quant_flags[basic_gen_methods[mi->gen_method].type] |= mode;
+        if ( gm->init ) 
            (*gm->init)(METHOD_VALUE,mi);
-      todo = 1;
+        todo = 1;
+        break;
+      }
     }
   }
 
   if ( !todo ) goto add_to_quantities;
-
-  q_info_init(&q_info,METHOD_VALUE); 
 
   for ( type = VERTEX ; type <= BODY ; type++ )
   if ( quant_flags[type] & mode )
@@ -1274,7 +1528,8 @@ int mode;  /* energy, constraint, and/or info flag bits */
          make_el_list(type);
       for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
       { mi = METH_INSTANCE(k); 
-         if ( mi->flags & Q_DOTHIS )
+        if ( mi->flags & Q_DELETED ) continue;
+        if ( mi->flags & Q_DOTHIS )
           for ( i = 0 ; i < nprocs ; i++ )
           {  mi->procvalue[i] = 0.0;
              mi->procabstotal[i] = 0.0;
@@ -1296,7 +1551,8 @@ int mode;  /* energy, constraint, and/or info flag bits */
       /* sum separate process values */
       for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
       { mi = METH_INSTANCE(k); 
-         if ( mi->flags & Q_DOTHIS )
+        if ( mi->flags & Q_DELETED ) continue;
+        if ( mi->flags & Q_DOTHIS )
           for ( i = 0 ; i < nprocs ; i++ )
           { mi->newvalue += mi->procvalue[i];
             mi->abstotal += mi->procabstotal[i];
@@ -1309,11 +1565,11 @@ int mode;  /* energy, constraint, and/or info flag bits */
 #endif
   {
     global_needs = global_meth_needs(type);
-    FOR_ALL_ELEMENTS(type,q_info.id)
+    FOR_ALL_ELEMENTS(type,q_info->id)
     { int setup_flag = 0;
       REAL value;
       int needs;
-      e_ptr = elptr(q_info.id);
+      e_ptr = elptr(q_info->id);
       /* get setup flags */
       needs = global_needs;
       for ( k = 0 ; k < e_ptr->method_count ; k++ )
@@ -1327,17 +1583,17 @@ int mode;  /* energy, constraint, and/or info flag bits */
       { int m =  global_meth_inst[type][k];
         mi = METH_INSTANCE(m);
         if ( (mi->flags & Q_DOTHIS) && (mi->type == type) )
-        { q_info.method = m;
+        { q_info->method = m;
           PROF_START(element_setup);
           if ( !setup_flag ) 
-          { (*q_setup[type])(NULL,&q_info,needs); setup_flag = 1; }
+          { (*q_setup[type])(NULL,q_info,needs); setup_flag = 1; }
           PROF_FINISH(element_setup);
           mi = METH_INSTANCE(m);  /* may have changed */
           METHOD_PROFILING_START(mi,value);
           gm = basic_gen_methods + mi->gen_method;
-          value = (*gm->value)(&q_info);
+          value = (*gm->value)(q_info);
            if ( mi->flags & ELEMENT_MODULUS_FLAG )
-            value *= *(REAL*)get_extra(q_info.id,mi->elmodulus);
+            value *= *(REAL*)get_extra(q_info->id,mi->elmodulus);
           binary_tree_add(mi->value_addends,value);
           mi->abstotal += fabs(value);
           METHOD_PROFILING_END(mi,value);
@@ -1347,19 +1603,19 @@ int mode;  /* energy, constraint, and/or info flag bits */
       { int m,mm;
         mm = ((int*)((char*)e_ptr+meth_offset))[k];
         m = abs(mm);
-        q_info.method = m;
+        q_info->method = m;
         mi = METH_INSTANCE(m);
         if ( (mi->flags & Q_DOTHIS) && (mi->type == type) )
         { gm = basic_gen_methods + mi->gen_method;
           PROF_START(element_setup);
           if ( !setup_flag ) 
-          { (*q_setup[type])(NULL,&q_info,needs); setup_flag = 1; }
+          { (*q_setup[type])(NULL,q_info,needs); setup_flag = 1; }
           PROF_FINISH(element_setup);
           mi = METH_INSTANCE(m);
           METHOD_PROFILING_START(mi,value);
-          value =  (*gm->value)(&q_info);
+          value =  (*gm->value)(q_info);
            if ( mi->flags & ELEMENT_MODULUS_FLAG )
-            value *= *(REAL*)get_extra(q_info.id,mi->elmodulus);
+            value *= *(REAL*)get_extra(q_info->id,mi->elmodulus);
           if (mm < 0) value = -value;
           binary_tree_add(mi->value_addends,value);
           mi->abstotal += fabs(value);
@@ -1369,12 +1625,13 @@ int mode;  /* energy, constraint, and/or info flag bits */
     }
   }
  }
-  q_info_free(&q_info);
+
 
   /* finish off binary tree addition */
   for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
   { int kk;
     mi = METH_INSTANCE(k);
+    if ( mi->flags & Q_DELETED ) continue;
     if ( mi->flags & Q_DOTHIS )
       for ( kk = 0 ; kk < MAXADDENDS ; kk++ )
         mi->newvalue += mi->value_addends[kk];
@@ -1383,6 +1640,7 @@ int mode;  /* energy, constraint, and/or info flag bits */
   add_to_quantities:
   for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
   { mi = METH_INSTANCE(k);
+    if ( mi->flags & Q_DELETED ) continue;
     if ( mi->flags & Q_DOTHIS )
       mi->value = mi->modulus*mi->newvalue;
   }
@@ -1390,6 +1648,7 @@ int mode;  /* energy, constraint, and/or info flag bits */
   /* combine methods to quantities */
   for ( k = 0 ; k < gen_quant_count ; k++ )
   { q = GEN_QUANT(k);
+    if ( q->flags & Q_DELETED ) continue;
     if ( q->flags & mode ) 
     { 
       #ifdef MPI_EVOLVER
@@ -1403,17 +1662,21 @@ int mode;  /* energy, constraint, and/or info flag bits */
   }
   for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
   { mi = METH_INSTANCE(k);
-    if ( mi->quant < 0 ) continue;
-    q = GEN_QUANT(mi->quant);
-    if ( q->flags & mode )
-    {  q->value += mi->value;
-       q->abstotal += mi->abstotal;
+    if ( mi->flags & Q_DELETED ) continue;
+    for ( j = 0 ; j < MMAXQUANTS ; j++ )
+    {
+      if ( mi->quants[j] < 0 ) continue;
+      q = GEN_QUANT(mi->quants[j]);
+      if ( q->flags & mode )
+      { q->value += mi->value;
+        q->abstotal += mi->abstotal;
+      }
     }
   }
   
   for ( k = compound_quant_list_head ; k >= 0 ; k = q->next_compound )
   { q = GEN_QUANT(k);
-    if ( (q->flags & mode) && ( q->flags & Q_COMPOUND ) )
+    if ( (q->flags & mode) && ( q->flags & Q_COMPOUND ) && ( q->modulus != 0.0 ) )
     {  q->value = eval(&q->expr,NULL,NULLID,NULL);
        q->abstotal = 1.0;  /* best I can think of for the moment */
     }
@@ -1424,6 +1687,7 @@ int mode;  /* energy, constraint, and/or info flag bits */
   { /* munge fixed volumes modulo torus volume */
     for ( k = 0 ; k < gen_quant_count ; k++ )
     { q = GEN_QUANT(k);
+      if ( q->flags & Q_DELETED ) continue;
       if ( (q->flags & Q_FIXED) && (q->flags & TORUS_MODULO_MUNGE) ) 
           q->value -= web.torusv*
                   (int)(0.5+(q->value - q->target)/(q->modulus*web.torusv));
@@ -1441,6 +1705,7 @@ int mode;  /* energy, constraint, and/or info flag bits */
   /* multiply by quantity modulus */
   for ( k = 0 ; k < gen_quant_count ; k++ )
   { q = GEN_QUANT(k);
+    if ( q->flags & Q_DELETED ) continue;
     if ( q->flags & mode ) 
     {     
       q->value *= q->modulus;    
@@ -1454,7 +1719,7 @@ int mode;  /* energy, constraint, and/or info flag bits */
   {
      for ( k = 0 ; k < gen_quant_count ; k++ )
      { q = GEN_QUANT(k);
-        if ( q->flags & Q_ENERGY ) 
+       if ( q->flags & Q_ENERGY ) 
           energy += q->value;
      }
   }
@@ -1464,6 +1729,7 @@ int mode;  /* energy, constraint, and/or info flag bits */
   /* take care of any cleanup */
   for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
   { mi = METH_INSTANCE(k); /* since some init may move things */
+    if ( mi->flags & Q_DELETED ) continue;
     gm = basic_gen_methods + mi->gen_method;
     if ( gm->cleanup && mi->flags & Q_DOTHIS ) gm->cleanup();
   }
@@ -1484,9 +1750,10 @@ int mode;  /* energy, constraint, and/or info flag bits */
 *          Uses any initialization left over from calc_quants().
 */
 
-REAL quantity_attribute(id,qnum)
-element_id id;
-int qnum;  /* number of quantity */
+REAL quantity_attribute(
+  element_id id,
+  int qnum  /* number of quantity */
+)
 {
   int k;
   struct element *e_ptr;
@@ -1495,50 +1762,60 @@ int qnum;  /* number of quantity */
   struct method_instance *mi;
   struct gen_quant_method *gm;
   REAL retval = 0.0,value;
-  struct qinfo q_info;  /* data passing structure */
+  struct qinfo *q_info = &(GET_THREAD_DATA->q_info);  /* data passing structure */
   int meth_offset = EXTRAS(type)[web.meth_attr[type]].offset;
   int *methlist = (int*)((char*)elptr(id) + meth_offset);
   int needs = 0;
+    
+  if ( q_info->xx == NULL )
+    q_info_init(q_info,METHOD_VALUE);
 
-  q_info_init(&q_info,METHOD_VALUE);  /* terribly inefficient */
-
-  q_info.id = id;
-  e_ptr = elptr(q_info.id);
-  (*q_setup[type])(NULL,&q_info,needs);
+  q_info->id = id;
+  e_ptr = elptr(q_info->id);
+  (*q_setup[type])(NULL,q_info,needs);
   for ( k = 0 ; k < global_meth_inst_count[type] ; k++ )
-  { mi = METH_INSTANCE(global_meth_inst[type][k]);
-    if ( mi->quant != qnum ) continue;
+  { int j;
+    mi = METH_INSTANCE(global_meth_inst[type][k]);
+    if ( mi->flags & Q_DELETED ) continue;
+    for ( j = 0 ; j < MMAXQUANTS ; j++ )
+      if ( mi->quants[j] == qnum )
+        break;
+    if ( j == MMAXQUANTS ) continue;
     if ( mi->type != type ) continue;
-    q =  GEN_QUANT(mi->quant);
-    q_info.method = global_meth_inst[type][k];
+    q =  GEN_QUANT(qnum);
+    q_info->method = global_meth_inst[type][k];
     gm = basic_gen_methods + mi->gen_method;
     if ( (gm->flags & ALL_NEEDS) & ~needs )
-    { needs |= gm->flags; (*q_setup[type])(NULL,&q_info,needs); }
-    value = q->modulus*mi->modulus*(*gm->value)(&q_info);
+    { needs |= gm->flags; (*q_setup[type])(NULL,q_info,needs); }
+    value = q->modulus*mi->modulus*(*gm->value)(q_info);
     if ( mi->flags & ELEMENT_MODULUS_FLAG )
-       value *= *(REAL*)get_extra(q_info.id,mi->elmodulus);
+       value *= *(REAL*)get_extra(q_info->id,mi->elmodulus);
     retval += value;
   }
   for ( k = 0 ; k < (int)e_ptr->method_count ; k++ )
   { int mm = methlist[k];
     int m = abs(mm);
-    q_info.method =  m;
+    int j;
+    q_info->method =  m;
     mi = METH_INSTANCE(m);
-    if ( mi->quant != qnum ) continue;
+    for ( j = 0 ; j < MMAXQUANTS ; j++ )
+      if ( mi->quants[j] == qnum )
+        break;
+    if ( j == MMAXQUANTS ) continue;
     if ( mi->type != type ) continue;
-    q =  GEN_QUANT(mi->quant);
+    q =  GEN_QUANT(qnum);
     gm = basic_gen_methods + mi->gen_method;
     if ( (gm->flags & ALL_NEEDS) & ~needs )
-    { needs |= gm->flags; (*q_setup[type])(NULL,&q_info,needs); }
-    value = q->modulus*mi->modulus*(*gm->value)(&q_info);
+    { needs |= gm->flags; (*q_setup[type])(NULL,q_info,needs); }
+    value = q->modulus*mi->modulus*(*gm->value)(q_info);
     if ( mi->flags & ELEMENT_MODULUS_FLAG )
-       value *= *(REAL*)get_extra(q_info.id,mi->elmodulus);
+       value *= *(REAL*)get_extra(q_info->id,mi->elmodulus);
     if ( mm < 0 ) retval -= value;
     else  retval += value;
   }
-  q_info_free(&q_info);
+
   return retval;
-}
+} // end quantity_attribute()
 
 
 /********************************************************************
@@ -1550,9 +1827,10 @@ int qnum;  /* number of quantity */
 *             Uses any initialization left over from calc_quants().
 */
 
-REAL instance_attribute(id,qnum)
-element_id id;
-int qnum;  /* number of instance */
+REAL instance_attribute(
+  element_id id,
+  int qnum  /* number of instance */
+)
 {
   int k;
   struct element *e_ptr;
@@ -1560,25 +1838,26 @@ int qnum;  /* number of instance */
   struct method_instance *mi=NULL;
   struct gen_quant_method *gm;
   REAL retval = 0.0;
-  struct qinfo q_info;  /* data passing structure */
+  struct qinfo *q_info = &(GET_THREAD_DATA->q_info);  /* data passing structure */
   int meth_offset = EXTRAS(type)[web.meth_attr[type]].offset;
   int *methlist = (int*)((char*)elptr(id) + meth_offset);
   int needs = 0;
 
-  q_info_init(&q_info,METHOD_VALUE);  /* terribly inefficient */
+  if ( q_info->xx == NULL )
+    q_info_init(q_info,METHOD_VALUE);
 
-  q_info.id = id;
-  e_ptr = elptr(q_info.id);
-  (*q_setup[type])(NULL,&q_info,needs);
+  q_info->id = id;
+  e_ptr = elptr(q_info->id);
+  (*q_setup[type])(NULL,q_info,needs);
   for ( k = 0 ; k < global_meth_inst_count[type] ; k++ )
   { if ( qnum != global_meth_inst[type][k] ) continue;
     mi = METH_INSTANCE(global_meth_inst[type][k]);
     if ( mi->type != type ) continue;
-    q_info.method = global_meth_inst[type][k];
+    q_info->method = global_meth_inst[type][k];
     gm = basic_gen_methods + mi->gen_method;
     if ( (gm->flags & ALL_NEEDS) & ~needs )
-    { needs |= gm->flags; (*q_setup[type])(NULL,&q_info,needs); }
-    retval += mi->modulus*(*gm->value)(&q_info);
+    { needs |= gm->flags; (*q_setup[type])(NULL,q_info,needs); }
+    retval += mi->modulus*(*gm->value)(q_info);
     break;
   }
   for ( k = 0 ; k < (int)e_ptr->method_count ; k++ )
@@ -1586,24 +1865,24 @@ int qnum;  /* number of instance */
     int m = abs(mm);
     if ( qnum != m ) continue;
     mi = METH_INSTANCE(m);
-    q_info.method = m;
+    q_info->method = m;
     if ( mi->type != type ) continue;
     gm = basic_gen_methods + mi->gen_method;
     if ( (gm->flags & ALL_NEEDS) & ~needs )
-    { needs |= gm->flags; (*q_setup[type])(NULL,&q_info,needs); }
-    if ( mm < 0 ) retval -=  mi->modulus*(*gm->value)(&q_info);
-    else retval +=  mi->modulus*(*gm->value)(&q_info);
+    { needs |= gm->flags; (*q_setup[type])(NULL,q_info,needs); }
+    if ( mm < 0 ) retval -=  mi->modulus*(*gm->value)(q_info);
+    else retval +=  mi->modulus*(*gm->value)(q_info);
     break;
   } 
   if ( mi && (mi->flags & ELEMENT_MODULUS_FLAG) )
        retval *= *(REAL*)get_extra(id,METH_INSTANCE(qnum)->elmodulus);
-  q_info_free(&q_info);
+
   return retval;
-}
+} // end instance_attribute()
 
 #if defined(SHARED_MEMORY)
 /* SGI multiple processor stuff */
-void m_fill_grad(struct hess_verlist *, REAL *,int,REAL *);
+void m_fill_grad(struct hess_verlist *, REAL *,REAL *, int);
 void m_fill_mixed_entry(vertex_id,vertex_id,REAL**,int);
 /***********************************************************************
 *
@@ -1614,11 +1893,9 @@ void m_fill_mixed_entry(vertex_id,vertex_id,REAL**,int);
 *
 */
 
-void m_calc_quant_grads(type)
-int type;    /* element type */
+void m_calc_quant_grads(int type /* element type */)
 { int i,j;
   struct element *e_ptr;
-  struct gen_quant *q;
   volgrad *vgptr;  /* constraint gradients */
   int flag;  /* 0 if doing global quantities, 1 for local */
   vertex_id v;
@@ -1627,7 +1904,7 @@ int type;    /* element type */
   REAL val;
   REAL *f;
   int inum;
-  struct qinfo q_info;  /* data passing structure */
+  struct qinfo *q_info = &(GET_THREAD_DATA->q_info);  /* data passing structure */
   int meth_offset = get_meth_offset(type); 
   int me = GET_THREAD_ID;
   int global_needs;
@@ -1637,9 +1914,11 @@ int type;    /* element type */
 #endif
   signal(SIGINT,catcher);    /* to catch user interrupt */     
   m_breakflag[me] = 0;
-  if ( setjmp(m_jumpbuf[me]) ) { q_info_free(&q_info); return; }
+  if ( setjmp(m_jumpbuf[me]) ) { return; }
 
-  q_info_init(&q_info,METHOD_GRADIENT);
+  if ( q_info->grad == NULL )
+    q_info_init(q_info,METHOD_GRADIENT);
+
 
   global_needs = global_meth_needs(type);
 
@@ -1648,8 +1927,8 @@ int type;    /* element type */
     int setup_flag = 0;
     int needs;
 
-    q_info.id = *idptr;
-    e_ptr = elptr(q_info.id);
+    q_info->id = *idptr;
+    e_ptr = elptr(q_info->id);
 
     /* get setup flags */
     needs = global_needs;
@@ -1668,53 +1947,60 @@ int type;    /* element type */
        int sign = 1;
        if ( flag ) 
        { mm = ((int*)((char*)e_ptr+meth_offset))[k];
-         q_info.method = abs(mm);
+         q_info->method = abs(mm);
          if ( mm < 0 ) sign = -1;
        }
-       else  q_info.method = global_meth_inst[type][k];
-       mi = METH_INSTANCE(q_info.method);
-       if ( mi->quant >= 0 ) q = GEN_QUANT(mi->quant);
+       else  q_info->method = global_meth_inst[type][k];
+       mi = METH_INSTANCE(q_info->method);
+
        if ( (mi->flags & Q_DOTHIS) && (mi->type == type) )
-       { REAL c = sign*mi->modulus*q->modulus;
+       { int m;
          REAL *p;
          REAL **pp;
          gm = basic_gen_methods + mi->gen_method;
          if ( !setup_flag ) 
-         { (*q_setup[type])(NULL,&q_info,needs); setup_flag = 1; }
-         for ( i = 0, pp = q_info.grad ; i < q_info.vcount ; i++,pp++ )
+         { (*q_setup[type])(NULL,q_info,needs); setup_flag = 1; }
+         for ( i = 0, pp = q_info->grad ; i < q_info->vcount ; i++,pp++ )
            for ( j = 0, p = *pp ; j < SDIM ; j++,p++ ) *p = 0.0;
-         val = (*gm->gradient)(&q_info);
-         mi = METH_INSTANCE(q_info.method);
+         val = (*gm->gradient)(q_info);
+         mi = METH_INSTANCE(q_info->method);
          if ( mi->flags & ELEMENT_MODULUS_FLAG )
-         { REAL emdls = *(REAL*)get_extra(q_info.id,mi->elmodulus);
+         { REAL emdls = *(REAL*)get_extra(q_info->id,mi->elmodulus);
            val *= emdls;
-           for ( i = 0 ; i < q_info.vcount ; i++ )
+           for ( i = 0 ; i < q_info->vcount ; i++ )
                for ( j = 0 ; j < SDIM ; j++ )
-                    q_info.grad[i][j] *= emdls;
+                    q_info->grad[i][j] *= emdls;
          }
          mi->procvalue[me] += sign*val;
          mi->procabstotal[me] += fabs(val);
          if ( mi->flags & Q_COMPOUND )
-         { if ( q_info.vcount > MAXCOORD+2 )
+         { if ( q_info->vcount > MAXCOORD+2 )
              kb_error(2181,
 "Too many vertices in method for compound quantity, due to lazy programmer.\n",
 RECOVERABLE);
-           for ( i = 0 ; i < q_info.vcount ; i++ )
+           for ( i = 0 ; i < q_info->vcount ; i++ )
              for ( j = 0 ; j < SDIM ; j++ )
-               mi->grad[i][j] = q_info.grad[i][j];
+               mi->grad[i][j] = q_info->grad[i][j];
          }
-         if ( mi->quant >= 0 && !(mi->flags & Q_COMPOUND) )
-           for ( i = 0 ; i < q_info.vcount ; i++ )
-           { 
+         for ( m = 0 ; m < MMAXQUANTS ; m++ )
+         { struct gen_quant *q;
+           if ( mi->quants[m] < 0 )
+              continue;
+           q = GEN_QUANT(mi->quants[m]);
+           if ( !(mi->flags & Q_COMPOUND) )
+           for ( i = 0 ; i < q_info->vcount ; i++ )
+           { REAL c;
              REAL wforce[MAXCOORD];  /* unwrapped forces */
              REAL *ff;
-             v = q_info.v[i];
-             if ( q_info.wraps[i] )
-             {  (*sym_form_pullback)(q_info.x[i],wforce,q_info.grad[i],
-                              q_info.wraps[i]);
+             v = q_info->v[i];
+             if ( q_info->wraps[i] )
+             {  (*sym_form_pullback)(q_info->x[i],wforce,q_info->grad[i],
+                              q_info->wraps[i]);
                 ff = wforce;
              }
-             else ff = q_info.grad[i];
+             else ff = q_info->grad[i];
+             
+             c = sign*mi->modulus*q->modulus;
              if ( q->flags & Q_ENERGY )
              { int procnum = v_procnum[loc_ordinal(v)]; 
                if ( procnum == me )
@@ -1742,17 +2028,16 @@ RECOVERABLE);
              { M_LOCK(vgradbase);
                vgptr = get_bv_new_vgrad(q->fixnum,v);
                vgptr->bb_id = q->b_id;
-               vgptr->qnum = mi->quant;
+               vgptr->qnum = mi->quants[j];
                vector_add_smul(vgptr->grad,ff, c, SDIM);
                M_UNLOCK(vgradbase);
              }
            }
-        }
-     }
+        } // end for quants loop
+     } // end if
+   }
   }
  ) /* end of macro */
-
-  q_info_free(&q_info);
 
 } /* m_calc_quant_grads */
 
@@ -1776,7 +2061,7 @@ void m_fix_grads()
         for ( i = 0 ; i < SDIM ; i++ ) f[i] += p->f[i];
      }
   }
-}
+} // end m_fix_grads()
 #endif
 
 /***********************************************************************
@@ -1790,8 +2075,9 @@ void m_fix_grads()
 *
 */
 
-void calc_quant_grads(mode)
-int mode; /* energy or constraint, or Q_COMPOUND for aiding hessian */
+void calc_quant_grads(
+  int mode /* energy or constraint, or Q_COMPOUND for aiding hessian */
+)
 { int i,k;
   struct element *e_ptr;
   struct gen_quant *q = NULL;
@@ -1802,53 +2088,65 @@ int mode; /* energy or constraint, or Q_COMPOUND for aiding hessian */
   struct method_instance  *mi;
   struct gen_quant_method *gm;
   int inum;
-  struct qinfo q_info;  /* data passing structure */
+  struct qinfo *q_info = &(GET_THREAD_DATA->q_info);  /* data passing structure */
   int todo = 0; /* whether any to do */
   int global_needs;
 #ifdef PROFILING_ENABLED
-  __int32 grad_elapsed_time[2];
+  __int64 grad_elapsed_time;
 #endif
 
   PROF_START(calc_quant_grads);
+
+  if ( q_info->grad == NULL )
+    q_info_init(q_info,METHOD_GRADIENT);
+
 
   /* method initialization */
   comp_quant_stamp = 0;
   for ( type = 0 ; type < NUMELEMENTS ; type++ ) quant_flags[type] = 0;
   for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
-  { mi = METH_INSTANCE(k); /* since some init may have moved things */
+  { int j;
+    mi = METH_INSTANCE(k); /* since some init may have moved things */
+    if ( mi->flags & Q_DELETED ) continue;
     mi->stamp = 0;  /* so only current methods used in eval_all() */
     gm = basic_gen_methods + mi->gen_method;
-    if ( mi->quant >= 0 ) q = GEN_QUANT(mi->quant); else q = NULL;
-    if ( !q || (q->modulus==0.0) || !(q->flags & mode & ~Q_COMPOUND) ||
+    mi->flags |= Q_DOTHIS;
+    for ( j = 0 ; j < MMAXQUANTS ; j++ )
+    { 
+      if ( mi->quants[j] >= 0 ) 
+        q = GEN_QUANT(mi->quants[j]); 
+      else 
+        q = NULL;
+      if ( !q || (q->modulus==0.0) || !(q->flags & mode & ~Q_COMPOUND) ||
             (mi->modulus==0.0) )
-      mi->flags &= ~Q_DOTHIS;
-    else
-    { mi->flags |= Q_DOTHIS;
-      mi->newvalue = 0.0;
-      mi->abstotal = 0.0;
-      mi->timestamp = global_timestamp;
-      quant_flags[basic_gen_methods[mi->gen_method].type] |= mode;
-      if ( gm->init ) 
+        mi->flags &= ~Q_DOTHIS;
+      else
+      { mi->flags |= Q_DOTHIS;
+        mi->newvalue = 0.0;
+        mi->abstotal = 0.0;
+        mi->timestamp = global_timestamp;
+        quant_flags[basic_gen_methods[mi->gen_method].type] |= mode;
+        if ( gm->init ) 
               (*gm->init)(METHOD_GRADIENT,mi);
-      todo = 1;
+        todo = 1;
+        break;
+      }
     }
   }
   if ( !todo ) 
   { PROF_FINISH(calc_quant_grads);
     return;
   }
-
-  q_info_init(&q_info,METHOD_GRADIENT); 
-
-   
+  
   if ( compound_quant_list_head >= 0 )
-    { for (  k=LOW_INST ; k < meth_inst_count ; k++ )
-      { mi = METH_INSTANCE(k);
-        if ( mi->flags & Q_COMPOUND )
-        { mi->grad = dmatrix(0,MAXVCOUNT,0,SDIM);
-        }
+  { if ( !vgradbase ) vgrad_init();
+    for (  k=LOW_INST ; k < meth_inst_count ; k++ )
+    { mi = METH_INSTANCE(k);
+      if ( mi->flags & Q_COMPOUND )
+      { mi->grad = dmatrix(0,MAXVCOUNT,0,SDIM);
       }
     }
+  }
 
   for ( type = VERTEX ; type <= BODY ; type++ )
   if ( quant_flags[type] & mode )
@@ -1865,7 +2163,8 @@ int mode; /* energy or constraint, or Q_COMPOUND for aiding hessian */
          make_el_list(type);
       for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
       { mi = METH_INSTANCE(k); 
-         if ( mi->flags & Q_DOTHIS )
+        if ( mi->flags & Q_DELETED ) continue;
+        if ( mi->flags & Q_DOTHIS )
           for ( i = 0 ; i < nprocs ; i++ )
           {  mi->procvalue[i] = 0.0;
              mi->procabstotal[i] = 0.0;
@@ -1899,7 +2198,8 @@ int mode; /* energy or constraint, or Q_COMPOUND for aiding hessian */
       /* sum separate process values */
       for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
       { mi = METH_INSTANCE(k); 
-         if ( mi->flags & Q_DOTHIS )
+        if ( mi->flags & Q_DELETED ) continue;
+        if ( mi->flags & Q_DOTHIS )
           for ( i = 0 ; i < nprocs ; i++ )
           { mi->newvalue += mi->procvalue[i];
             mi->abstotal += mi->procabstotal[i];
@@ -1912,12 +2212,12 @@ int mode; /* energy or constraint, or Q_COMPOUND for aiding hessian */
 #endif
     /* Don't put anything here; non-shared falls through!! */
     
-    FOR_ALL_ELEMENTS(type,q_info.id)
+    FOR_ALL_ELEMENTS(type,q_info->id)
     { int j;
       int setup_flag = 0;
       int needs;
 
-      e_ptr = elptr(q_info.id);
+      e_ptr = elptr(q_info->id);
       /* get setup flags */
       needs = global_needs;
       for ( k = 0 ; k < e_ptr->method_count ; k++ )
@@ -1935,75 +2235,80 @@ int mode; /* energy or constraint, or Q_COMPOUND for aiding hessian */
           int sign = 1;
           if ( flag ) 
           { mm = ((int*)((char*)e_ptr+meth_offset))[k];
-            q_info.method = abs(mm);
+            q_info->method = abs(mm);
             if ( mm < 0 ) sign = -1;
           }
-          else  q_info.method = global_meth_inst[type][k];
-          mi = METH_INSTANCE(q_info.method);
-         if ( mi->quant >= 0 ) q = GEN_QUANT(mi->quant);
+          else  q_info->method = global_meth_inst[type][k];
+          mi = METH_INSTANCE(q_info->method);
+ 
           if ( (mi->flags & Q_DOTHIS) && (mi->type == type) )
           { REAL c = 0;  /* net coefficient */
             REAL value;
             gm = basic_gen_methods + mi->gen_method;
             PROF_START(element_setup);
             if ( !setup_flag ) 
-            { (*q_setup[type])(NULL,&q_info,needs); setup_flag = 1; }
+            { (*q_setup[type])(NULL,q_info,needs); setup_flag = 1; }
             PROF_FINISH(element_setup);
-            mi = METH_INSTANCE(q_info.method);
+            mi = METH_INSTANCE(q_info->method);
             METHOD_PROFILING_START(mi,grad);
-            for ( i = 0 ; i < q_info.vcount ; i++ ) /* methods don't know */
+            for ( i = 0 ; i < q_info->vcount ; i++ ) /* methods don't know */
               for ( j = 0 ; j < SDIM ; j++ )          /* how many */
-                  q_info.grad[i][j] = 0.0;
-            value = (*gm->gradient)(&q_info);
+                  q_info->grad[i][j] = 0.0;
+            value = (*gm->gradient)(q_info);
             if ( mi->flags & ELEMENT_MODULUS_FLAG )
-            { REAL emdls = *(REAL*)get_extra(q_info.id,mi->elmodulus);
+            { REAL emdls = *(REAL*)get_extra(q_info->id,mi->elmodulus);
               value *= emdls;
-              for ( i = 0 ; i < q_info.vcount ; i++ )
+              for ( i = 0 ; i < q_info->vcount ; i++ )
                 for ( j = 0 ; j < SDIM ; j++ )
-                  q_info.grad[i][j] *= emdls;
+                  q_info->grad[i][j] *= emdls;
             }
             mi->newvalue += sign*value;
             mi->abstotal += fabs(value);
             if ( mi->flags & Q_COMPOUND ) 
             {
-              for ( i = 0 ; i < q_info.vcount ; i++ )
+              for ( i = 0 ; i < q_info->vcount ; i++ )
               { for ( j = 0 ; j < SDIM ; j++ )
-                  mi->grad[i][j] = mi->modulus*q_info.grad[i][j];
+                  mi->grad[i][j] = sign*mi->modulus*q_info->grad[i][j];
               }
               mi->stamp = comp_quant_stamp;
             }
-            if ( mi->quant >= 0 )
-               c = sign*mi->modulus*q->modulus;
-            for ( i = 0 ; i < q_info.vcount ; i++ )
+
+
+            for ( i = 0 ; i < q_info->vcount ; i++ )
             { 
               REAL wforce[MAXCOORD];  /* unwrapped forces */
               REAL *ff;
-              v = q_info.v[i];
-              if ( q_info.wraps[i] )
-              { (*sym_form_pullback)(q_info.x[i],wforce,q_info.grad[i],
-                                 q_info.wraps[i]);
+              v = q_info->v[i];
+              if ( q_info->wraps[i] )
+              { (*sym_form_pullback)(q_info->x[i],wforce,q_info->grad[i],
+                                 q_info->wraps[i]);
                 ff = wforce;
               }
-              else ff = q_info.grad[i];
-              if ( mi->quant >= 0 && !(mi->flags & Q_COMPOUND) )
-              { if ( q->flags & Q_ENERGY & mode )
-                { REAL *f = get_force(v);
-                  vector_add_smul(f,ff, -c, SDIM);
-                }
-                else if ( q->flags & (Q_FIXED|Q_CONSERVED) & mode )
-                { vgptr = get_bv_new_vgrad(q->fixnum,v);
-                  vgptr->bb_id = q->b_id;
-                  vgptr->qnum = mi->quant;
-                  vector_add_smul(vgptr->grad,ff, c, SDIM);
-                }
+              else ff = q_info->grad[i];
+              for ( j = 0 ; j < MMAXQUANTS ; j++ )
+              { if ( mi->quants[j] < 0 )
+                  continue;
+                q = GEN_QUANT(mi->quants[j]);
+                if ( !(mi->flags & Q_COMPOUND) )
+                { c = sign*mi->modulus*q->modulus;
+                  if ( q->flags & Q_ENERGY & mode )
+                  { REAL *f = get_force(v);
+                    vector_add_smul(f,ff, -c, SDIM);
+                  }
+                  else if ( q->flags & (Q_FIXED|Q_CONSERVED) & mode )
+                  { vgptr = get_bv_new_vgrad(q->fixnum,v);
+                    vgptr->bb_id = q->b_id;
+                    vgptr->qnum = mi->quants[j];
+                    vector_add_smul(vgptr->grad,ff, c, SDIM);
+                  }
+                } 
               }
-              if ( mode & mi->flags & Q_COMPOUND )
+              if ( mode && (mi->flags & Q_COMPOUND) )
               { 
                   vgptr = get_bv_new_vgrad(mi->self_id,v);
                   vgptr->bb_id = mi->self_id;
                   vgptr->qnum = mi->self_id;
-                  vector_add_smul(vgptr->grad,ff, mi->modulus, SDIM);
-                 
+                  vector_add_smul(vgptr->grad,ff, sign*mi->modulus, SDIM);                 
               }
             }
             METHOD_PROFILING_END(mi,grad);
@@ -2015,11 +2320,11 @@ int mode; /* energy or constraint, or Q_COMPOUND for aiding hessian */
       for ( k = compound_quant_list_head ; k >= 0 ; k = q->next_compound )
       { q = GEN_QUANT(k);
         if ( (q->flags & mode) && (q->flags & Q_COMPOUND) ) 
-        { for ( i = 0 ; i < q_info.vcount ; i++ )
+        { for ( i = 0 ; i < q_info->vcount ; i++ )
           { REAL dummy,partials[MAXCOORD];
             comp_quant_vertex = i; /* so eval_all knows */ 
             eval_all(&q->expr,NULL,SDIM,&dummy,partials,NULLID);
-            v = q_info.v[i];
+            v = q_info->v[i];
             if ( q->flags & Q_ENERGY )
             { REAL *f = get_force(v);
               vector_add_smul(f,partials, -q->modulus, SDIM);
@@ -2039,6 +2344,7 @@ int mode; /* energy or constraint, or Q_COMPOUND for aiding hessian */
 
   for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
   { mi = METH_INSTANCE(k);
+    if ( mi->flags & Q_DELETED ) continue;
     if ( mi->flags & Q_DOTHIS )
     {  mi->value = mi->modulus*mi->newvalue;
        mi->abstotal *= fabs(mi->modulus);
@@ -2048,6 +2354,7 @@ int mode; /* energy or constraint, or Q_COMPOUND for aiding hessian */
   /* combine methods to quantities */
   for ( k = 0 ; k < gen_quant_count ; k++ )
   { q = GEN_QUANT(k);
+    if ( q->flags & Q_DELETED ) continue;
     if ( q->flags & mode ) 
     { q->value = q->volconst;
       q->abstotal = 0.0;
@@ -2055,19 +2362,26 @@ int mode; /* energy or constraint, or Q_COMPOUND for aiding hessian */
     }
   }
   for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
-  { mi = METH_INSTANCE(k);
-    if ( mi->quant < 0 ) continue;
-    q = GEN_QUANT(mi->quant);
-    if ( q->flags & mode ) 
-    { q->value += q->modulus*mi->value;
-      q->abstotal += fabs(q->modulus)*mi->abstotal;
+  { int j;
+    mi = METH_INSTANCE(k);
+    if ( mi->flags & Q_DELETED ) continue;
+    
+    for ( j = 0 ; j < MMAXQUANTS ; j++ )
+    { if ( mi->quants[j] < 0 )
+         continue;
+      q = GEN_QUANT(mi->quants[j]);
+      if ( q->flags & mode ) 
+      { q->value += q->modulus*mi->value;
+        q->abstotal += fabs(q->modulus)*mi->abstotal;
+      }
     }
   }
 
   for ( k = 0 ; k < gen_quant_count ; k++ )
   { q = GEN_QUANT(k);
+    if ( q->flags & Q_DELETED ) continue;
     if ( q->flags & mode ) 
-      if ( q->flags & Q_COMPOUND )
+      if ( (q->flags & Q_COMPOUND) && (q->modulus != 0.0) )
       {  q->value = q->modulus*eval(&q->expr,NULL,NULLID,NULL);
          q->abstotal = 1.0;
       }
@@ -2077,8 +2391,8 @@ int mode; /* energy or constraint, or Q_COMPOUND for aiding hessian */
   { /* munge fixed volumes modulo torus volume */
     for (  k = 0 ; k < gen_quant_count ; k++ )
     { q = GEN_QUANT(k);
-      if ( (q->flags & Q_FIXED) 
-              && (q->flags & TORUS_MODULO_MUNGE) ) 
+      if ( q->flags & Q_DELETED ) continue;
+      if ( (q->flags & Q_FIXED) && (q->flags & TORUS_MODULO_MUNGE) ) 
           q->value -= q->modulus*web.torusv*
                   (int)(0.5+(q->value - q->target)/(q->modulus*web.torusv));
     }
@@ -2087,6 +2401,7 @@ int mode; /* energy or constraint, or Q_COMPOUND for aiding hessian */
   /* take care of any cleanup */
   for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
   { mi = METH_INSTANCE(k); /* since some init may move things */
+    if ( mi->flags & Q_DELETED ) continue;
     gm = basic_gen_methods + mi->gen_method;
     if ( gm->cleanup && mi->flags & Q_DOTHIS ) gm->cleanup();
   }
@@ -2094,13 +2409,12 @@ int mode; /* energy or constraint, or Q_COMPOUND for aiding hessian */
   if ( compound_quant_list_head >= 0 )
     for ( k = LOW_INST ; k < meth_inst_count ; k++ )
     { mi = METH_INSTANCE(k);
+      if ( mi->flags & Q_DELETED ) continue;
       if ( mi->flags & Q_COMPOUND )
       { free_matrix(mi->grad); mi->grad = NULL;
       }
     }
-
-  q_info_free(&q_info);
-
+    
   PROF_FINISH(calc_quant_grads);
 } /* end calc_quant_grads() */
 
@@ -2113,11 +2427,12 @@ int mode; /* energy or constraint, or Q_COMPOUND for aiding hessian */
 *
 */
 
-void calc_quant_hess(S,rhs_mode,hess_mode,rhs)
-struct linsys *S; /* to gather hessian */
-int rhs_mode;    /* whether to do rhs */
-int hess_mode;    /* 1 for full hessian */
-REAL *rhs;
+void calc_quant_hess(
+  struct linsys *S, /* to gather hessian */
+  int rhs_mode,     /* whether to do rhs */
+  int hess_mode,    /* 1 for full hessian */
+  REAL *rhs
+)
 { int i,ii,k,j,jj,m,n;
   struct element *e_ptr;
   struct gen_quant *q = NULL;
@@ -2132,7 +2447,7 @@ REAL *rhs;
   int mode = Q_ENERGY|Q_FIXED|Q_CONSERVED;
   REAL coeff; /* net modulus, including pressure if fixed quant */
   REAL ccoeff=0.0; /* net modulus */
-  struct qinfo q_info;  /* data passing structure */
+  struct qinfo *q_info = &(GET_THREAD_DATA->q_info);  /* data passing structure */
   int todo = 0;
   MAT2D(seconds,2*MAXCOORD,2*MAXCOORD);
   int global_needs;
@@ -2142,17 +2457,20 @@ REAL *rhs;
 
   PROF_START(calc_quant_hess);
 
+  if ( q_info->hess == NULL )
+    q_info_init(q_info,METHOD_HESSIAN);
+
   if ( compound_quant_list_head >= 0 )
   {
     /* get total gradients for compound quantities */
-    vgrad_end();
-    vgrad_init(1);
+    vgrad_init();
     calc_quant_grads(Q_COMPOUND|Q_FIXED|Q_ENERGY|Q_CONSERVED);
 	if ( quantity_function_sparse_flag )
 		add_vgrads_to_update(S);
     compound_hess_flag = CH_GRADS;
     for ( k = 0 ; k < gen_quant_count ; k++ )
     { q = GEN_QUANT(k);
+      if ( q->flags & Q_DELETED ) continue;
       if ( !(q->flags & Q_COMPOUND ) ) continue;
       if ( q->flags & (Q_ENERGY|Q_FIXED|Q_CONSERVED) )
       { REAL coeff = q->modulus;
@@ -2196,27 +2514,34 @@ REAL *rhs;
   for ( type = 0 ; type < NUMELEMENTS ; type++ ) quant_flags[type] = 0;
   for ( k = LOW_INST  ; k < meth_inst_count  ;k++ )
     { mi = METH_INSTANCE(k);
+      if ( mi->flags & Q_DELETED ) continue;
       mi->stamp = 0;  /* so only current methods used in eval_all() */
       gm = basic_gen_methods + mi->gen_method;
-      if ( mi->quant >= 0 ) q = GEN_QUANT(mi->quant);
-      if ( (!(mi->flags&Q_COMPOUND) && (mi->quant >= 0) &&  
+      mi->flags |= Q_DOTHIS;
+      for ( j = 0 ; j < MMAXQUANTS ; j++ )
+      { if ( mi->quants[j] < 0 )
+           continue;
+        q = GEN_QUANT(mi->quants[j]);
+        if ( (!(mi->flags&Q_COMPOUND)  &&  
                         ((q->modulus == 0.0) || !(q->flags & mode)))
                   || (mi->modulus == 0.0) || 
-             ((mi->quant >= 0) && (q->flags & Q_REDUNDANT)) )
-         mi->flags &= ~Q_DOTHIS;
-      else
-      { mi->flags |= Q_DOTHIS;
-        if ( (gm->hessian == NULL) || (gm->hessian == null_q_hess) )
-        { sprintf(errmsg,"Method %s has no Hessian available.\n",gm->name);
-          kb_error(1571,errmsg,RECOVERABLE);
-        }
-        mi->newvalue = 0.0;
-        mi->abstotal = 0.0;
-        mi->timestamp = global_timestamp;
-        quant_flags[basic_gen_methods[mi->gen_method].type] |= mode;
-        if ( gm->init ) 
+             ( q->flags & Q_REDUNDANT ) )
+          mi->flags &= ~Q_DOTHIS;
+        else
+        { mi->flags |= Q_DOTHIS;
+          if ( (gm->hessian == NULL) || (gm->hessian == null_q_hess) )
+          { sprintf(errmsg,"Method %s has no Hessian available.\n",gm->name);
+            kb_error(1571,errmsg,RECOVERABLE);
+          }
+          mi->newvalue = 0.0;
+          mi->abstotal = 0.0;
+          mi->timestamp = global_timestamp;
+          quant_flags[basic_gen_methods[mi->gen_method].type] |= mode;
+          if ( gm->init ) 
               (*gm->init)(METHOD_HESSIAN,mi);
-        todo = 1;
+          todo = 1;
+          break;
+        }
       }
     }
   if ( !todo )
@@ -2225,8 +2550,7 @@ REAL *rhs;
   }
 
   /* set up matrices in qinfo with lots of room */
-  q_info_init(&q_info,METHOD_HESSIAN); 
-  q_info.hess = dmatrix4(MAXVCOUNT,MAXVCOUNT,SDIM,SDIM);
+  q_info->hess = dmatrix4(MAXVCOUNT,MAXVCOUNT,SDIM,SDIM);
   p1 = dmatrix(0,MAXCOORD-1,0,MAXCOORD-1);
   p2 = dmatrix(0,MAXCOORD-1,0,MAXCOORD-1);
 
@@ -2253,7 +2577,7 @@ REAL *rhs;
          make_el_list(type);
       for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
       { mi = METH_INSTANCE(k); 
-         if ( mi->flags & Q_DOTHIS )
+        if ( mi->flags & Q_DOTHIS )
           for ( i = 0 ; i < nprocs ; i++ )
           {  mi->procvalue[i] = 0.0;
              mi->procabstotal[i] = 0.0;
@@ -2265,7 +2589,6 @@ REAL *rhs;
       if ( mpflag == M_INACTIVE ) m_rele_procs();  /* resume parked procs */
       mpflag = M_ACTIVE;
       m_quanrowstart = S->quanrowstart;
-      m_bodyrowstart = S->bodyrowstart;
       m_fork(m_calc_quant_hess,type,mode,rhs);
       m_park_procs();
       mpflag = M_INACTIVE; 
@@ -2280,7 +2603,8 @@ REAL *rhs;
       /* sum separate process values */
       for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
       { mi = METH_INSTANCE(k); 
-         if ( mi->flags & Q_DOTHIS )
+        if ( mi->flags & Q_DELETED ) continue;
+        if ( mi->flags & Q_DOTHIS )
           for ( i = 0 ; i < nprocs ; i++ )
           { mi->newvalue += mi->procvalue[i];
             mi->abstotal += mi->procabstotal[i];
@@ -2292,11 +2616,11 @@ REAL *rhs;
    {
    
     global_needs = global_meth_needs(type);
-    FOR_ALL_ELEMENTS(type,q_info.id)
+    FOR_ALL_ELEMENTS(type,q_info->id)
     { int setup_flag = 0;
       int needs;
       ++comp_quant_stamp;
-      e_ptr = elptr(q_info.id);
+      e_ptr = elptr(q_info->id);
       /* get setup flags */
       needs = global_needs;
       for ( k = 0 ; k < e_ptr->method_count ; k++ )
@@ -2313,38 +2637,49 @@ REAL *rhs;
           int sign = 1;
           if ( flag ) 
           { mm = ((int*)((char*)e_ptr+meth_offset))[k];
-            q_info.method = abs(mm);
+            q_info->method = abs(mm);
             if ( mm < 0 ) sign = -1;
           }
-          else  q_info.method = global_meth_inst[type][k];
-          mi = METH_INSTANCE(q_info.method);
+          else  q_info->method = global_meth_inst[type][k];
+          mi = METH_INSTANCE(q_info->method);
           if ( (mi->flags & Q_DOTHIS) && (mi->type == type) )
           { REAL value;
-            if ( mi->quant >= 0 ) q = GEN_QUANT(mi->quant);
+
             PROF_START(element_setup);
             if ( !setup_flag ) 
-            { (*q_setup[type])(S,&q_info,needs); setup_flag = 1; }
+            { (*q_setup[type])(S,q_info,needs); setup_flag = 1; }
             PROF_FINISH(element_setup);
-            coeff = sign*q->modulus*mi->modulus;
-            if ( q->flags & (Q_FIXED|Q_CONSERVED) )
-             { ccoeff = coeff; coeff *= -q->pressure; }
-            mi = METH_INSTANCE(q_info.method);
+            
+            coeff = ccoeff = 0.0;
+            for ( j = 0 ; j < MMAXQUANTS ; j++ )
+            { 
+              if ( mi->quants[j] < 0 ) 
+                continue;
+              q = GEN_QUANT(mi->quants[j]);
+              if ( q->flags & (Q_FIXED|Q_CONSERVED) )
+              { ccoeff += sign*q->modulus*mi->modulus; 
+                coeff += -q->pressure*sign*q->modulus*mi->modulus; 
+              }
+              else 
+                coeff += sign*q->modulus*mi->modulus;      
+            }
+             
             METHOD_PROFILING_START(mi,hess);
             gm = basic_gen_methods + mi->gen_method;
-            zerohess(&q_info);
-            if ( hess_mode ) value = (*gm->hessian)(&q_info);
-            else value = (*gm->gradient)(&q_info);
+            zerohess(q_info);
+            if ( hess_mode ) value = (*gm->hessian)(q_info);
+            else value = (*gm->gradient)(q_info);
             if ( mi->flags & ELEMENT_MODULUS_FLAG )
-            { REAL emdls = *(REAL*)get_extra(q_info.id,mi->elmodulus);
+            { REAL emdls = *(REAL*)get_extra(q_info->id,mi->elmodulus);
               value *= emdls;
-              for ( i = 0 ; i < q_info.vcount ; i++ )
+              for ( i = 0 ; i < q_info->vcount ; i++ )
                 for ( j = 0 ; j < SDIM ; j++ )
-                  q_info.grad[i][j] *= emdls;
-              for ( i = 0 ; i < q_info.vcount ; i++ )
-               for ( ii = 0 ; ii < q_info.vcount ; ii++ )
+                  q_info->grad[i][j] *= emdls;
+              for ( i = 0 ; i < q_info->vcount ; i++ )
+               for ( ii = 0 ; ii < q_info->vcount ; ii++ )
                 for ( j = 0 ; j < SDIM ; j++ )
                  for ( jj = 0 ; jj < SDIM ; jj++ )
-                   q_info.hess[i][ii][j][jj] *= emdls;
+                   q_info->hess[i][ii][j][jj] *= emdls;
             }
             mi->newvalue += sign*value;
             mi->abstotal += fabs(value);
@@ -2353,31 +2688,31 @@ REAL *rhs;
             if ( sym_flags & NEED_FORM_UNWRAPPING )
             { /* gradient */
               REAL grad[MAXCOORD];
-              for ( i = 0 ; i < q_info.vcount ; i++ )
-              { if ( q_info.wraps[i] )
-                { (*sym_form_pullback)(q_info.x[i],grad,q_info.grad[i],
-                                  q_info.wraps[i]);
-                  for ( j = 0 ; j < SDIM ; j++ ) q_info.grad[i][j] = grad[j];
+              for ( i = 0 ; i < q_info->vcount ; i++ )
+              { if ( q_info->wraps[i] )
+                { (*sym_form_pullback)(q_info->x[i],grad,q_info->grad[i],
+                                  q_info->wraps[i]);
+                  for ( j = 0 ; j < SDIM ; j++ ) q_info->grad[i][j] = grad[j];
                 }
               }
               if ( hess_mode )
-              { for ( i = 0 ; i < q_info.vcount ; i++ )
-                for ( ii = 0 ; ii < q_info.vcount ; ii++ )
-                { if ( q_info.wraps[i] )
+              { for ( i = 0 ; i < q_info->vcount ; i++ )
+                for ( ii = 0 ; ii < q_info->vcount ; ii++ )
+                { if ( q_info->wraps[i] )
                     for ( jj = 0 ; jj < SDIM ; jj++ )
                     { REAL tmp[MAXCOORD];
                       for ( j = 0 ; j < SDIM ; j++ ) 
-                            tmp[j]=q_info.hess[i][ii][j][jj];
-                      (*sym_form_pullback)(q_info.x[i],grad,tmp,q_info.wraps[i]);
+                            tmp[j]=q_info->hess[i][ii][j][jj];
+                      (*sym_form_pullback)(q_info->x[i],grad,tmp,q_info->wraps[i]);
                       for ( j = 0 ; j < SDIM ; j++ )
-                        q_info.hess[i][ii][j][jj] = grad[j];
+                        q_info->hess[i][ii][j][jj] = grad[j];
                     }
-                  if ( q_info.wraps[ii] )
+                  if ( q_info->wraps[ii] )
                     for ( j = 0 ; j < SDIM ; j++ )
-                    { (*sym_form_pullback)(q_info.x[ii],grad,
-                           q_info.hess[i][ii][j],q_info.wraps[ii]);
+                    { (*sym_form_pullback)(q_info->x[ii],grad,
+                           q_info->hess[i][ii][j],q_info->wraps[ii]);
                       for ( jj = 0 ; jj < SDIM ; jj++ )
-                         q_info.hess[i][ii][j][jj] = grad[jj];
+                         q_info->hess[i][ii][j][jj] = grad[jj];
                     }
                  }
                }
@@ -2385,63 +2720,68 @@ REAL *rhs;
 
                 
             if ( mi->flags & Q_COMPOUND ) 
-            { mi->vlist = q_info.v; /* for eval_sec */
-              for ( i = 0 ; i < q_info.vcount ; i++ )
+            { mi->vlist = q_info->v; /* for eval_sec */
+              for ( i = 0 ; i < q_info->vcount ; i++ )
                  for ( m = 0 ; m < SDIM ; m++ )
-                    mi->grad[i][m] = mi->modulus*q_info.grad[i][m];
-              for ( i = 0 ; i < q_info.vcount ; i++ )
-                for ( j = 0 ; j < q_info.vcount ; j++ )
+                    mi->grad[i][m] = sign*mi->modulus*q_info->grad[i][m];
+              for ( i = 0 ; i < q_info->vcount ; i++ )
+                for ( j = 0 ; j < q_info->vcount ; j++ )
                  for ( m = 0 ; m < SDIM ; m++ )
                   for ( n = 0 ; n < SDIM ; n++ )
-                    mi->hess[i][j][m][n] = mi->modulus*q_info.hess[i][j][m][n];
+                    mi->hess[i][j][m][n] = sign*mi->modulus*q_info->hess[i][j][m][n];
               mi->stamp = comp_quant_stamp;
             }
            else
            {
-             for ( i = 0 ; i < q_info.vcount ; i++ )
+             for ( i = 0 ; i < q_info->vcount ; i++ )
              { REAL grad[MAXCOORD];
-               va = get_vertex_vhead(q_info.v[i]);
+               va = get_vertex_vhead(q_info->v[i]);
                for ( j = 0 ; j < SDIM ; j++ )
-                    grad[j] = coeff*q_info.grad[i][j];
+                    grad[j] = coeff*q_info->grad[i][j];
                fill_grad(S,va,grad,rhs);
              }
 
              /* second derivatives */
              if ( hess_mode && (mode & (Q_FIXED|Q_ENERGY|Q_CONSERVED))  )
-               for ( i = 0 ; i < q_info.vcount ; i++ )
-                 { va = get_vertex_vhead(q_info.v[i]);
+               for ( i = 0 ; i < q_info->vcount ; i++ )
+                 { va = get_vertex_vhead(q_info->v[i]);
                    if ( va->freedom == 0 ) continue;
 
-                   for ( j = i ; j < q_info.vcount ; j++ )
-                   { vb = get_vertex_vhead(q_info.v[j]);
+                   for ( j = i ; j < q_info->vcount ; j++ )
+                   { vb = get_vertex_vhead(q_info->v[j]);
                      if ( vb->freedom == 0 ) continue;
                      for ( n = 0 ; n < SDIM ; n++ )
                        for ( m = 0 ; m < SDIM ; m++ )
-                         q_info.hess[i][j][m][n] *= coeff;
-                     fill_mixed_entry(S,q_info.v[i],q_info.v[j],q_info.hess[i][j]);
+                         q_info->hess[i][j][m][n] *= coeff;
+                     fill_mixed_entry(S,q_info->v[i],q_info->v[j],q_info->hess[i][j]);
 
-                     if ( (i != j) && (q_info.v[i] == q_info.v[j]) ) /* also transpose */
+                     if ( (i != j) && (q_info->v[i] == q_info->v[j]) ) /* also transpose */
                      { MAT2D(transpose,MAXCOORD,MAXCOORD);
                        for ( n = 0 ; n < SDIM ; n++ )
                          for ( m = 0 ; m < SDIM ; m++ )
-                           transpose[m][n] = q_info.hess[i][j][n][m];
-                       fill_mixed_entry(S,q_info.v[i],q_info.v[j],transpose);
+                           transpose[m][n] = q_info->hess[i][j][n][m];
+                       fill_mixed_entry(S,q_info->v[i],q_info->v[j],transpose);
                      }
                    } /* end inner vertex loop */
 
                    /* fixed quantity gradients for left side */
-                   if ( q->flags & (Q_FIXED|Q_CONSERVED) )
-                   { /* find entry */
-                     int currentrow;
-                     if ( va->proj )
-                     { vec_mat_mul(q_info.grad[i],va->proj,g,SDIM,
+                   for ( j = 0 ; j < MMAXQUANTS ; j++ )
+                   { if ( mi->quants[j] < 0 )
+                       continue;
+                     q = GEN_QUANT(mi->quants[j]);
+                     if ( q->flags & (Q_FIXED|Q_CONSERVED) )
+                     { /* find entry */
+                       int currentrow;
+                       if ( va->proj )
+                       { vec_mat_mul(q_info->grad[i],va->proj,g,SDIM,
                                     va->freedom);
-                       ggg = g;
-                     }
-                     else ggg = q_info.grad[i];
-                     currentrow = S->quanrowstart + mi->quant;
-                     for ( m = 0 ; m < va->freedom ; m++ )
-                     { sp_hash_search(S,va->rownum+m,currentrow,ccoeff*ggg[m]);
+                         ggg = g;
+                       }
+                       else ggg = q_info->grad[i];
+                       currentrow = S->quanrowstart + mi->quants[j];
+                       ccoeff = sign*q->modulus*mi->modulus;
+                       for ( m = 0 ; m < va->freedom ; m++ )
+                         sp_hash_search(S,va->rownum+m,currentrow,ccoeff*ggg[m]);
                      }
                    }
                  } /* end second derivatives */
@@ -2453,15 +2793,15 @@ REAL *rhs;
         /* Here we take care of compound quantities */
         for ( k = compound_quant_list_head ; k >= 0 ; k = q->next_compound )
         { q = GEN_QUANT(k);
-          if ( (q->flags & mode) && (q->flags & Q_COMPOUND) ) 
+          if ( (q->flags & mode) && (q->flags & Q_COMPOUND) && (q->modulus != 0.0) ) 
           {
-            for ( i = 0 ; i < q_info.vcount ; i++ )
+            for ( i = 0 ; i < q_info->vcount ; i++ )
             { REAL dummy,partials[MAXCOORD];
               REAL grad[MAXCOORD];
               comp_quant_vertex = i; /* so eval_all knows */ 
               comp_quant_type = type;
               eval_all(&q->expr,NULL,SDIM,&dummy,partials,NULLID);
-              va = get_vertex_vhead(q_info.v[i]);
+              va = get_vertex_vhead(q_info->v[i]);
               for ( j = 0 ; j < SDIM ; j++ )
                    grad[j] = q->modulus*partials[j];
               fill_grad(S,va,grad,rhs);
@@ -2485,29 +2825,29 @@ REAL *rhs;
             /* second derivatives */
             compound_hess_flag = CH_HESS;
             if ( hess_mode )
-              for ( i = 0 ; i < q_info.vcount ; i++ )
+              for ( i = 0 ; i < q_info->vcount ; i++ )
               { REAL dummy[MAXCOORD];
                 REAL partials[MAXCOORD];
-                va = get_vertex_vhead(q_info.v[i]);
+                va = get_vertex_vhead(q_info->v[i]);
                 if ( va->freedom == 0 ) continue;
 
-                for ( j = i ; j < q_info.vcount ; j++ )
-                { vb = get_vertex_vhead(q_info.v[j]);
+                for ( j = i ; j < q_info->vcount ; j++ )
+                { vb = get_vertex_vhead(q_info->v[j]);
                   if ( vb->freedom == 0 ) continue;
                   comp_quant_vertexi = i; /* so eval_all knows */ 
                   comp_quant_vertexj = j; /* so eval_all knows */ 
                   eval_second(&q->expr,NULL,SDIM,dummy,partials,seconds,NULLID);
                   for ( n = 0 ; n < SDIM ; n++ )
                     for ( m = 0 ; m < SDIM ; m++ )
-                      q_info.hess[i][j][m][n] = q->modulus*seconds[m][n];
-                  fill_mixed_entry(S,q_info.v[i],q_info.v[j],q_info.hess[i][j]);
+                      q_info->hess[i][j][m][n] = q->modulus*seconds[m][n];
+                  fill_mixed_entry(S,q_info->v[i],q_info->v[j],q_info->hess[i][j]);
 
-                  if ( (i != j) && (q_info.v[i] == q_info.v[j]) ) /* also transpose */
+                  if ( (i != j) && (q_info->v[i] == q_info->v[j]) ) /* also transpose */
                   { MAT2D(transpose,MAXCOORD,MAXCOORD);
                     for ( n = 0 ; n < SDIM ; n++ )
                       for ( m = 0 ; m < SDIM ; m++ )
-                        transpose[m][n] = q_info.hess[i][j][n][m];
-                    fill_mixed_entry(S,q_info.v[i],q_info.v[j],transpose);
+                        transpose[m][n] = q_info->hess[i][j][n][m];
+                    fill_mixed_entry(S,q_info->v[i],q_info->v[j],transpose);
                   }
                 } /* end inner vertex loop */
 
@@ -2520,10 +2860,10 @@ REAL *rhs;
   }  /* end single thread */
   
   /* free stuff */
-  free_matrix4(q_info.hess);
+  free_matrix4(q_info->hess);
   free_matrix(p1);
   free_matrix(p2);
-  q_info_free(&q_info);
+
   if ( compound_quant_list_head >= 0 )
   for ( k = LOW_INST ; k < meth_inst_count ; k++ )
   { mi = METH_INSTANCE(k);
@@ -2535,6 +2875,7 @@ REAL *rhs;
 
   for ( k = LOW_INST ; k < meth_inst_count ; k++ )
   { mi = METH_INSTANCE(k);
+    if ( mi->flags & Q_DELETED ) continue;
     if ( mi->flags & Q_DOTHIS )
     {  mi->value = mi->modulus*mi->newvalue;
        mi->abstotal *= fabs(mi->modulus);
@@ -2544,6 +2885,7 @@ REAL *rhs;
   /* combine methods to quantities */
   for (  k = 0 ; k < gen_quant_count ; k++ )
   { q = GEN_QUANT(k);
+    if ( q->flags & Q_DELETED ) continue;
     if ( q->flags & mode ) 
     { q->value = q->volconst;
       q->abstotal = 0.0;
@@ -2552,17 +2894,22 @@ REAL *rhs;
   }
   for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
     { mi = METH_INSTANCE(k);
+      if ( mi->flags & Q_DELETED ) continue;
       if ( mi->flags & Q_COMPOUND ) continue;
       gm = basic_gen_methods + mi->gen_method;
-      if ( mi->quant >= 0 ) q = GEN_QUANT(mi->quant);
-      if ( (mi->quant >= 0) && (q->flags & mode) ) 
-      { q->value += q->modulus*mi->value;
-        q->abstotal += fabs(q->modulus)*mi->abstotal;
+      for ( j = 0 ; j < MMAXQUANTS ; j++ )
+      { if ( mi->quants[j] < 0 ) 
+          continue;
+        q = GEN_QUANT(mi->quants[j]);
+        if ( q->flags & mode ) 
+        { q->value += q->modulus*mi->value;
+          q->abstotal += fabs(q->modulus)*mi->abstotal;
+        }
       }
     }
   for ( k = compound_quant_list_head ; k >= 0 ; k = q->next_compound )
   { q = GEN_QUANT(k);
-    if ( (q->flags & mode) && ( q->flags & Q_COMPOUND ) )
+    if ( (q->flags & mode) && ( q->flags & Q_COMPOUND ) && ( q->modulus != 0) )
     {  q->value = q->modulus*eval(&q->expr,NULL,NULLID,NULL);
        q->abstotal = 1.0;
     }
@@ -2572,6 +2919,7 @@ REAL *rhs;
   { /* munge fixed volumes modulo torus volume */
     for ( k = 0 ; k < gen_quant_count ; k++ )
     { q = GEN_QUANT(k);
+      if ( q->flags & Q_DELETED ) continue;
       if ( (q->flags & Q_FIXED) 
              && (q->flags & TORUS_MODULO_MUNGE) ) 
           q->value -= q->modulus*web.torusv*
@@ -2582,6 +2930,7 @@ REAL *rhs;
   /* take care of any cleanup */
   for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
   { mi = METH_INSTANCE(k); /* since some init may move things */
+    if ( mi->flags & Q_DELETED ) continue;
     gm = basic_gen_methods + mi->gen_method;
     if ( gm->cleanup && mi->flags & Q_DOTHIS ) gm->cleanup();
   }
@@ -2589,7 +2938,7 @@ REAL *rhs;
   vgrad_end();
  
   PROF_FINISH(calc_quant_hess);
-}
+} // end calc_quant_hess()
 
 #if defined(SHARED_MEMORY)
 /* SGI multiple processor stuff */
@@ -2605,7 +2954,7 @@ static int m_max_fill[MAXPROCS];     /* max number of entries until enlarge */
 static int m_hashcount[MAXPROCS];    /* current number of entries */
 static int m_hash_per_row[MAXPROCS];    /* estimate size of table */
 static int m_hash_extraprobes; /* for measuring efficiency */
-static int m_bodyrowstart,m_quanrowstart,m_total_rows;
+static int m_quanrowstart;
 struct hess_entry *m_hashtable[MAXPROCS];  /* the table */
 int m_table_size[MAXPROCS];  /* hashtable size */
 void m_hess_hash_search(int,int,REAL,int);
@@ -2635,7 +2984,7 @@ void m_hess_hash_init()
      (struct hess_entry *)mycalloc(m_table_size[me],sizeof(struct hess_entry));
   for ( i = 0 ; i < m_table_size[me] ; i++ ) m_hashtable[me][i].row = HASHEMPTY;
   m_hash_extraprobes = 0;
-}
+} // end m_hess_hash_init()
 
 /********************************************************************
 * 
@@ -2668,7 +3017,7 @@ void m_hess_hash_expand()
      if ( e->row != HASHEMPTY )
         m_hess_hash_search(e->col,e->row,e->value,me);
   myfree((char*)oldtable);
-}
+} // end m_hess_hash_expand()
 
 /********************************************************************
 * 
@@ -2677,10 +3026,11 @@ void m_hess_hash_expand()
 * purpose: Finds existing entry or allocates entry.
 *             Installs key values, and adds hessian value.
 */
-void m_hess_hash_search(col,row,value,tid)
-int row,col;  /* meant to do upper triangle */
-REAL value;  /* value to add */
-int tid;        /* thread id */
+void m_hess_hash_search(
+  int row, int col,  /* meant to do upper triangle */
+  REAL value,  /* value to add */
+  int tid        /* thread id */
+)
 {
   struct hess_entry *e;
   int spot;
@@ -2707,7 +3057,7 @@ int tid;        /* thread id */
   /* if here, then have empty slot and need to insert */
   e->col = col; e->row = row;  m_hashcount[tid]++; 
   e->value = value;
-}
+} // end m_hess_hash_search()
 
 /***********************************************************************
 *
@@ -2718,10 +3068,11 @@ int tid;        /* thread id */
 *
 */
 
-void m_calc_quant_hess(type,mode,rhs)
-int type;    /* element type */
-int mode;    /* ENERGY, FIXED, or INFO_ONLY */
-REAL *rhs;
+void m_calc_quant_hess(
+  int type,    /* element type */
+  int mode,    /* ENERGY, FIXED, or INFO_ONLY */
+  REAL *rhs
+)
 { int i,n,j,m,nn;
   struct element *e_ptr;
   struct gen_quant *q;
@@ -2729,7 +3080,7 @@ REAL *rhs;
   struct gen_quant_method *gm;
   struct method_instance  *mi;
   int inum;
-  struct qinfo q_info;  /* data passing structure */
+  struct qinfo *q_info = &(GET_THREAD_DATA->q_info);  /* data passing structure */
   int meth_offset = get_meth_offset(type); 
   int me = GET_THREAD_ID;
   int start,end,bin;
@@ -2744,11 +3095,14 @@ REAL *rhs;
 #endif
   signal(SIGINT,catcher);    /* to catch user interrupt */     
   m_breakflag[me] = 0;
-  if ( setjmp(m_jumpbuf[me]) ) { q_info_free(&q_info); return; }
+  if ( setjmp(m_jumpbuf[me]) ) { return; }
 
   /* set up matrices in qinfo with lots of room */
-  q_info_init(&q_info,METHOD_HESSIAN); 
-  q_info.hess = dmatrix4(MAXVCOUNT,MAXVCOUNT,SDIM,SDIM);
+
+  if ( q_info->grad == NULL )
+    q_info_init(q_info,METHOD_HESSIAN);
+
+  q_info->hess = dmatrix4(MAXVCOUNT,MAXVCOUNT,SDIM,SDIM);
   p1 = dmatrix(0,MAXCOORD-1,0,MAXCOORD-1);
   p2 = dmatrix(0,MAXCOORD-1,0,MAXCOORD-1);
 
@@ -2765,8 +3119,8 @@ REAL *rhs;
     int setup_flag = 0;
     int needs;
 
-    q_info.id = el_list[type][nn]; 
-    e_ptr = elptr(q_info.id);
+    q_info->id = el_list[type][nn]; 
+    e_ptr = elptr(q_info->id);
 
     /* get setup flags */
     needs = global_needs;
@@ -2786,35 +3140,42 @@ REAL *rhs;
        REAL value;
        if ( flag ) 
        { mm = ((int*)((char*)e_ptr+meth_offset))[k];
-         q_info.method = abs(mm);
+         q_info->method = abs(mm);
          if ( mm < 0 ) sign = -1;
        }
-       else  q_info.method = global_meth_inst[type][k];
-       mi = METH_INSTANCE(q_info.method);
+       else  q_info->method = global_meth_inst[type][k];
+       mi = METH_INSTANCE(q_info->method);
        if ( (mi->flags & Q_DOTHIS) && (mi->type == type) )
-        { q = GEN_QUANT(mi->quant);
-          coeff = sign*q->modulus*mi->modulus;
+        { coeff = 0.0;
+          for ( j = 0 ; j < MMAXQUANTS ; j++ )
+          { if ( mi->quants[j] < 0 )
+              continue;
+            q = GEN_QUANT(mi->quants[j]);
+            coeff += sign*q->modulus*mi->modulus;
+            if ( q->flags & (Q_FIXED|Q_CONSERVED) )
+              coeff += -q->pressure*sign*q->modulus*mi->modulus; 
+            else
+              coeff += sign*q->modulus*mi->modulus;
+          }
+           
           if ( !setup_flag ) 
-          { (*q_setup[type])(NULL,&q_info,needs); setup_flag = 1; }
-          if ( q->flags & (Q_FIXED|Q_CONSERVED) )
-           { ccoeff = coeff; coeff *= -q->pressure; }
-          mi = METH_INSTANCE(q_info.method);
+          { (*q_setup[type])(NULL,q_info,needs); setup_flag = 1; }
           gm = basic_gen_methods + mi->gen_method;
-          zerohess(&q_info);
+          zerohess(q_info);
 
-          if ( m_hess_mode ) value = (*gm->hessian)(&q_info);
-          else value = (*gm->gradient)(&q_info); 
+          if ( m_hess_mode ) value = (*gm->hessian)(q_info);
+          else value = (*gm->gradient)(q_info); 
           if ( mi->flags & ELEMENT_MODULUS_FLAG )
-          { REAL emdls = *(REAL*)get_extra(q_info.id,mi->elmodulus);
+          { REAL emdls = *(REAL*)get_extra(q_info->id,mi->elmodulus);
             value *= emdls;
-            for ( i = 0 ; i < q_info.vcount ; i++ )
+            for ( i = 0 ; i < q_info->vcount ; i++ )
               for ( j = 0 ; j < SDIM ; j++ )
-                q_info.grad[i][j] *= emdls;
-            for ( i = 0 ; i < q_info.vcount ; i++ )
-                 for ( ii = 0 ; ii < q_info.vcount ; ii++ )
+                q_info->grad[i][j] *= emdls;
+            for ( i = 0 ; i < q_info->vcount ; i++ )
+                 for ( ii = 0 ; ii < q_info->vcount ; ii++ )
               for ( j = 0 ; j < SDIM ; j++ )
                for ( jj = 0 ; jj < SDIM ; jj++ )
-                 q_info.hess[i][ii][j][jj] *= emdls;
+                 q_info->hess[i][ii][j][jj] *= emdls;
           }
           mi->newvalue += sign*value;
           mi->abstotal += fabs(value);
@@ -2824,78 +3185,82 @@ REAL *rhs;
           { /* gradient */
             int ii,jj;
             REAL grad[MAXCOORD];
-            for ( i = 0 ; i < q_info.vcount ; i++ )
+            for ( i = 0 ; i < q_info->vcount ; i++ )
             {
-               if ( q_info.wraps[i] )
-               { (*sym_form_pullback)(q_info.x[i],grad,q_info.grad[i],
-                                q_info.wraps[i]);
-                  for ( j = 0 ; j < SDIM ; j++ ) q_info.grad[i][j] = grad[j];
+               if ( q_info->wraps[i] )
+               { (*sym_form_pullback)(q_info->x[i],grad,q_info->grad[i],
+                                q_info->wraps[i]);
+                  for ( j = 0 ; j < SDIM ; j++ ) q_info->grad[i][j] = grad[j];
                }
             }
             if ( m_hess_mode )
-              for ( i = 0 ; i < q_info.vcount ; i++ )
-               for ( ii = 0 ; ii < q_info.vcount ; ii++ )
-               { if ( q_info.wraps[i] )
+              for ( i = 0 ; i < q_info->vcount ; i++ )
+               for ( ii = 0 ; ii < q_info->vcount ; ii++ )
+               { if ( q_info->wraps[i] )
                    for ( jj = 0 ; jj < SDIM ; jj++ )
                    { REAL tmp[MAXCOORD];
                       for ( j = 0 ; j < SDIM ; j++ ) 
-                        tmp[j]=q_info.hess[i][ii][j][jj];
-                      (*sym_form_pullback)(q_info.x[i],grad,tmp,q_info.wraps[i]);
+                        tmp[j]=q_info->hess[i][ii][j][jj];
+                      (*sym_form_pullback)(q_info->x[i],grad,tmp,q_info->wraps[i]);
                       for ( j = 0 ; j < SDIM ; j++ )
-                        q_info.hess[i][ii][j][jj] = grad[j];
+                        q_info->hess[i][ii][j][jj] = grad[j];
                     }
-                  if ( q_info.wraps[ii] )
+                  if ( q_info->wraps[ii] )
                    for ( j = 0 ; j < SDIM ; j++ )
                    { 
-                      (*sym_form_pullback)(q_info.x[ii],grad,q_info.hess[i][ii][j],
-                                                   q_info.wraps[ii]);
+                      (*sym_form_pullback)(q_info->x[ii],grad,q_info->hess[i][ii][j],
+                                                   q_info->wraps[ii]);
                        for ( jj = 0 ; jj < SDIM ; jj++ )
-                           q_info.hess[i][ii][j][jj] = grad[jj];
+                           q_info->hess[i][ii][j][jj] = grad[jj];
                    }
                }
           }
 
-          for ( i = 0 ; i < q_info.vcount ; i++ )
+          for ( i = 0 ; i < q_info->vcount ; i++ )
             { REAL grad[MAXCOORD];
-               va = get_vertex_vhead(q_info.v[i]);
+               va = get_vertex_vhead(q_info->v[i]);
                for ( j = 0 ; j < SDIM ; j++ )
-                  grad[j] = coeff*q_info.grad[i][j];
-               m_fill_grad(va,grad,me,rhs);
+                  grad[j] = coeff*q_info->grad[i][j];
+               m_fill_grad(va,grad,rhs,me);
             }
           /* second derivatives */
           if ( m_hess_mode )
-           for ( i = 0 ; i < q_info.vcount ; i++ )
-            { va = get_vertex_vhead(q_info.v[i]);
+           for ( i = 0 ; i < q_info->vcount ; i++ )
+            { va = get_vertex_vhead(q_info->v[i]);
                if ( va->freedom == 0 ) continue;
 
-               for ( j = i ; j < q_info.vcount ; j++ )
-               { vb = get_vertex_vhead(q_info.v[j]);
+               for ( j = i ; j < q_info->vcount ; j++ )
+               { vb = get_vertex_vhead(q_info->v[j]);
                  if ( vb->freedom == 0 ) continue;
                  for ( n = 0 ; n < SDIM ; n++ )
                     for ( m = 0 ; m < SDIM ; m++ )
-                       q_info.hess[i][j][m][n] *= coeff;
-                 m_fill_mixed_entry(q_info.v[i],q_info.v[j],
-                      q_info.hess[i][j],me);
-                 if ( (i != j) && (q_info.v[i] == q_info.v[j]) )
-                    m_fill_mixed_entry(q_info.v[i],q_info.v[j],
-                       q_info.hess[i][j],me);
+                       q_info->hess[i][j][m][n] *= coeff;
+                 m_fill_mixed_entry(q_info->v[i],q_info->v[j],
+                      q_info->hess[i][j],me);
+                 if ( (i != j) && (q_info->v[i] == q_info->v[j]) )
+                    m_fill_mixed_entry(q_info->v[i],q_info->v[j],
+                       q_info->hess[i][j],me);
 
                } /* end inner vertex loop */
 
                /* fixed quantity gradients for left side */
-               if ( q->flags & (Q_FIXED|Q_CONSERVED) )
-               { /* find entry */
-                 int currentrow;
-                 if ( va->proj )
-                 { vec_mat_mul(q_info.grad[i],va->proj,g,SDIM,
+               for ( j = 0 ; j < MMAXQUANTS ; j++ )
+               { if ( mi->quants[j] < 0 ) 
+                    continue;
+                 q = GEN_QUANT(mi->quants[j]);
+                 if ( q->flags & (Q_FIXED|Q_CONSERVED) )
+                 { /* find entry */
+                   int currentrow;
+                   if ( va->proj )
+                   { vec_mat_mul(q_info->grad[i],va->proj,g,SDIM,
                                 va->freedom);
-                   ggg = g;
-                 }
-                 else ggg = q_info.grad[i];
-                 currentrow = m_quanrowstart + mi->quant;
-                 for ( m = 0 ; m < va->freedom ; m++ )
-                 { 
-                    m_hess_hash_search(currentrow,va->rownum+m,
+                     ggg = g;
+                   }
+                   else ggg = q_info->grad[i];
+                   currentrow = m_quanrowstart + mi->quants[j];
+                   ccoeff = sign*q->modulus*mi->modulus;
+                   for ( m = 0 ; m < va->freedom ; m++ )
+                      m_hess_hash_search(currentrow,va->rownum+m,
                            ccoeff*ggg[m],me);
                  }
                }
@@ -2905,11 +3270,11 @@ REAL *rhs;
    } /* end all element loop */
 
   /* free stuff */
-  free_matrix4(q_info.hess);
+  free_matrix4(q_info->hess);
   free_matrix(p1);
   free_matrix(p2);
-  q_info_free(&q_info);
-}
+
+} // end m_calc_quant_hess()
 
 
 /*************************************************************************
@@ -2920,11 +3285,12 @@ REAL *rhs;
 *          Just stores in local list for future processing.
 */
 
-void m_fill_grad(v,grad,tid,rhs)
-struct hess_verlist *v;
-REAL *grad;
-REAL *rhs;
-int tid; /* thread id */
+void m_fill_grad(
+  struct hess_verlist *v,
+  REAL *grad,
+  REAL *rhs,
+  int tid /* thread id */
+)
 { REAL g[MAXCOORD];
   int k,a,b;
 
@@ -2950,7 +3316,7 @@ int tid; /* thread id */
                   SDIM_dot(grad,v->conhess[a][b]),tid);
       }
   }
-}
+} // end m_fill_grad()
 
 
 /*************************************************************************
@@ -2961,10 +3327,12 @@ int tid; /* thread id */
 *             For multi-proc, just stores in local list.
 */
 
-void m_fill_mixed_entry(v_id1,v_id2,mixed,tid)
-vertex_id v_id1,v_id2;
-REAL **mixed; /* full dim values */
-int tid; /* thread id */
+void m_fill_mixed_entry(
+  vertex_id v_id1,
+  vertex_id v_id2,
+  REAL **mixed, /* full dim values */
+  int tid /* thread id */
+)
 { int k,j;
   REAL **oo;
   MAT2D(temp_mat,MAXCOORD,MAXCOORD);
@@ -2990,7 +3358,7 @@ int tid; /* thread id */
   for ( j = 0 ; j < v1->freedom ; j++ )
     for ( k = 0 ; k < v2->freedom ; k++ )
       m_hess_hash_search(v1->rownum+j,v2->rownum+k,oo[j][k],tid);
-}
+} // end m_fill_mixed_entry()
 
 
 /*******************************************************************
@@ -2998,10 +3366,9 @@ int tid; /* thread id */
 * function: m_fix_hess()
 *
 * purpose: stores local lists into regular hessian list.
-*             THis version still serial!!
+*             This version still serial!!
 */
-void m_fix_hess(S)
-struct linsys *S;
+void m_fix_hess(struct linsys *S)
 { int p,i;
 
   for ( p = 0 ; p < nprocs ; p++ )
@@ -3024,7 +3391,7 @@ struct linsys *S;
   { sprintf(msg,"m_hash_extraprobes: %d\n",m_hash_extraprobes);
      outstring(msg);
   }
-}
+} // end m_fix_hess()
 #endif
 
 /*******************************************************************
@@ -3034,10 +3401,11 @@ struct linsys *S;
 *  purpose:  calculate vertex attributes needed for quantities.
 */
 
-void q_vertex_setup(S,v_info,needs)
-struct linsys *S;
-struct qinfo *v_info;
-int needs;  /* particular setup needs for current mode */
+void q_vertex_setup(
+  struct linsys *S,
+  struct qinfo *v_info,
+  int needs  /* particular setup needs for current mode */
+)
 { /* struct vertex *v_ptr = (struct vertex *)elptr(v_info->id); */
   int i,j;
   vertex_id q_id;
@@ -3068,6 +3436,7 @@ int needs;  /* particular setup needs for current mode */
     { v_info->vcount++; 
       v_info->v[2] = get_edge_headv(e_id[2]);
     }
+
     for ( i = 1 ; i < v_info->vcount ; i++ )
     {
       v_info->x[i] = get_coord(v_info->v[i]);
@@ -3079,12 +3448,13 @@ int needs;  /* particular setup needs for current mode */
          v_info->sides[0][i-1][j] = v_info->x[i][j] - v_info->x[0][j];
     }
   }
-  if ( needs & NEED_MARKED_WINGS ) 
+
+   if ( needs & NEED_MARKED_WINGS ) 
      { /* pair of marked edge vertices 
           for sqcurve_string_marked */
         edge_id thise,starte;
-        edge_id e_id[3];
-
+        edge_id e_id[MAXVCOUNT];
+        memset(v_info->marked,0,sizeof(v_info->marked));
         starte = get_vertex_edge(v_info->id);
         i = 1;
         thise = starte;
@@ -3096,8 +3466,9 @@ int needs;  /* particular setup needs for current mode */
             e_id[i] = thise;
             v_info->vcount++; 
             v_info->v[i] = get_edge_headv(e_id[i]);
+            v_info->marked[i-1] = *EINT(thise,marked_edge_attr);
             i++;
-            if ( i >= 3 ) break;
+            if ( i >= MAXVCOUNT ) break;
           }
           thise = get_next_tail_edge(thise);
         } while ( !equal_id(thise,starte) );
@@ -3117,6 +3488,7 @@ int needs;  /* particular setup needs for current mode */
   { facetedge_id fe,startfe,next_fe;
      edge_id e_id;
      int k=0;
+     v_info->vcount = 1;
      if ( get_vattr(q_id) & BARE_NAKED ) goto nostar;
      fe = get_vertex_fe(q_id);
      if ( !valid_id(fe) ) goto nostar;
@@ -3177,12 +3549,17 @@ int needs;  /* particular setup needs for current mode */
        while ( !equal_id(fe,startfe) );
 
        /* now do the actual work */
+	   if ( needs & NEED_MARKED_WINGS )
+		 memset(v_info->marked,0,sizeof(v_info->marked));
        do 
        { 
           e_id = get_fe_edge(fe);
           v_info->v[k+1] = get_edge_headv(e_id);
           if(web.symmetry_flag) v_info->wraps[k+1] = get_edge_wrap(e_id);
           get_edge_side(e_id,v_info->sides[0][k]);
+		  if ( (marked_edge_attr>0) && *EINT(e_id,marked_edge_attr) )
+	        v_info->marked[k] = 1;
+ 
           v_info->vcount++;
           k++;
           if ( k >= MAXVCOUNT-1 )
@@ -3201,7 +3578,7 @@ int needs;  /* particular setup needs for current mode */
 nostar: ;
   }
 vset_exit: ; 
-}
+} // end q_vertex_setup()
 
 /*******************************************************************
 *
@@ -3210,16 +3587,18 @@ vset_exit: ;
 *  purpose:  calculate edge attributes needed for quantities.
 */
 
-void q_edge_setup(S,e_info,needs)
-struct linsys *S;
-struct qinfo *e_info;
-int needs;  /* particular setup needs for current mode */
+void q_edge_setup(
+  struct linsys *S,
+  struct qinfo *e_info,
+  int needs  /* particular setup needs for current mode */
+)
 { int i,j;
 
   if ( web.modeltype == QUADRATIC ) 
   { q_edge_setup_q(e_info,needs); return; }
   if ( web.modeltype == LAGRANGE ) 
   { q_edge_setup_lagrange(e_info,needs); return; }
+
 
   /* W A R N I N G */
   /* Be sure to place all data consistently for all methods !!! */
@@ -3261,6 +3640,65 @@ int needs;  /* particular setup needs for current mode */
          e_info->sides[0][i-1][j] = e_info->x[i][j] - e_info->x[0][j];
     }
   }
+  if ( needs & NEED_MARKED_WINGS )
+  { int found;
+    edge_id ee_id;
+
+    ee_id = get_next_tail_edge(e_info->id);
+    found = 0;
+    while ( !equal_id(ee_id,e_info->id) )
+    { 
+      if ( (sqtor_marked_edge_attr>0) && *EINT(ee_id,sqtor_marked_edge_attr) )
+      { int i = e_info->vcount;            
+        e_info->v[i] = get_edge_headv(ee_id);
+        e_info->marked[i] = *EINT(ee_id,sqtor_marked_edge_attr);
+        e_info->x[i] = get_coord(e_info->v[i]);
+        if ( web.symmetry_flag )
+        { (*sym_wrap)(e_info->x[i],e_info->xx[i],get_edge_wrap(ee_id));
+          e_info->x[i] = e_info->xx[i];
+        }
+        for ( j = 0 ; j < SDIM ; j++ )
+           e_info->sides[0][i][j] = e_info->x[i][j] - e_info->x[0][j];
+        e_info->vcount++;
+        found++;
+        if ( e_info->vcount >= MAXVCOUNT ) break;
+      }
+      ee_id = get_next_tail_edge(ee_id);
+    };
+    if ( found != 1 )
+    { sprintf(errmsg,"sq_torsion method: Must be exactly two marked edges at vertex %s\n",
+        ELNAME(get_edge_tailv(e_info->id)));
+      kb_error(6589,errmsg,RECOVERABLE);
+    }
+
+    ee_id = get_next_head_edge(e_info->id);
+    found = 0;
+    while ( !equal_id(ee_id,e_info->id) )
+    { 
+      if ( (sqtor_marked_edge_attr>0) && *EINT(ee_id,sqtor_marked_edge_attr) )
+      { int i = e_info->vcount;           
+        e_info->v[i] = get_edge_tailv(ee_id);
+        e_info->marked[i] = *EINT(ee_id,sqtor_marked_edge_attr);      
+        e_info->x[i] = get_coord(e_info->v[i]);
+        if ( web.symmetry_flag )
+        { (*sym_wrap)(e_info->x[i],e_info->xx[i],get_edge_wrap(inverse_id(ee_id)));
+          e_info->x[i] = e_info->xx[i];
+        }
+        for ( j = 0 ; j < SDIM ; j++ )
+           e_info->sides[0][i][j] = e_info->x[i][j] - e_info->x[1][j];
+        e_info->vcount++;
+        found++;
+        if ( e_info->vcount >= MAXVCOUNT ) break;
+      }
+      ee_id = get_next_head_edge(ee_id);
+    };
+    if ( found != 1 )
+    { sprintf(errmsg,"sq_torsion method: Must be exactly two marked edges at vertex %s\n",
+        ELNAME(get_edge_tailv(e_info->id)));
+      kb_error(6590,errmsg,RECOVERABLE);
+    }
+  } // end NEED_MARKED_WINGS
+
   if ( needs & NEED_STRING_STAR )
   { edge_id e_id1,e_id2 = e_info->id,e_id3;
      /* careful of weird packaging */
@@ -3285,7 +3723,7 @@ int needs;  /* particular setup needs for current mode */
          e_info->gauss_pt[m][i] = gauss1poly[0][m]*e_info->x[0][i]
                                 + gauss1poly[1][m]*e_info->x[1][i];
   }
-}
+} // end q_edge_setup()
 
 /*******************************************************************
 *
@@ -3295,9 +3733,10 @@ int needs;  /* particular setup needs for current mode */
 *                For quadratic model.
 */
 
-void q_edge_setup_q(e_info,needs)
-struct qinfo *e_info;
-int needs;  /* particular setup needs for current mode */
+void q_edge_setup_q(
+  struct qinfo *e_info,
+  int needs  /* particular setup needs for current mode */
+)
 { int i,j;
 
   /* W A R N I N G */
@@ -3311,11 +3750,20 @@ int needs;  /* particular setup needs for current mode */
   e_info->x[1] = get_coord(e_info->v[1]);
   e_info->x[2] = get_coord(e_info->v[2]);
   if ( web.symmetry_flag )
-     { WRAPTYPE wrap = get_edge_wrap(e_info->id);
-        (*sym_wrap)(e_info->x[2],e_info->xx[2],wrap);
-        e_info->x[2] = e_info->xx[2];
-        e_info->wraps[2] = wrap;
-     }
+  { WRAPTYPE wrap = get_edge_wrap(e_info->id);
+    if ( inverted(e_info->id) )
+    { wrap = (*sym_inverse)(wrap);
+      (*sym_wrap)(e_info->x[0],e_info->xx[2],wrap);
+      e_info->x[0] = e_info->xx[2];
+      e_info->wraps[0] = wrap;
+    }
+    else 
+    {
+      (*sym_wrap)(e_info->x[2],e_info->xx[2],wrap);
+      e_info->x[2] = e_info->xx[2];
+      e_info->wraps[2] = wrap;
+    } 
+  }
   if ( needs & NEED_SIDE ) 
   { /* tangent vectors at gauss points */
     int m;
@@ -3328,19 +3776,20 @@ int needs;  /* particular setup needs for current mode */
       }
   }
   if ( needs & NEED_WINGS )
-     { kb_error(1575,"Can't do quadratic model with edge WINGS (needed for some method instance).\n",RECOVERABLE);
-     }
+  { kb_error(1575,"Can't do quadratic model with edge WINGS (needed for some method instance).\n",RECOVERABLE);
+  }
+
   if ( needs & NEED_GAUSS )
-     { int m;
-        REAL t; 
-        for ( m = 0 ; m < gauss1D_num ; m++ )
-          for ( i = 0 ; i < SDIM ; i++ )
-          { for ( j = 0, t = 0.0 ; j < edge_ctrl ; j++ )
-                t += gauss1poly[j][m]*e_info->x[j][i];
-             e_info->gauss_pt[m][i] = t;
-          }
-     }
-}
+  { int m;
+    REAL t; 
+    for ( m = 0 ; m < gauss1D_num ; m++ )
+      for ( i = 0 ; i < SDIM ; i++ )
+      { for ( j = 0, t = 0.0 ; j < edge_ctrl ; j++ )
+          t += gauss1poly[j][m]*e_info->x[j][i];
+        e_info->gauss_pt[m][i] = t;
+      }
+  }
+} // end q_edge_setup_q()
 
 
 /*******************************************************************
@@ -3351,9 +3800,10 @@ int needs;  /* particular setup needs for current mode */
 *                For Lagrange model.
 */
 
-void q_edge_setup_lagrange(e_info,needs)
-struct qinfo *e_info;
-int needs;  /* particular setup needs for current mode */
+void q_edge_setup_lagrange(
+  struct qinfo *e_info,
+  int needs  /* particular setup needs for current mode */
+)
 { int i;
   int ctrl = web.skel[EDGE].ctrlpts;
   int dim = (web.representation==STRING) ? 1 : web.dimension - 1 ;
@@ -3394,7 +3844,7 @@ int needs;  /* particular setup needs for current mode */
   }
   if ( needs & NEED_GAUSS )
      mat_mult(gl->gpoly,e_info->x,e_info->gauss_pt,gl->gnumpts,ctrl,SDIM);
-}
+} // end q_edge_setup_lagrange()
 
 /*******************************************************************
 *
@@ -3403,10 +3853,11 @@ int needs;  /* particular setup needs for current mode */
 *  purpose:  calculate facet attributes needed for quantities.
 */
 
-void q_facet_setup(S,f_info,needs)
-struct linsys *S;
-struct qinfo *f_info;
-int needs;  /* particular setup needs for current mode */
+void q_facet_setup(
+  struct linsys *S,
+  struct qinfo *f_info,
+  int needs  /* particular setup needs for current mode */
+)
 { facetedge_id fe_id;
   int i,j;
 
@@ -3430,15 +3881,18 @@ int needs;  /* particular setup needs for current mode */
   else
   { 
     fe_id = get_facet_fe(f_info->id);
-    for ( i = 0 ; i < FACET_EDGES ; i++ )
-    { 
-      f_info->v[i] = get_fe_tailv(fe_id);
-      f_info->x[i] = f_info->xx[i];
-      fe_id = get_next_edge(fe_id);
-    } 
+    if ( web.representation == SOAPFILM )
+    { for ( i = 0 ; i < FACET_VERTS ; i++ )
+        f_info->x[i] = f_info->xx[i];
+      get_facet_verts(f_info->id,f_info->x,f_info->wraps);  /* in tail order */
+      for ( i = 0 ; i < FACET_EDGES ; i++ )
+      { 
+        f_info->v[i] = get_fe_tailv(fe_id);
+        fe_id = get_next_edge(fe_id);
+      } 
+    }
   }
-  get_facet_verts(f_info->id,f_info->x,f_info->wraps);  /* in tail order */
-
+ 
   /* fan of sides from v0 */
   if ( needs & NEED_SIDE )
   { for ( i = 0 ; i < web.dimension ; i++ )
@@ -3452,7 +3906,39 @@ int needs;  /* particular setup needs for current mode */
 
   if ( needs & NEED_GAUSS )
     mat_mult(gpoly,f_info->x,f_info->gauss_pt,gauss2D_num,ctrl_num,SDIM);
-}
+
+  if ( needs & NEED_SURROUNDING_VERTICES )
+  { // For soapfilm model, add outer vertices of neighbor facets.
+    // Linear model only.  Error if missing neighbor facets.
+    // Error if multiple neighbors.  Originally for Rabah Bouzidi.
+    facetedge_id fe;
+    REAL xx[MAXCOORD];
+    f_info->vcount = 2*FACET_EDGES;  // 6 total
+    fe = get_facet_fe(f_info->id);
+    for ( i = 0 ; i < FACET_EDGES ; i++ )
+    { edge_id e_id;
+      facetedge_id ffe = get_next_facet(fe);
+      if ( !valid_id(ffe) || equal_id(fe,ffe) )
+      { sprintf(errmsg,"Facet %s missing neighbor needed for NEED_SURROUNDING_VERTICES method.\n",
+             ELNAME(f_info->id));
+        kb_error(4572,errmsg,RECOVERABLE);
+      }
+      if ( !equal_id(fe,get_next_facet(ffe)) )
+      { sprintf(errmsg,"Facet %s has too many neighbors for NEED_SURROUNDING_VERTICES method.\n",
+             ELNAME(f_info->id));
+        kb_error(4579,errmsg,RECOVERABLE);
+      }
+      f_info->x[FACET_EDGES+i] = f_info->xx[FACET_EDGES+i];
+      e_id = get_fe_edge(get_prev_edge(ffe));
+      f_info->v[FACET_EDGES+i] = get_edge_tailv(e_id);
+      get_edge_side(e_id,xx);
+      for ( j = 0 ; j < SDIM ; j++ )
+        f_info->x[FACET_EDGES+i][j] = f_info->x[i][j] - xx[j];
+      fe = get_next_edge(fe);
+    }
+  } // end NEED_SURROUNDING_VERTICES
+
+} // end q_facet_setup()
 
 /*******************************************************************
 *
@@ -3462,9 +3948,10 @@ int needs;  /* particular setup needs for current mode */
 *                Quadratic model.
 */
 
-void q_facet_setup_q(f_info,needs)
-struct qinfo *f_info;
-int needs;  /* particular setup needs for current mode */
+void q_facet_setup_q(
+  struct qinfo *f_info,
+  int needs  /* particular setup needs for current mode */
+)
 { facetedge_id fe_id;
   int i,m;
 
@@ -3492,7 +3979,7 @@ int needs;  /* particular setup needs for current mode */
 
   if ( needs & NEED_GAUSS )
      mat_mult(gpoly,f_info->x,f_info->gauss_pt,gauss2D_num,FACET_CTRL,SDIM);
-}
+} // end q_facet_setup_q()
 
 
 /*******************************************************************
@@ -3503,9 +3990,10 @@ int needs;  /* particular setup needs for current mode */
 *                For Lagrange model.
 */
 
-void q_facet_setup_lagrange(f_info,needs)  
-struct qinfo *f_info;
-int needs;  /* particular setup needs for current mode */
+void q_facet_setup_lagrange(  
+  struct qinfo *f_info,
+  int needs  /* particular setup needs for current mode */
+)
 { int i,j;
   int ctrl = web.skel[FACET].ctrlpts;
   int dim = web.dimension;
@@ -3540,7 +4028,7 @@ int needs;  /* particular setup needs for current mode */
   /* always need gauss */
   mat_mult(gl->gpoly,f_info->x,f_info->gauss_pt,gl->gnumpts,ctrl,SDIM);
 
-}
+} // end q_facet_setup_lagrange()
 
 /*******************************************************************
 *
@@ -3549,12 +4037,13 @@ int needs;  /* particular setup needs for current mode */
 *  purpose:  calculate body attributes needed for quantities.
 */
 
-void q_body_setup(S,b_info,needs)
-struct linsys *S;
-struct qinfo *b_info;
-int needs;  /* particular setup needs for current mode */
+void q_body_setup(
+  struct linsys *S,
+  struct qinfo *b_info,
+  int needs /* particular setup needs for current mode */
+)
 {
-}
+} // end q_body_setup()
 
 
 /*******************************************************************
@@ -3564,12 +4053,13 @@ int needs;  /* particular setup needs for current mode */
 *  purpose:  calculate facetedge attributes needed for quantities.
 */
 
-void q_facetedge_setup(S,fe_info,needs)
-struct linsys *S;
-struct qinfo *fe_info;
-int needs;  /* particular setup needs for current mode */
+void q_facetedge_setup(
+  struct linsys *S,
+  struct qinfo *fe_info,
+  int needs  /* particular setup needs for current mode */
+)
 {
-}
+} // end q_facetedge_setup()
 
 /*****************************************************************8
 *
@@ -3578,36 +4068,32 @@ int needs;  /* particular setup needs for current mode */
 * purpose: traps for undefined quantity methods.
 */
 
-REAL null_q_value(q_info)
-struct qinfo *q_info;
+REAL null_q_value(struct qinfo *q_info)
 { sprintf(errmsg,"Method value function not implemented for %s.\n",
      basic_gen_methods[METH_INSTANCE(q_info->method)->gen_method].name);
   kb_error(1577,errmsg,RECOVERABLE);
 
   return 0.0;
-}
+} // end null_q_value()
 
-REAL null_q_grad(q_info)
-struct qinfo *q_info;
+REAL null_q_grad(struct qinfo *q_info)
 { sprintf(errmsg,"Method gradient function not implemented for %s.\n",
      basic_gen_methods[METH_INSTANCE(q_info->method)->gen_method].name);
   kb_error(1578,errmsg,RECOVERABLE);
 
   return 0.0;
-}
+} // end null_q_grad()
 
-REAL null_q_hess(q_info)
-struct qinfo *q_info;
+REAL null_q_hess(struct qinfo *q_info)
 { sprintf(errmsg,"Quantity hessian function not implemented for %s.\n",
      basic_gen_methods[METH_INSTANCE(q_info->method)->gen_method].name);
   kb_error(1579,errmsg,RECOVERABLE);
 
   return 0.0;
-}
+} // end null_q_hess()
 
 /* handy for zeroing out gradient and hessian */
-void zerohess(q_info)
-struct qinfo *q_info;
+void zerohess(struct qinfo *q_info)
 { int m,i,j,k;
   for ( m = 0 ; m < q_info->vcount ; m++ )
      for ( j = 0 ; j < SDIM ; j++ ) 
@@ -3617,7 +4103,7 @@ struct qinfo *q_info;
      for ( j = 0 ; j < SDIM ; j++ ) 
       for ( k = 0 ; k < SDIM ; k++ ) 
           q_info->hess[m][i][j][k] = 0.0;
-}
+} // end zerohess()
 
 /*********************************************************************
 
@@ -3635,9 +4121,10 @@ struct qinfo *q_info;
 * purpose: initial checks for inertial motion
 */
 
-void ackerman_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void ackerman_init(
+  int mode,
+  struct method_instance *mi
+)
 { int sdim2=2*SDIM;
   if ( 2*SDIM > MAXCOORD )
      kb_error(1580,"ackerman method: Dimension too high for phase space motion.\n",RECOVERABLE);
@@ -3647,7 +4134,7 @@ struct method_instance *mi;
   expand_attribute(VERTEX,V_FORCE_ATTR,&sdim2);
   expand_attribute(VERTEX,V_VELOCITY_ATTR,&sdim2);
   ackerman_flag = 1;
-}
+} // end ackerman_init()
 
 /***********************************************************************
 *
@@ -3656,8 +4143,7 @@ struct method_instance *mi;
 * purpose: dummy energy
 */
 
-REAL ackerman_energy(v_info)
-struct qinfo *v_info;
+REAL ackerman_energy(struct qinfo *v_info)
 { return 0.0;
 }
 
@@ -3668,8 +4154,7 @@ struct qinfo *v_info;
 * purpose: forces in  phase space
 */
 
-REAL ackerman_forces(v_info)
-struct qinfo *v_info;
+REAL ackerman_forces(struct qinfo *v_info)
 { REAL *f = get_force(v_info->id);
   REAL *x = get_coord(v_info->id);
 /*  REAL star = get_vertex_star(v_info->id); */
@@ -3683,7 +4168,7 @@ struct qinfo *v_info;
       v_info->grad[0][i] = -x[i+SDIM];
     }
   return 0.0;
-}
+} // end ackerman_forces()
 
 /************************************************************************
 *
@@ -3692,8 +4177,9 @@ struct qinfo *v_info;
 * purpose: add method gradients to low rank update part of hessian.
 */
 
-void add_vgrads_to_update(S)
-struct linsys *S;
+void add_vgrads_to_update(
+  struct linsys *S
+)
 { vertex_id v_id;
 
   FOR_ALL_VERTICES(v_id)
@@ -3718,4 +4204,6 @@ struct linsys *S;
        }
      }
    }
-}
+} // end add_vgrads_to_update()
+
+

@@ -90,6 +90,6 @@ void softimage()
   fclose(fd);
 
   temp_free((char*)vnumber);
-}
+} // end softimage()
 
 

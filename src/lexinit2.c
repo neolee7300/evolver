@@ -31,12 +31,13 @@ void torus_period_init()
 
   web.torus_period = dmatrix(0,SDIM-1,0,SDIM-1);
   web.inverse_periods = dmatrix(0,SDIM-1,0,SDIM-1);
+  web.inverse_periods_tr = dmatrix(0,SDIM-1,0,SDIM-1);
   set_torus_periods_global();
   set_inverse_periods_global();
   for ( i = 0 ; i < SDIM ; i++ )
     web.torus_period[i][i] = web.inverse_periods[i][i] = 1.0;
   web.torusv = 1.0;
-}
+} // end torus_period_init()
 
 /*********************************************************************
 *
@@ -54,7 +55,7 @@ void torus_display_period_init()
   web.inverse_display_periods = dmatrix(0,SDIM-1,0,SDIM-1);
   for ( i = 0 ; i < SDIM ; i++ )
     web.torus_display_period[i][i] = web.inverse_display_periods[i][i] = 1.0;
-}
+} // end torus_display_period_init()
 
 /****************************************************************
 *
@@ -85,7 +86,7 @@ void read_periods()
     }
   calc_periods(ADJUST_VOLUMES);
 
-}
+} // end read_periods()
 
 /****************************************************************
 *
@@ -115,23 +116,23 @@ void read_display_periods()
       sprintf(torus_display_period_expr[i][j].name,"display period [%d][%d]",i,j);
     }
   calc_periods(ADJUST_VOLUMES);
-}
+} // end read_display_periods()
 
 /****************************************************************
 *
 *  Function: read_parameter()
 *
-*  Purpose:  Reads one adjustable parameter. 
+*  Purpose:  Reads one parameter. 
 */
 
 void read_parameter()
 {
   int n=0;
   struct global *p;
-  int oldtok = tok; /* whether variable */
+  int oldtok = tok; /* whether optimizing */
 
   tok = yylex(); /* dispose of PARAMETER */
-  if ( tok == IDENT_ )
+  if ( tok == IDENT_TOK )
   { p = globals(yylval.i);
     if ( !(p->flags & LEFTOVER) && !addload_flag ) 
     { sprintf(errmsg,"Redefinition of identifier '%s'.\n",yytext);
@@ -140,7 +141,7 @@ void read_parameter()
     p->flags &= ~LEFTOVER;
   }
   else 
-  { if ( tok != NEWIDENT_ )
+  { if ( tok != NEWIDENT_TOK )
      { kb_error(1672,"Need PARAMETER identifier.\n",WARNING);
         return;
      }
@@ -157,7 +158,7 @@ void read_parameter()
   p->flags |= ORDINARY_PARAM;
   p->attr.varstuff.delta = OPTPARAM_DELTA;
   p->attr.varstuff.pscale = 1.0;
-  if ( oldtok == OPTIMIZING_PARAMETER_ )
+  if ( (oldtok == OPTIMIZING_PARAMETER_TOK) && !(p->flags & OPTIMIZING_PARAMETER) )
   { p->flags |= OPTIMIZING_PARAMETER;
      if ( optparamcount >= MAXOPTPARAM-1 )
         kb_error(1674,"Too many optimizing parameters. Change MAXOPTPARAM in extern.h if you really need more.\n",DATAFILE_ERROR);
@@ -165,19 +166,30 @@ void read_parameter()
   }
 
   tok = yylex(); /* dispose of IDENT_ */
-  if ( (tok == '=') || (tok == ASSIGN_) ) /* have initial value */
+  if ( (tok == '=') || (tok == ASSIGN_TOK ) )/* have initial value */
   { if ( read_const(&p->value.real) < 0 )
-       kb_error(1351,"Need constant expression for initial value.\n",DATAFILE_ERROR);
+    { if ( tok == QUOTATION_TOK )
+      { p->value.string = mycalloc(strlen(yytext)+2,sizeof(char));
+        strcpy(p->value.string,yytext);
+        p->type = STRING_TYPE;
+        p->flags |= STRINGVAL;
+        p->flags &= ~ORDINARY_PARAM;
+        tok = yylex();  // eat string token
+        tok = yylex();
+      } 
+      else
+        kb_error(1351,"Need constant expression for initial value.\n",DATAFILE_ERROR);
+    }
     else tok = yylex();  /* get back token exparse pushed back */
     if ( tok == ';' ){ verb_flag = 0; tok = yylex();  /* permit ; */ }
   }
-  else if ( tok == PARAMETER_FILE_ )
+  else if ( tok == PARAMETER_FILE_TOK )
   {
     tok = yylex();
-    if ( tok == QUOTATION_ )
+    if ( tok == QUOTATION_TOK )
     { FILE *pfd = path_open(yytext,NOTDATAFILENAME);
       int k;
-      REAL val;
+      REAL val; 
 
       if ( pfd == NULL )
       { 
@@ -190,7 +202,11 @@ void read_parameter()
       p->value.file.values = (REAL *)mycalloc(1000,sizeof(REAL));
       while ( fgets(msg,msgmax,pfd) )
       {
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+        k = atoi(msg);
+        strtok(msg," \t");
+        val = atof(strtok(NULL," \t"));
+#elif defined(LONGDOUBLE)
         sscanf(msg,"%d %Lf",&k,&val);
 #else
         sscanf(msg,"%d %lf",&k,&val);
@@ -210,9 +226,12 @@ void read_parameter()
 
   }
   else
-  { unput_tok();
-    if ( read_const(&p->value.real) >= 0 )
-      kb_error(2672,"Missing '=' after parameter name.\n",WARNING);
+  { int errline = line_no;
+    unput_tok();
+    if ( read_const(&p->value.real) >= 0 )      
+    { sprintf(errmsg,"Missing '=' after parameter name on line %d.\n",errline);
+      kb_error(2672,errmsg,WARNING);
+    }
     tok = yylex();  /* get back token exparse pushed back */
     if ( tok == ';' ){ verb_flag = 0; tok = yylex();  /* permit ; */ }
   
@@ -220,26 +239,41 @@ void read_parameter()
 
   for (;;)
   {
-    if ( (tok == DELTA_) || ( stricmp(yytext,"delta") == 0) )
-    { tok = yylex(); /* dispose of IDENT_ */
-       if ( (tok == '=') || (tok == ASSIGN_) ) /* have initial value */
+    if ( (tok == PDELTA_TOK) || ( stricmp(yytext,"delta") == 0) )
+    { tok = yylex(); /* dispose of DELTA_TOK */
+       if ( (tok == '=') || (tok == ASSIGN_TOK) ) /* have initial value */
        { if ( read_const(&p->attr.varstuff.delta) < 0 )
-            kb_error(1675,"Need constant expression for delta.\n",DATAFILE_ERROR);
+            kb_error(1675,"Need constant expression for pdelta.\n",DATAFILE_ERROR);
           else tok = yylex();  /* get back token exparse pushed back */
        }
     }
-    else if ( tok == SCALE_ )
-    { tok = yylex(); /* dispose of IDENT_ */
-      if ( (tok == '=') || (tok == ASSIGN_) ) /* have initial value */
+    else if ( tok == PSCALE_TOK || tok == SCALE_TOK)
+    { tok = yylex(); /* dispose of SCALE_TOK */
+      if ( (tok == '=') || (tok == ASSIGN_TOK) ) /* have initial value */
       { if ( read_const(&p->attr.varstuff.pscale) < 0 )
            kb_error(1676,"Need constant expression for scale.\n",DATAFILE_ERROR);
         else tok = yylex();  /* get back token exparse pushed back */
       }
     }
+    else if ( tok == ON_ASSIGN_CALL_TOK )
+    { tok = yylex(); /* dispose of ON_ASSIGN_CALL_TOK */
+      if ( tok == PROCEDURE_IDENT_TOK )
+      { struct global *gg = globals(yylval.i);
+        if ( gg->attr.procstuff.argcount != 0 )
+          kb_error(4765,"on_assign_call procedure cannot have arguments.\n",
+           DATAFILE_ERROR);
+        p->attr.varstuff.on_assign_call = yylval.i;
+        gg->flags |= USED_ON_ASSIGN_CALL;
+        tok = yylex();
+      }
+      else 
+        kb_error(5629,"on_assign_call must be followed by command name.\n",
+          DATAFILE_ERROR);
+    }
     else break;
   } 
   recovery_flag = 0;
-} 
+} // end read_parameter()
          
       
 /*************************************************************************
@@ -260,19 +294,22 @@ int read_boundary()
   if ( V_BOUNDARY_ATTR == 0 )
   { int one = 1;
     V_BOUNDARY_ATTR = 
-	  add_attribute(VERTEX,"__v_boundary",INTEGER_TYPE,0,&one,0,NULL);
+	  add_attribute(VERTEX,"v_boundary",INTEGER_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
     E_BOUNDARY_ATTR = 
-	  add_attribute(EDGE,"__e_boundary",INTEGER_TYPE,0,&one,0,NULL);
+	  add_attribute(EDGE,"e_boundary",INTEGER_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
     F_BOUNDARY_ATTR = 
-	  add_attribute(FACET,"__f_boundary",INTEGER_TYPE,0,&one,0,NULL);
+	  add_attribute(FACET,"f_boundary",INTEGER_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
+    EXTRAS(VERTEX)[V_BOUNDARY_ATTR].flags |= READ_ONLY_ATTR;
+    EXTRAS(EDGE)[E_BOUNDARY_ATTR].flags |= READ_ONLY_ATTR;
+    EXTRAS(FACET)[F_BOUNDARY_ATTR].flags |= READ_ONLY_ATTR;
   }
 
   tok = yylex();  /* eat BOUNDARY token */
-  if ( (tok != INTEGER_) && (tok != NEWIDENT_) && (tok != BOUNDARY_NAME_) ) 
+  if ( (tok != INTEGER_TOK) && (tok != NEWIDENT_TOK) && (tok != BOUNDARY_NAME_TOK) ) 
   { kb_error(1679,"Need boundary number or name.\n",DATAFILE_ERROR);
     return -1;
   }
-  if ( tok == INTEGER_ )
+  if ( tok == INTEGER_TOK )
   { bnum = yylval.i;     /* boundary number */
     if ( bnum < 0 ) 
     { sprintf(errmsg,"Bad boundary number: %d.\n",bnum);
@@ -292,9 +329,10 @@ int read_boundary()
       if ( web.boundaries[bnum].attr & NAMED_THING )
       /* move named boundary */
       do
-      { for ( i = 0 ; i < web.bdrymax ; i++ )
+      { for ( i = 1 ; i < web.bdrymax ; i++ )
           if ( !(web.boundaries[i].attr & IN_USE) )
           { web.boundaries[i] = web.boundaries[bnum];
+            memset((char*)(&web.boundaries[bnum]),0,sizeof(struct boundary));
             web.boundaries[i].num = i;
             k = lookup_global(web.boundaries[i].name);
             globals(k)->value.bnum = i;
@@ -319,7 +357,7 @@ int read_boundary()
   } 
   else /* name */
   {
-    for ( i = 0 ; i < web.bdrymax ; i++ )
+    for ( i = 1 ; i < web.bdrymax ; i++ )
     {
       if ( !(web.boundaries[i].attr & IN_USE) )
       { bnum = i; break; } 
@@ -346,17 +384,29 @@ int read_boundary()
       bnum = i;
     }
 
-    if ( tok == NEWIDENT_ )
+    if ( tok == NEWIDENT_TOK )
     { k = add_global(yytext);
       globals(k)->flags |= BOUNDARY_NAME;
       globals(k)->value.bnum = bnum;
     }
   }
   bdry = web.boundaries + bnum;
+  
+  // fix memory lead for addload
+  if ( bdry->coordf[0] )
+  { 
+    for ( i = 0 ; i < MAXCOORD ; i++ )
+    { free_expr(bdry->coordf[i]);
+      free_expr(bdry->convect[i]);
+      free_expr(bdry->envect[i]);
+    }
+    myfree((char*)bdry->coordf[0]);
+  }
+
   memset((char*)bdry,0,sizeof(struct boundary));
   bdry->num = bnum;
   bdry->attr |= IN_USE;
-  if ( tok == INTEGER_ ) 
+  if ( tok == INTEGER_TOK ) 
     sprintf(web.boundaries[bnum].name,"%d",bnum);
   else
   { strncpy(bdry->name,yytext,BDRYNAMESIZE-1);
@@ -370,18 +420,21 @@ int read_boundary()
     tok = yylex();
     return bnum;
   }
-  if ( tok != PARAMETERS_ )
+  if ( tok != PARAMETERS_TOK )
      { sprintf(errmsg,"Expecting PARAMETERS keyword for boundary %s.\n",bdry->name);
        kb_error(1683,errmsg,DATAFILE_ERROR);
        pcount = bdry->pcount = 1; 
        /* try to continue */
      }
   else
-  { tok = gettok(INTEGER_);
+  { tok = gettok(INTEGER_TOK);
     bdry->pcount = pcount = yylval.i;
   }
-  if ( pcount > web.maxparam ) web.maxparam = pcount;
-  if ( (pcount < 0) || (tok != INTEGER_) ) 
+  if ( pcount > web.maxparam )
+  { web.maxparam = pcount;
+    expand_attribute(VERTEX,V_PARAM_ATTR,&web.maxparam);
+  }
+  if ( (pcount < 0) || (tok != INTEGER_TOK) ) 
      { sprintf(errmsg,"Bad parameter count %d for boundary %s. Assuming 1.\n",
           pcount,bdry->name);
        kb_error(1684,errmsg,DATAFILE_ERROR);
@@ -398,12 +451,12 @@ int read_boundary()
   tok = yylex();
   for (;;)
     switch (tok )
-    { case CONVEX_:
+    { case CONVEX_TOK:
        web.convex_flag = 1;
        bdry->attr |= B_CONVEX;
        tok = yylex();
        break;
-      case CONTENT_RANK_:
+      case CONTENT_RANK_TOK:
         { REAL rank;
           if ( read_const(&rank) < 0 )
             kb_error(3467,"Need integer value for content_rank.\n",
@@ -412,11 +465,11 @@ int read_boundary()
           tok = yylex();  /* lookahead */
           break;
         }
-      case NONWALL_:
+      case NONWALL_TOK:
        bdry->attr |= NONWALL;
        tok = yylex();
        break;
-      case PARTNER_HITTING_:
+      case PARTNER_HITTING_TOK:
        bdry->attr |= PARTNER_HITTING;
        tok = yylex();
        break;
@@ -433,7 +486,7 @@ read_coord_funcs:
 
   for ( i = 0 ; i < SDIM ; i++ )
   {
-    if ( (tok != COORD_ ) || ( yylval.i != 1 + i ))
+    if ( (tok != COORD_TOK ) || ( yylval.i != 1 + i ))
     { sprintf(errmsg,
           "Bad coordinate %d definition for boundary %s.\n",i+1,bdry->name);
       goto berr;
@@ -459,7 +512,7 @@ read_coord_funcs:
   for (;;)
     switch ( tok )
     { 
-      case ENERGY_:
+      case ENERGY_TOK:
       /* read and parse energy function */
       tok = yylex();
       for ( i = 0 ; i < MAXCOORD ; i++ )
@@ -488,7 +541,7 @@ read_coord_funcs:
       bdry->attr |= CON_ENERGY;
       break;
 
-     case CONTENT_:
+     case CONTENT_TOK:
       /* read and parse content vector potential */
       tok = yylex();
       bdry->attr |= CON_CONTENT;
@@ -550,11 +603,11 @@ int read_constraint()
   int done_flag;
 
   tok = yylex();  /* eat CONSTRAINT */
-  if ( (tok != INTEGER_)  && (tok != NEWIDENT_) && ( tok != CONSTRAINT_NAME_) ) 
+  if ( (tok != INTEGER_TOK)  && (tok != NEWIDENT_TOK) && ( tok != CONSTRAINT_NAME_TOK) ) 
   { kb_error(1687,"Need constraint number or name.\n",DATAFILE_ERROR);
     return -1;
   }
-  if ( tok == INTEGER_ )
+  if ( tok == INTEGER_TOK )
   { cnum = yylval.i;     /* constraint number */
     if ( cnum < 0 ) 
      { kb_error(1688,"Constraint number must be positive.\n",DATAFILE_ERROR);
@@ -571,49 +624,48 @@ int read_constraint()
       web.highcon = cnum;
     con = get_constraint(cnum);
     if ( con->attr & IN_USE )
-    { int moved_flag = 0;
+    { 
       if ( con->attr & NAMED_THING )
-      do
       { /* Oops. Move the named constraint */
-        for ( i = 0 ; i < web.maxcon ; i++ )
-        { struct constraint *c = get_constraint(i);
+        for ( i = 1 ;  ; i++ )
+        { struct constraint *c;
+
+          if ( i >= web.maxcon ) // need more constraint structures
+          { int newcons = 2*web.maxcon;
+            web.constraints = 
+              (struct constraint *) kb_realloc((char*)web.constraints,
+              newcons*sizeof(struct constraint));
+            web.maxcon = newcons;
+            con = get_constraint(cnum);  // might hvae move during re-allocation
+          }
+          c = get_constraint(i);
           if ( !(c->attr & IN_USE) )
           { struct global *g;
             *c = *con;
+            memset((char*)con,0,sizeof(struct constraint));
             k = lookup_global(c->name);
             g = globals(k);  
             g->value.cnum = i;
-            moved_flag = 1;
             if ( i > web.highcon )
               web.highcon = i;
             break;
-          }
+          }   
         }
-        if ( i >= web.maxcon )
-        { int newcons = 2*web.maxcon;
-          web.constraints = 
-            (struct constraint *) kb_realloc((char*)web.constraints,
-            newcons*sizeof(struct constraint));
-          web.maxcon = newcons;
-          con = get_constraint(cnum);
-        }
-       } while ( !moved_flag );
-        
-    
-      else if ( datafile_flag & !(con->attr & CON_FORWARD_DEF)
+       }           
+       else if ( datafile_flag & !(con->attr & CON_FORWARD_DEF)
                          & !addload_flag )
-      { sprintf(errmsg,"Constraint number %d already defined.\n",cnum);
-        kb_error(1690,errmsg,DATAFILE_ERROR);
-        tok = yylex();
-        return -1;
-      }
-      else
-        con->attr &= ~CON_FORWARD_DEF;
+       { sprintf(errmsg,"Constraint number %d already defined.\n",cnum);
+         kb_error(1690,errmsg,DATAFILE_ERROR);
+         tok = yylex();
+         return -1;
+       }
+       else
+         con->attr &= ~CON_FORWARD_DEF;
     }
   }
   else /* named constraint */
   { 
-    for ( i = 0 ; i < web.maxcon ; i++ )
+    for ( i = 1 ; i < web.maxcon ; i++ )
     { con = get_constraint(i);
       if ( !(con->attr & IN_USE) )
       { cnum = i; break; }   
@@ -637,20 +689,32 @@ int read_constraint()
       web.constraints = (struct constraint *) kb_realloc((char*)web.constraints,
               newcons*sizeof(struct constraint));
       cnum = web.maxcon;
+      if ( cnum == 0 )
+         cnum = 1;  // not using constraint number 0
       web.maxcon = newcons;
     }
     if ( i > web.highcon )
       web.highcon = i;
-    if ( tok == NEWIDENT_ )
+    if ( tok == NEWIDENT_TOK )
     { k = add_global(yytext);
       globals(k)->flags |= CONSTRAINT_NAME;
       globals(k)->value.cnum = cnum;
     }
-  }
+  } // end else named constraint
 
   con = GETCONSTR(cnum);
+  // fix memory leak for addload
+  if ( con->formula )
+  { free_expr(con->formula);
+    for ( i = 0 ; i < MAXCONCOMP ; i++ )
+    { free_expr(con->convect[i]);
+      free_expr(con->envect[i]);
+    }
+    myfree((char*)con->formula);
+  }
+
   memset((char*)con,0,sizeof(struct constraint));
-  if ( tok == INTEGER_ )
+  if ( tok == INTEGER_TOK )
     sprintf(con->name,"%d",cnum);
   else
   { strncpy(con->name,yytext,CONNAMESIZE-1);
@@ -667,41 +731,41 @@ int read_constraint()
   for ( more_attr = 1 ; more_attr ; )
     switch ( tok )
     {
-      case CONTENT_RANK_:
+      case CONTENT_RANK_TOK:
         { REAL rank;
           if ( read_const(&rank) < 0 )
-            kb_error(3467,"Need integer value for content_rank.\n",
+            kb_error(1911,"Need integer value for content_rank.\n",
               DATAFILE_ERROR); 
           con->content_rank = (int)rank;
           tok = yylex();  /* lookahead */
           break;
         }
-      case CONVEX_:
+      case CONVEX_TOK:
           web.convex_flag = 1;
           con->attr |= B_CONVEX;
           tok = yylex();
           break;
 
-      case NONWALL_:
+      case NONWALL_TOK:
           con->attr |= NONWALL;
           tok = yylex();
           break;
 
-      case NONNEGATIVE_:
+      case NONNEGATIVE_TOK:
           web.constr_flag = 1;
           con->attr |= NONNEGATIVE;
           one_sided_present = 1;
           tok = yylex();
           break;
 
-      case NONPOSITIVE_:
+      case NONPOSITIVE_TOK:
           web.constr_flag = 1;
           con->attr |= NONPOSITIVE;
           one_sided_present = 1;
           tok = yylex();
           break;
 
-      case GLOBAL_:
+      case GLOBAL_TOK:
           web.constr_flag = 1;
           con->attr |= GLOBAL;
           web.con_global_map[web.con_global_count++] = (conmap_t)cnum;
@@ -714,12 +778,12 @@ int read_constraint()
   if ( one_sided_present && (raw_velocity_attr < 0) )
   { int dim = SDIM;
     raw_velocity_attr = add_attribute(VERTEX,RAW_VELOCITY_ATTR_NAME,
-        REAL_TYPE,1,&dim,0,NULL);
+        REAL_TYPE,1,&dim,0,NULL,MPI_PROPAGATE);
   }
 
   /* read and parse defining function */
   constraint_init(con);
-  if ( tok != FUNCTION_ )
+  if ( tok != FUNCTION_TOK )
   { sprintf(errmsg,
        "Expected function definition for constraint %s.\n",con->name);
     kb_error(1691,errmsg,DATAFILE_ERROR);
@@ -740,7 +804,7 @@ int read_constraint()
   while ( !done_flag )
     switch ( tok )
     { 
-     case ENERGY_:
+     case ENERGY_TOK:
       /* read and parse energy function */
       tok = yylex();
       for ( i = 0 ; i < MAXCONCOMP ; i++ )
@@ -768,7 +832,7 @@ int read_constraint()
       con->attr |= CON_ENERGY;
       break;
 
-     case CONTENT_:
+     case CONTENT_TOK:
       /* read and parse content vector potential */
       tok = yylex();
       con->attr |= CON_CONTENT;
@@ -810,7 +874,7 @@ int read_constraint()
   if ( everything_quantities_flag )
     convert_constraint_to_quantities(cnum);
   return cnum;
-}
+} // end read_constraint()
 
 
 /*************************************************************************
@@ -826,7 +890,7 @@ void read_surface_energy()
    "Numbered surface energies are obsolete. Please use named quantity.\n",
       DATAFILE_ERROR);
   tok = yylex();
-}
+} // end read_surface_energy()
 
 /*************************************************************************
 *
@@ -841,10 +905,10 @@ int read_method_instance()
   int mi = -1;
 
   tok = yylex(); /* name */
-  if ( tok != NEWIDENT_ && tok != METHOD_NAME_ )
+  if ( tok != NEWIDENT_TOK && tok != METHOD_NAME_TOK )
   { kb_error(1708,"Need instance name.\n",DATAFILE_ERROR); return -1; }
 
-  if ( tok == METHOD_NAME_ )
+  if ( tok == METHOD_NAME_TOK )
   { mi = yylval.i;  /* redefinition or was forward */
   }
  
@@ -858,12 +922,12 @@ int read_method_instance()
     return mi;
   }
   
-  if ( tok != METHOD_ )
+  if ( tok != METHOD_TOK )
   { kb_error(1709,"Missing METHOD keyword.\n",DATAFILE_ERROR); return -1; }
 
   tok = yylex();
   
-  if ( tok != NEWIDENT_  && tok != MEAN_CURV_INT_ /* kludge */)
+  if ( tok != NEWIDENT_TOK  && tok != MEAN_CURV_INT_TOK /* kludge */)
   { kb_error(1710,"Need method name.\n",DATAFILE_ERROR); return -1; }
   mi = new_method_instance(yytext,mname);
   
@@ -874,7 +938,7 @@ int read_method_instance()
   METH_INSTANCE(mi)->flags &= ~Q_FORWARD_DEF;
   
   return mi;
-}
+} // end read_method_instance()
 
 /*************************************************************************
 *
@@ -884,69 +948,79 @@ int read_method_instance()
 * definition or part of quantity definition.
 */
 
-void read_instance_attr(mnum)
-int mnum;  /* number of method instance */
+void read_instance_attr(int mnum  /* number of method instance */)
 {
   int bflag;
   int spec_flag = 0;
   int esize,i;
   struct gen_quant_method *gm;
+  struct method_instance *mi = METH_INSTANCE(mnum);
   int comps,etype;
   REAL val;
   int expr_count = 0;
 
-  gm = basic_gen_methods + METH_INSTANCE(mnum)->gen_method;
+  gm = basic_gen_methods + mi->gen_method;
   /* read further attributes of instance */
   for (bflag=0;bflag==0;)
      switch ( tok )
-     { case GLOBAL_:
-          if ( !(METH_INSTANCE(mnum)->flags & GLOBAL_INST) )
+     { case GLOBAL_TOK:
+          if ( !(mi->flags & GLOBAL_INST) )
              apply_method_num(NULLID,mnum); 
           tok = yylex(); 
           break;
-       case MODULUS_:
-          if ( read_const(&(METH_INSTANCE(mnum)->modulus))  <= 0 )
+       case MODULUS_TOK:
+          if ( read_const(&(mi->modulus))  <= 0 )
              kb_error(1711,"Missing modulus.\n",WARNING);
           else tok = yylex();
           break;
-       case ELEMENT_MODULUS_:
+       case ELEMENT_MODULUS_TOK:
           tok = yylex();
-          if ( tok != EXTRA_ATTRIBUTE_ )
+          if ( tok != EXTRA_ATTRIBUTE_TOK )
              kb_error(2123,"Need extra attribute name after ELEMENT_MODULUS.\n",
                 DATAFILE_ERROR);
-          METH_INSTANCE(mnum)->elmodulus = find_extra(idname,&etype);
-          if ( etype != METH_INSTANCE(mnum)->type )
+          mi->elmodulus = find_extra(idname,&etype);
+          if ( etype != mi->type )
              kb_error(2124,"Extra attribute is for wrong type of element.\n",RECOVERABLE);
-          if ( EXTRAS(etype)[METH_INSTANCE(mnum)->elmodulus].type != REAL_TYPE )
+          if ( EXTRAS(etype)[mi->elmodulus].type != REAL_TYPE )
              kb_error(2125,"Element modulus attribute type must be REAL.\n",
               DATAFILE_ERROR);
-          METH_INSTANCE(mnum)->flags |= ELEMENT_MODULUS_FLAG;
+          mi->flags |= ELEMENT_MODULUS_FLAG;
           tok = yylex();
           break;
-       case IGNORE_FIXED_:
-          METH_INSTANCE(mnum)->flags |= IGNORE_FIXED;
+       case IGNORE_FIXED_TOK:
+          mi->flags |= IGNORE_FIXED;
           tok = yylex();
           break;
-       case IGNORE_CONSTRAINTS_:
-          METH_INSTANCE(mnum)->flags |= IGNORE_CONSTR;
+       case IGNORE_CONSTRAINTS_TOK:
+          mi->flags |= IGNORE_CONSTR;
           sqcurve_ignore_constr = 1; /* kludge */
           tok = yylex();
           break;
-       case K_VEC_ORDER_:
+       case K_VEC_ORDER_TOK:
           if ( read_const(&val)  <= 0 )
           { kb_error(1712,"Missing k_vector_order value.\n",DATAFILE_ERROR);
              val = 1.;
           }
           else tok = yylex();
-          METH_INSTANCE(mnum)->vec_order = (int)val;
+          mi->vec_order = (int)val;
           break;
-       case PARAMETER_1_:
-          if ( read_const(&(METH_INSTANCE(mnum)->parameter_1))  <= 0 )
+       case PARAMETER_1_TOK:
+          if ( read_const(&(mi->parameter_1))  <= 0 )
              kb_error(1713,"Missing parameter_1 value.\n",WARNING);
           else tok = yylex();
-          METH_INSTANCE(mnum)->flags |= METH_PARAMETER_1;
+          mi->flags |= METH_PARAMETER_1;
           break;
-       case SCALAR_INTEGRAND_: 
+       case PARAMETER_2_TOK:
+          if ( read_const(&(mi->parameter_2))  <= 0 )
+             kb_error(2660,"Missing parameter_2 value.\n",WARNING);
+          else tok = yylex();
+          mi->flags2 |= METH_PARAMETER_2;
+          break;
+       case CALC_IN_3D_TOK:
+           mi->flags2 |= CALC_IN_3D;
+           tok = yylex();
+           break;
+       case SCALAR_INTEGRAND_TOK: 
            /* read and parse integrand function */
            if ( !(gm->spec_flags & SPEC_SCALAR) )
            { kb_error(1714,"No scalar integrand for this method.\n",
@@ -955,23 +1029,32 @@ int mnum;  /* number of method instance */
            }
            spec_flag |= SPEC_SCALAR;
            expr_count = 1;
-           METH_INSTANCE(mnum)->expr[0] =
-               (struct expnode *)mycalloc(expr_count,sizeof(struct expnode));
+           if ( mi->expr[0] )
+           { // in case of replace_load or something
+             for ( i = 0 ; i < expr_count ; i++ )
+               free_expr(mi->expr[i]);
+           }
+           mi->expr[0] =
+               (struct expnode *)kb_realloc((char*)mi->expr[0],expr_count*sizeof(struct expnode));
            if ( gm->spec_flags & SPEC_EXTRADIM )
-           { esize = exparse(2*SDIM,METH_INSTANCE(mnum)->expr[0],USERCOPY);
+           { esize = exparse(2*SDIM,mi->expr[0],USERCOPY);
              spec_flag |= SPEC_EXTRADIM;
            }
-           else esize = exparse(SDIM,METH_INSTANCE(mnum)->expr[0],USERCOPY);
+           else if ( gm->spec_flags & SPEC_EXTRADIM2 )
+           { esize = exparse(SDIM+(SDIM*(SDIM-1))/2,mi->expr[0],USERCOPY);
+             spec_flag |= SPEC_EXTRADIM2;
+           }
+           else esize = exparse(SDIM,mi->expr[0],USERCOPY);
            tok = yylex();
            if ( esize <= 0 )
            { sprintf(errmsg, "Bad integrand definition.\n");
              kb_error(1715,errmsg,DATAFILE_ERROR);
            }
-           sprintf(msg, "%s scalar integrand", METH_INSTANCE(mnum)->name);
-           strncpy(METH_INSTANCE(mnum)->expr[0]->name,msg,EXPNAMESIZE-1);
+           sprintf(msg, "%s scalar integrand", mi->name);
+           strncpy(mi->expr[0]->name,msg,EXPNAMESIZE-1);
            break;
 
-       case VECTOR_INTEGRAND_:
+       case VECTOR_INTEGRAND_TOK:
            /* read and parse integrand vector */
            if ( !(gm->spec_flags & (SPEC_VECTOR|SPEC_KVECTOR)) )
            { kb_error(1716,"No vector integrand for this method.\n",
@@ -985,32 +1068,37 @@ int mnum;  /* number of method instance */
            }
            else /* SPEC_KVECTOR  */
            { spec_flag |= SPEC_KVECTOR;
-             comps = (SDIM-METH_INSTANCE(mnum)->vec_order)*SDIM;
+             comps = (SDIM-mi->vec_order)*SDIM;
              if ( comps <= 0 ) 
                  kb_error(1717,"Need k_vector_order.\n",DATAFILE_ERROR);
            }
            if ( comps > MAXMEXPR )
               kb_error(1718,"Total components exceeds MAXMEXPR.\n",DATAFILE_ERROR);
            expr_count = comps;
-           METH_INSTANCE(mnum)->expr[0]=(struct expnode *)mycalloc(comps,
-              sizeof(struct expnode));
+           if ( mi->expr[0] )
+           { // in case of replace_load or something
+             for ( i = 0 ; i < expr_count ; i++ )
+               free_expr(mi->expr[i]);
+           }
+           mi->expr[0]=(struct expnode *)kb_realloc((char*)mi->expr[0],
+             comps*sizeof(struct expnode));
            tok = yylex();
            for ( i = 0 ; i < comps ; i++ )
-           { METH_INSTANCE(mnum)->expr[i] = METH_INSTANCE(mnum)->expr[0] + i;
+           { mi->expr[i] = mi->expr[0] + i;
              if ( (tolower(yytext[0]) != 'q') || (atoi(yytext+1) != 1 + i ))
              { sprintf(errmsg,"Expected component %d definition.\n",i+1);
                kb_error(1719,errmsg,DATAFILE_ERROR);
                break;                  
              }
-             esize = exparse(SDIM,METH_INSTANCE(mnum)->expr[i],USERCOPY);
+             esize = exparse(SDIM,mi->expr[i],USERCOPY);
              tok = yylex();
              if ( esize <= 0 )
              { sprintf(errmsg, "Bad component %d definition.\n",i+1);
                kb_error(1720,errmsg,DATAFILE_ERROR);
              }
              sprintf(msg,"%s vector integrand component %d",
-                METH_INSTANCE(mnum)->name,i+1);
-             strncpy(METH_INSTANCE(mnum)->expr[i]->name,msg,EXPNAMESIZE-1);
+                mi->name,i+1);
+             strncpy(mi->expr[i]->name,msg,EXPNAMESIZE-1);
            }
            if ( (tolower(yytext[0]) == 'q') && isdigit(yytext[1]) ) 
            { sprintf(errmsg,"k_vector method needs only %d (complement of order) vectors.\n",(SDIM-METH_INSTANCE(mnum)->vec_order));
@@ -1018,7 +1106,7 @@ int mnum;  /* number of method instance */
            }
            break;
 
-       case FORM_INTEGRAND_:  /* 2-form */
+       case FORM_INTEGRAND_TOK:  /* 2-form */
            /* read and parse integrand 2-form */
            if ( !(gm->spec_flags & SPEC_2FORM) )
            { kb_error(1721,"No 2-form integrand for this method.\n",
@@ -1032,25 +1120,30 @@ int mnum;  /* number of method instance */
                  DATAFILE_ERROR);
 
            expr_count = comps;
-           METH_INSTANCE(mnum)->expr[0]=(struct expnode *)mycalloc(comps,
-              sizeof(struct expnode));
+           if ( mi->expr[0] )
+           { // in case of replace_load or something
+             for ( i = 0 ; i < expr_count ; i++ )
+               free_expr(mi->expr[i]);
+           }
+
+           mi->expr[0]=(struct expnode *)kb_realloc((char*)mi->expr[0],
+             comps*sizeof(struct expnode));
            tok = yylex();
            for ( i = 0 ; i < comps ; i++ )
            {
-             METH_INSTANCE(mnum)->expr[i] = METH_INSTANCE(mnum)->expr[0] + i;
+             mi->expr[i] = mi->expr[0] + i;
              if ( (tolower(yytext[0]) != 'q') || (atoi(yytext+1) != 1 + i ) )
              { sprintf(errmsg,"Expected component %d definition.\n",i+1);
                kb_error(1723,errmsg,DATAFILE_ERROR);
              }
-             esize = exparse(SDIM,METH_INSTANCE(mnum)->expr[i],USERCOPY);
+             esize = exparse(SDIM,mi->expr[i],USERCOPY);
              tok = yylex();
              if ( esize <= 0 )
              { sprintf(errmsg, "Bad component %d definition.\n",i+1);
                kb_error(1724,errmsg,DATAFILE_ERROR);
              }
-             sprintf(msg,"%s form integrand component %d",
-                 METH_INSTANCE(mnum)->name,i+1);
-             strncpy(METH_INSTANCE(mnum)->expr[i]->name,msg,EXPNAMESIZE-1);
+             sprintf(msg,"%s form integrand component %d", mi->name,i+1);
+             strncpy(mi->expr[i]->name,msg,EXPNAMESIZE-1);
            }
            break;
 
@@ -1069,7 +1162,7 @@ int mnum;  /* number of method instance */
 
     /* Check use of boundary parameters */
     for ( i = 0 ; i < expr_count ; i++ )
-	{ struct method_instance *mi = METH_INSTANCE(mnum);
+	{ 
 	  if ( mi->expr[i] && (mi->expr[i]->flag & USING_PARAM_FLAG) )
       { sprintf(errmsg,
          "%s: Cannot use boundary parameters in gradient or hessian.\n",
@@ -1078,8 +1171,8 @@ int mnum;  /* number of method instance */
 	  }
     }
     
-    METH_INSTANCE(mnum)->flags &= ~Q_FORWARD_DEF;
- }
+    mi->flags &= ~Q_FORWARD_DEF;
+ } // end read_instance_attr()
 
 /*************************************************************************
 *
@@ -1091,8 +1184,8 @@ int mnum;  /* number of method instance */
 
 int read_quantity()
 {
-  tok = gettok(INTEGER_);
-  if ( tok != INTEGER_ ) 
+  tok = gettok(INTEGER_TOK);
+  if ( tok != INTEGER_TOK ) 
   { return read_named_quantity();
   }
   kb_error(1727,
@@ -1100,7 +1193,7 @@ int read_quantity()
       DATAFILE_ERROR);
   tok = yylex();
   return 0;
-}
+} // end read_quantity()
 
 /***********************************************************************
 *
@@ -1123,7 +1216,7 @@ int read_named_quantity()
   int esize;
   int lagmulflag = 0;
 
-  if ( (tok != NEWIDENT_) && (tok != IDENT_) && (tok != QUANTITY_NAME_) )
+  if ( (tok != NEWIDENT_TOK) && (tok != IDENT_TOK) && (tok != QUANTITY_NAME_TOK) )
   { kb_error(1733,"Need quantity name.\n",DATAFILE_ERROR);
     return -1;
   }
@@ -1137,7 +1230,7 @@ int read_named_quantity()
     tok = yylex();
     return gnum;
   }
-  if ( tok == FIXED_ )
+  if ( tok == FIXED_TOK )
   { gnum = new_quantity(qname,Q_FIXED);
     tok = yylex(); /* eat '=' */
     if ( tok != '=' )
@@ -1146,15 +1239,15 @@ int read_named_quantity()
       kb_error(1735,"Missing quantity target value. \n",DATAFILE_ERROR);
     tok = yylex();
   }
-  else if ( tok == ENERGY_ )
+  else if ( tok == ENERGY_TOK )
   { gnum = new_quantity(qname,Q_ENERGY);
     tok = yylex();
   }
-  else if ( tok == INFO_ONLY_ )
+  else if ( tok == INFO_ONLY_TOK )
   { gnum = new_quantity(qname,Q_INFO);
     tok = yylex();
   }
-  else if ( tok == CONSERVED_ )
+  else if ( tok == CONSERVED_TOK )
   { gnum = new_quantity(qname,Q_CONSERVED);
     tok = yylex();
   }
@@ -1167,43 +1260,57 @@ int read_named_quantity()
   namecount = 0;
   for (;;) /* further attributes */
     switch ( tok )
-    { case GLOBAL_METHOD_ :
-      case METHOD_ :
+    { case GLOBAL_METHOD_TOK :
+      case METHOD_TOK :
           if ( GEN_QUANT(gnum)->flags & Q_COMPOUND )
             kb_error(1737,
               "Can't list separate methods with function of methods.\n",
                          DATAFILE_ERROR);
           globality = tok;
           tok = yylex();
-          /* see if instance or method */
+
+          strncpy(inst_name,qname,sizeof(qname));
+          sprintf(inst_name+strlen(inst_name),"%d_",++namecount);
+          strncat(inst_name,yytext,sizeof(qname)-strlen(inst_name));
+
+          /* see if existing instance */
           for ( n=LOW_INST ; n < meth_inst_count ; n++ )
           { mi = METH_INSTANCE(n);
-            if ( stricmp(mi->name,yytext) == 0 ) break;
+            if ( mi->flags & Q_DELETED ) continue;
+            if ( stricmp(mi->name,inst_name) == 0 ) 
+            { // existing implicit method, say in replace_load
+              attach_method_num(gnum,n);
+              if ( globality == GLOBAL_METHOD_TOK) 
+                apply_method(NULLID,inst_name);
+              tok = yylex();
+              read_instance_attr(n);
+              break;
+            }
+            if ( stricmp(mi->name,yytext) == 0 )
+            { /* predefined instance */
+              int mnum = attach_method(gnum,yytext);
+              if ( (globality  == GLOBAL_METHOD_TOK) && (mnum>=0) &&
+                !(METH_INSTANCE(mnum)->flags & GLOBAL_INST) )
+                 apply_method(NULLID,yytext);
+              tok = yylex();
+              break;
+            }
           }
           if ( n >= meth_inst_count )
           { /* need to instantiate method */
-            strncpy(inst_name,qname,sizeof(qname));
-            sprintf(inst_name+strlen(inst_name),"%d_",++namecount);
-            strncat(inst_name,yytext,sizeof(qname)-strlen(inst_name));
             meth = new_method_instance(yytext,inst_name);
             if ( meth >= 0 )
             { METH_INSTANCE(meth)->flags |= IMPLICIT_INSTANCE;
               attach_method_num(gnum,meth);
-              if ( globality == GLOBAL_METHOD_) 
+              if ( globality == GLOBAL_METHOD_TOK) 
                 apply_method(NULLID,inst_name);
               tok = yylex();
               read_instance_attr(meth);
             }
           }
-          else /* predefined instance */
-          { int mnum = attach_method(gnum,yytext);
-            if ( (globality  == GLOBAL_METHOD_) && (mnum>=0) &&
-                !(METH_INSTANCE(mnum)->flags & GLOBAL_INST) )
-               apply_method(NULLID,yytext);
-            tok = yylex();
-          }
           break;
-      case LAGRANGE_MULTIPLIER_: 
+
+      case LAGRANGE_MULTIPLIER_TOK: 
          if ( read_const(&(GEN_QUANT(gnum)->pressure)) <= 0 ) 
            kb_error(2126,"Missing lagrange_multiplier value.\n",DATAFILE_ERROR);  
          else 
@@ -1212,12 +1319,12 @@ int read_named_quantity()
          }
          break;
 
-      case VOLCONST_:
+      case VOLCONST_TOK:
           if (read_const(&(GEN_QUANT(gnum)->volconst)) <= 0)
              kb_error(1738,"Missing quantity volconst value. \n",DATAFILE_ERROR);
           else tok = yylex();
           break;
-      case TOLERANCE_:
+      case TOLERANCE_TOK:
          if ( read_const(&GEN_QUANT(gnum)->tolerance) <= 0 )
             kb_error(2127,"Missing tolerance value.\n",DATAFILE_ERROR);
          else tok=yylex();
@@ -1225,12 +1332,12 @@ int read_named_quantity()
           kb_error(2128,"Tolerance must be positive.\n",DATAFILE_ERROR);
          break;
 
-      case MODULUS_:
+      case MODULUS_TOK:
           if (read_const(&(GEN_QUANT(gnum)->modulus)) <= 0)
              kb_error(1739,"Missing quantity modulus value. \n",DATAFILE_ERROR);
           else tok = yylex();
           break;
-      case FUNCTION_:  /* compound function of instances */
+      case FUNCTION_TOK:  /* compound function of instances */
           cur_quant = gnum;
           if ( GEN_QUANT(cur_quant)->method_count > 0 && !addload_flag)
             kb_error(1740,
@@ -1262,7 +1369,7 @@ named_exit:
   if ( !lagmulflag ) pressure_set_flag = 0;
   GEN_QUANT(gnum)->flags &= ~Q_FORWARD_DEF;
   return gnum;
-}
+} // end read_named_quantity()
 
 /*************************************************************
 *
@@ -1329,7 +1436,7 @@ return; /* temporary turn off */
               }
         }
 #endif
-}
+} // end  add_outside()
 
 /*********************************************************************
 *
@@ -1369,7 +1476,7 @@ void fix_volconst()
       set_body_volconst(b_id,newvc);
       set_body_volume(b_id,calcvol+newvc,SETSTAMP);
    }
-}
+} // end fix_volconst()
 
 /*******************************************************************
 *
@@ -1382,7 +1489,7 @@ void fix_volconst()
 
 struct fsort { facetedge_id fe;
                     REAL angle;
-                 };
+             };
 
 static int fcompare(a,b)
 struct fsort *a,*b;
@@ -1390,10 +1497,9 @@ struct fsort *a,*b;
   if ( a->angle < b->angle ) return -1;
   if ( a->angle > b->angle ) return 1;
   return 0;
-}
+} // end fcompare()
 
-void fe_reorder(e_id)
-edge_id e_id;
+void fe_reorder(edge_id e_id)
 { int fcount = 0;
   facetedge_id fe;
 #define FSORTMAX 100
@@ -1508,6 +1614,35 @@ edge_id e_id;
       break;
     }
   }
+
+  if ( !bodies_ok )
+  { // see if body matching forces order
+    bodies_ok = 1;
+    for ( k = 0 ; k < fcount ; k++ )
+    { int kk;
+      for ( kk = k+1 ; kk < fcount+k ; kk++ )
+      { int kkk = (kk >= fcount) ? kk-fcount : kk;
+        body_id kbod,kkbod;
+        kbod = get_facet_body(inverse_id(get_fe_facet(fe_list[k].fe)));
+        kkbod = get_facet_body(get_fe_facet(fe_list[kkk].fe));
+        if ( kbod == kkbod )
+        { int kkkk;
+          struct fsort tempfe;
+          if ( kk == k+1 )
+            break;
+          // swap 
+          kkkk = (k+1 >= fcount) ? k+1-fcount : k+1;
+          tempfe = fe_list[kkkk];
+          fe_list[kkkk] = fe_list[kkk];
+          fe_list[kkk] = tempfe;
+          break;
+        }
+      }
+      if ( kk == fcount+k )
+        bodies_ok = 0;
+    }
+  }
+
   if ( !bodies_ok )
   { REAL best_violation;
     int k,kk,bestk;
@@ -1560,8 +1695,82 @@ edge_id e_id;
   { set_next_facet(fe_list[i].fe,fe_list[(i+1)%fcount].fe);
     set_prev_facet(fe_list[i].fe,fe_list[(i+fcount-1)%fcount].fe);
   }
-}
+} // end fe_reorder()
 
+/*******************************************************************
+*
+*  Function: raw_fe_reorder()
+*
+*  Purpose:  Order facets properly around edge, without regard for bodies.
+*            For use by merge_edge().
+*            Note: for higher dimension ambient space, just uses 
+*            first three dimensions.
+*/
+void raw_fe_reorder(edge_id e_id)
+{ int fcount = 0;
+  facetedge_id fe;
+  struct fsort fe_list[FSORTMAX];
+  REAL side[MAXCOORD],norm_a[MAXCOORD],side_a[MAXCOORD];
+  REAL side_b[MAXCOORD],norm_aa[MAXCOORD],a_norm,aa_norm;
+  REAL c,s,angle;
+  int i,j,k;
+  facetedge_id first_fe;
+
+  memset(norm_a,0,sizeof(norm_a));
+  memset(norm_aa,0,sizeof(norm_aa));
+
+  /* see if we have 3 or more facets */
+  fe = first_fe = get_edge_fe(e_id);
+  if ( valid_id(fe) ) 
+  do { fcount++; 
+       fe = get_next_facet(fe);
+     } while ( valid_id(fe) && !equal_id(fe,first_fe) );
+  if ( fcount <= 2 ) return;
+
+  if ( fcount > FSORTMAX )
+  { kb_error(5742,"More than 100 facets on an edge; not sorted.\n",WARNING); 
+    return;
+  }
+
+  /* use first facet as reference facet */
+  /* to get basis for calculating angles */
+  get_edge_side(e_id,side);     
+  fe = get_edge_fe(e_id);
+  fe_list[0].fe = fe;
+  get_fe_side(get_next_edge(fe),side_a);
+  cross_prod(side,side_a,norm_a);
+  cross_prod(norm_a,side,norm_aa);
+  a_norm = sqrt(SDIM_dot(norm_a,norm_a));
+  aa_norm = sqrt(SDIM_dot(norm_aa,norm_aa));
+
+  /* now get angles to rest of facets */
+  fe_list[0].angle = 0.0;
+  for ( i = 1 ; i < fcount ; i++ )
+  { fe = get_next_facet(fe);
+    fe_list[i].fe = fe;
+    get_fe_side(get_next_edge(fe),side_b);
+    s = SDIM_dot(side_b,norm_a)*aa_norm;
+    c = SDIM_dot(side_b,norm_aa)*a_norm;
+    angle = atan2(s,c);
+    fe_list[i].angle = angle;
+  }
+
+  /* sort by angle */
+  for ( j = 0 ; j < fcount-1 ; j++ )
+    for ( k = j+1 ; k < fcount ; k++ )
+       if ( fe_list[k].angle < fe_list[j].angle )
+       { struct fsort ftemp;
+         ftemp = fe_list[k];
+         fe_list[k] = fe_list[j];
+         fe_list[j] = ftemp;
+       } 
+
+  /* relink in proper order */
+  for ( i = 0 ; i < fcount ; i++ )
+  { set_next_facet(fe_list[i].fe,fe_list[(i+1)%fcount].fe);
+    set_prev_facet(fe_list[i].fe,fe_list[(i+fcount-1)%fcount].fe);
+  }
+} // end raw_fe_reorder()
 
 
 /**************************************************************
@@ -1572,18 +1781,17 @@ edge_id e_id;
 *                with '-' preceding.
 */
 
-int gettok(kind)
-int kind;
+int gettok(int kind /* REAL_TOK or INTEGER_TOK */ )
 {
   int sign = 1; 
 
   tok = yylex();
   if ( tok == ',' ) tok = yylex(); /* skip separating comma */
   if ( tok == '-' ) { sign = -1; tok = yylex(); }
-  if ( tok == UMINUS_ ) { sign = -1; tok = yylex(); }
+  if ( tok == UMINUS_TOK ) { sign = -1; tok = yylex(); }
   if ( tok != kind )
-  { if ( !((tok == INTEGER_) && (kind == REAL_) ) &&
-         !((tok == INTEGER_AT_) && (kind == INTEGER_)) )
+  { if ( !((tok == INTEGER_TOK) && (kind == REAL_TOK) ) &&
+         !((tok == INTEGER_AT_TOK) && (kind == INTEGER_TOK)) )
     { if ( sign == -1 ) 
           kb_error(2129,"Unexpected minus sign.\n",DATAFILE_ERROR);
       return tok;
@@ -1591,12 +1799,11 @@ int kind;
     /* caller should check for error, and if error leave tok as lookahead */
   }
 
-
   yylval.i *= sign;
   yylval.r *= sign;
   tok = kind;
   return tok;
-}
+} // end gettok()
 
 
 /*******************************************************************
@@ -1613,8 +1820,7 @@ int kind;
 *           > 0 valid expression
 */
 
-int read_const(value)
-REAL *value;
+int read_const(REAL *value)
 {
   int retval;
   struct expnode node;  /* for getting constant expression */
@@ -1633,7 +1839,7 @@ REAL *value;
   }
   const_expr_flag = 0;
   return 1;
-}
+} // end read_const()
 
 /*********************************************************************
 *
@@ -1649,9 +1855,10 @@ REAL *value;
 *              > 0 valid expression
 */
 
-int const_expr(str,value)
-char *str;
-REAL *value;
+int const_expr(
+  char *str,
+  REAL *value
+)
 { char *old_cmdptr;  /* in case in middle of another parse */
   int ret;    /* return value */
 
@@ -1662,7 +1869,7 @@ REAL *value;
   ret = read_const(value);
   cmdptr = old_cmdptr;
   return ret;
-}
+} // end const_expr()
 
 
 /*********************************************************************
@@ -1693,7 +1900,7 @@ void string_fixup()
       set_edge_fe(e_id,fe);
 
     }
-}
+} // end string_fixup()
 
 
 /*******************************************************
@@ -1709,8 +1916,7 @@ void string_fixup()
 *
 */
 
-void phase_initialize(phasename)
-char *phasename;
+void phase_initialize(char *phasename)
 {
   FILE *pfd;
   int i,j;         /* which phases */
@@ -1721,9 +1927,9 @@ char *phasename;
   phase_flag = 1;
 
   if ( web.representation == STRING )
-    F_PHASE_ATTR = add_attribute(FACET,"phase",INTEGER_TYPE,0,&one,0,NULL);
+    F_PHASE_ATTR = add_attribute(FACET,"phase",INTEGER_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
   else
-    B_PHASE_ATTR = add_attribute(BODY,"phase",INTEGER_TYPE,0,&one,0,NULL);
+    B_PHASE_ATTR = add_attribute(BODY,"phase",INTEGER_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
 
   /* save  name */
   strncpy(phase_file_name,phasename,sizeof(phase_file_name));
@@ -1741,8 +1947,19 @@ char *phasename;
      for ( j = 0 ; j <= phasemax ; j++ ) 
         phase_data[i][j] = 1.0;
   while ( fgets(line,sizeof(line),pfd) )
-  {
-#ifdef LONGDOUBLE
+  { 
+#ifdef FLOAT128
+    char *c;
+    c = strtok(line," \t");
+    if ( !c ) continue;
+    i = atoi(c);
+    c = strtok(NULL," \t");
+    if ( !c ) continue;
+    j = atoi(c);
+    c = strtok(NULL," \t");
+    if ( !c ) continue;
+    value = atof(c);
+#elif defined(LONGDOUBLE)
     if ( sscanf(line,"%d %d %Lf",&i,&j,&value) == 3 ) 
 #else
     if ( sscanf(line,"%d %d %lf",&i,&j,&value) == 3 ) 
@@ -1755,7 +1972,7 @@ char *phasename;
     }
   }
   fclose(pfd);
-}
+} // end phase_initialize()
 
 /****************************************************************
 *
@@ -1765,8 +1982,7 @@ char *phasename;
 *                Works both from datafile and commandline
 */
 
-void read_transforms(count)
-int count; /* number, if known from command */
+void read_transforms(int count /* number, if known from command */ )
 {
   int i,j,n;
   REAL value;
@@ -1777,7 +1993,7 @@ int count; /* number, if known from command */
   else
   {
     /* find how many transforms */
-    if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+    if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
     { kb_error(1748,"Missing number of transforms.\n",DATAFILE_ERROR);
       transform_count = 1;
     }
@@ -1799,13 +2015,13 @@ int count; /* number, if known from command */
   /* read in transform matrices, in homogeneous coords */
   for ( n = 1 ; n < transform_count ; n++ )
   { tok = yylex();
-    if ( tok == COLOR_ )
-    { if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+    if ( tok == COLOR_TOK )
+    { if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
          kb_error(1749,"Missing transform color.\n",DATAFILE_ERROR);
       transform_colors[n] = yylval.i;
       transform_colors_flag = 1;
     }
-    else if ( tok == SWAP_COLORS_ )
+    else if ( tok == SWAP_COLORS_TOK )
     { transform_colors[n] = SWAP_COLORS;
       transform_colors_flag = 1;
     }
@@ -1831,7 +2047,7 @@ int count; /* number, if known from command */
   transforms_flag = 1; /* default is to show */
   lists_flag = 0;
   if ( n == transform_count ) tok = yylex(); /* lookahead */
-}
+} // end read_transforms()
 
 /****************************************************************
 *
@@ -1839,9 +2055,8 @@ int count; /* number, if known from command */
 *
 * Purpose: Create method for constraint energy.
 */
-void convert_constraint_to_quantities(i)
-int i; /* number of constraint */    
-  { int j;
+void convert_constraint_to_quantities( int i /* number of constraint */)    
+{   int j;
     char qname[100];
     char inst_name[100];
     int gq;
@@ -1863,7 +2078,8 @@ int i; /* number of constraint */
        meth = new_method_instance("vertex_scalar_integral",inst_name);
     else
        meth = new_method_instance("edge_vector_integral",inst_name);
-    METH_INSTANCE(meth)->flags |= IMPLICIT_INSTANCE;
+    METH_INSTANCE(meth)->connum = i;
+    METH_INSTANCE(meth)->flags |= IMPLICIT_INSTANCE|DEFAULT_INSTANCE;
     attach_method_num(gq,meth);
     if ( con->attr & GLOBAL ) 
        apply_method_num(NULLID,meth);
@@ -1884,7 +2100,8 @@ int i; /* number of constraint */
        METH_INSTANCE(meth)->expr[j] = con->envect[j];
     con->attr |= USURPED_BY_QUANTITY;  /* prevent dual expr deallocation */
     con->energy_method = meth;
-  }
+
+} // end convert_constraint_to_quantities()
   
 /****************************************************************
 *
@@ -1894,16 +2111,28 @@ int i; /* number of constraint */
 *                Works both from datafile and commandline
 */
 
-void read_transform_generators(count)
-int count; /* number, if known from command */
+void read_transform_generators(int count /* number, if known from command */ )
 {
   int i,j,n;
+
+  // take care of addload memory leak
+  if (  view_transform_gens_expr )
+  { for ( i = 0; i < transform_gen_count ; i++ )
+      for ( j = 0 ; j <= SDIM ; j++ )
+        for ( n = 0 ; n <= SDIM ; n++ )
+          free_expr(&view_transform_gens_expr[i][j][n]);
+    myfree((char*)view_transform_gens_expr);
+    view_transform_gens_expr = NULL;
+    transform_gen_count = 0;
+  }
+  if ( view_transform_gens )
+    free_matrix3(view_transform_gens);
 
   lists_flag = 1;
   if ( count > 0 ) transform_count = count;
   else
   { /* find how many transforms */
-    if ( (tok = gettok(INTEGER_)) != INTEGER_ )
+    if ( (tok = gettok(INTEGER_TOK)) != INTEGER_TOK )
     { kb_error(1751,"Missing number of view_transform_generators.\n",DATAFILE_ERROR);
       transform_gen_count = 1;
     }
@@ -1920,13 +2149,13 @@ int count; /* number, if known from command */
   view_transform_gens = dmatrix3(web.torus_flag?(transform_gen_count+SDIM):
             transform_gen_count,SDIM+1,SDIM+1);
   view_transform_gens_expr = 
-        (expnodearray *)mycalloc((MAXCOORD+1)*(MAXCOORD+1)*transform_gen_count,
+        (expnodearray *)mycalloc((MAXCOORD+1)*(MAXCOORD+1)*(transform_gen_count+SDIM),
                                     sizeof(struct expnode));
 
   /* read in transform matrices, in homogeneous coords */
   for ( n = 0 ; n < transform_gen_count ; n++ )
   { tok = yylex();
-    if ( tok == SWAP_COLORS_ )
+    if ( tok == SWAP_COLORS_TOK )
     { transform_gen_swap[n] = 1;
     }
     else unput_tok();
@@ -1946,7 +2175,8 @@ int count; /* number, if known from command */
 
   transforms_flag = 1; /* default is to show */
   lists_flag = 0;
-}
+  calc_view_transform_gens();
+} // end read_transform_generators()
 
 /***************************************************************************
 *
@@ -1995,7 +2225,9 @@ void convert_to_quantities()
   if ( length_method_name[0] )
   { meth = find_method_instance(length_method_name);  /* user instance? */
     if ( meth < 0 )  /* try pre-defined method */
-      meth = new_method_instance(length_method_name,"default_length_inst");
+    { meth = new_method_instance(length_method_name,"default_length_inst");
+      METH_INSTANCE(meth)->flags |= DEFAULT_INSTANCE;
+    }
   }
   else if ( web.dimension >= 3 )
   { /* can't do edges in simplex model */
@@ -2003,10 +2235,12 @@ void convert_to_quantities()
   }
   else if ( klein_metric_flag )
   { meth = new_method_instance("klein_length","default_length_inst");
+    METH_INSTANCE(meth)->flags |= DEFAULT_INSTANCE;
   }
   else if ( web.conformal_flag )
   {  int oldflag = datafile_flag;
      meth = new_method_instance("edge_scalar_integral","default_length_inst");
+     METH_INSTANCE(meth)->flags |= DEFAULT_INSTANCE;
      strcpy(formula,"density*sqrt(");
      gformula = print_express(&web.metric[0][0],'X');
      if ( strlen(gformula) > sizeof(formula)-20 )
@@ -2018,13 +2252,14 @@ void convert_to_quantities()
           (struct expnode *)mycalloc(1,sizeof(struct expnode));
      cmdptr = formula;
      datafile_flag = 1; 
-     exparse(SDIM,METH_INSTANCE(meth)->expr[0],USERCOPY);
+     exparse(SDIM,METH_INSTANCE(meth)->expr[0],USERCOPY); line_no--;
      sprintf(METH_INSTANCE(meth)->expr[0]->name,"conformal metric");
      cmdptr = NULL; datafile_flag = oldflag;
   }
   else if ( web.metric_flag )
   {  int oldflag = datafile_flag;
      meth = new_method_instance("edge_general_integral","default_length_inst");
+     METH_INSTANCE(meth)->flags |= DEFAULT_INSTANCE;
      strcpy(formula,"density*sqrt(");
      for ( i = 1 ; i <= SDIM ; i++ )
        for ( j = 1 ; j <= i  ; j++ )
@@ -2042,19 +2277,22 @@ void convert_to_quantities()
          (struct expnode *)mycalloc(1,sizeof(struct expnode));
      cmdptr = formula;
      datafile_flag = 1;
-     exparse(2*SDIM,METH_INSTANCE(meth)->expr[0],USERCOPY);
+     exparse(2*SDIM,METH_INSTANCE(meth)->expr[0],USERCOPY); line_no--;
      sprintf(METH_INSTANCE(meth)->expr[0]->name,"conformal metric");
      cmdptr = NULL; datafile_flag = oldflag;
   }
   else if ( web.representation == STRING )
-     meth = new_method_instance("density_edge_length","default_length_inst");
+  { meth = new_method_instance("density_edge_length","default_length_inst");
+    METH_INSTANCE(meth)->flags |= DEFAULT_INSTANCE;
+  }
   else
-     meth = new_method_instance("edge_length","default_length_inst");
+  { meth = new_method_instance("edge_length","default_length_inst");
+    METH_INSTANCE(meth)->flags |= DEFAULT_INSTANCE;
+  }
   length_method_number = meth;
   if ( meth >= 0 )
   {
     METH_INSTANCE(meth)->flags |= IMPLICIT_INSTANCE;
-    METH_INSTANCE(meth)->flags |= DEFAULT_INSTANCE;
     if ( web.representation == STRING )
       METH_INSTANCE(meth)->flags |= USE_DENSITY;
     attach_method_num(q,meth);
@@ -2069,17 +2307,22 @@ void convert_to_quantities()
      if ( area_method_name[0] )
      { meth = find_method_instance(area_method_name);  /* user instance? */
        if ( meth < 0 )  /* try pre-defined method */
-         meth = new_method_instance(area_method_name,"default_area_inst");
+       { meth = new_method_instance(area_method_name,"default_area_inst");
+         METH_INSTANCE(meth)->flags |= DEFAULT_INSTANCE;
+       }
      }
      else if ( web.wulff_flag )
      { meth = new_method_instance("wulff_energy","default_area_inst");
+       METH_INSTANCE(meth)->flags |= DEFAULT_INSTANCE;
      }
      else if ( klein_metric_flag )
      { meth = new_method_instance("klein_area","default_area_inst");
+       METH_INSTANCE(meth)->flags |= DEFAULT_INSTANCE;
      }
      else if ( web.conformal_flag )
      {  int oldflag = datafile_flag;
         meth = new_method_instance("facet_scalar_integral","default_area_inst");
+        METH_INSTANCE(meth)->flags |= DEFAULT_INSTANCE;
         strcpy(formula,"density*(");
         gformula = print_express(&web.metric[0][0],'X');
         if ( strlen(gformula) > sizeof(formula)-20 )
@@ -2091,17 +2334,20 @@ void convert_to_quantities()
             (struct expnode *)mycalloc(1,sizeof(struct expnode));
         cmdptr = formula;
         datafile_flag = 1;
-        exparse(SDIM,METH_INSTANCE(meth)->expr[0],USERCOPY);
+        exparse(SDIM,METH_INSTANCE(meth)->expr[0],USERCOPY); line_no--;
         sprintf(METH_INSTANCE(meth)->expr[0]->name,"conformal metric");
         cmdptr = NULL; datafile_flag = oldflag;
      }
      else if ( web.metric_flag )
      {
-        meth = new_method_instance("metric_facet_area","default_area_inst");
+       meth = new_method_instance("metric_facet_area","default_area_inst");
+       METH_INSTANCE(meth)->flags |= DEFAULT_INSTANCE;
      }
      else
-        meth = new_method_instance("density_facet_area","default_area_inst");
-     METH_INSTANCE(meth)->flags |= IMPLICIT_INSTANCE | DEFAULT_INSTANCE;
+     { meth = new_method_instance("density_facet_area","default_area_inst");
+       METH_INSTANCE(meth)->flags |= DEFAULT_INSTANCE;
+     }
+     METH_INSTANCE(meth)->flags |= IMPLICIT_INSTANCE;
      METH_INSTANCE(meth)->flags |= USE_DENSITY;
      attach_method_num(q,meth);
      apply_method_num(NULLID,meth);  /* global method */
@@ -2130,7 +2376,7 @@ void convert_to_quantities()
         meth = new_method_instance("vertex_scalar_integral",inst_name);
     else
         meth = new_method_instance("edge_vector_integral",inst_name);
-    METH_INSTANCE(meth)->flags |= IMPLICIT_INSTANCE;
+    METH_INSTANCE(meth)->flags |= IMPLICIT_INSTANCE|DEFAULT_INSTANCE;
     attach_method_num(gq,meth);
     { vertex_id v_id;
       if ( web.representation == STRING )
@@ -2152,7 +2398,7 @@ void convert_to_quantities()
 
   /* bodies */
   FOR_ALL_BODIES(b_id)
-      convert_new_body_to_quantity(b_id);  /* set up individual stuff */
+    convert_new_body_to_quantity(b_id);  /* set up individual stuff */
   convert_bodies_to_quantities();  /* add quantities to edges and facets */
 
   /* gravity */
@@ -2168,7 +2414,7 @@ void convert_to_quantities()
         meth = new_method_instance("string_gravity",inst_name);
      else
         meth = new_method_instance("gravity_method",inst_name);
-     METH_INSTANCE(meth)->flags |= IMPLICIT_INSTANCE;
+     METH_INSTANCE(meth)->flags |= IMPLICIT_INSTANCE|DEFAULT_INSTANCE;
      attach_method_num(gq,meth);
      apply_method_num(NULLID,meth);
   }
@@ -2192,7 +2438,7 @@ void convert_to_quantities()
         meth = new_method_instance("sqcurve_string",inst_name);
      else
         meth = new_method_instance("sq_mean_curvature",inst_name);
-     METH_INSTANCE(meth)->flags |= IMPLICIT_INSTANCE;
+     METH_INSTANCE(meth)->flags |= IMPLICIT_INSTANCE|DEFAULT_INSTANCE;
      attach_method_num(gq,meth);
      apply_method_num(NULLID,meth);
      GEN_QUANT(gq)->modulus = globals(square_curvature_param)->value.real;
@@ -2206,7 +2452,7 @@ void convert_to_quantities()
      GEN_QUANT(gq)->flags |= DEFAULT_QUANTITY;
      gap_quantity_num = gq;
      meth = new_method_instance("gap_energy",inst_name);
-     METH_INSTANCE(meth)->flags |= IMPLICIT_INSTANCE;
+     METH_INSTANCE(meth)->flags |= IMPLICIT_INSTANCE|DEFAULT_INSTANCE;
      attach_method_num(gq,meth);
      apply_method_num(NULLID,meth);
   }
@@ -2214,7 +2460,7 @@ void convert_to_quantities()
   quantities_only_flag = everything_quantities_flag = 1;
 
   outstring("Done.\n");
-}
+} // end convert_to_quantities()
 
 
 /****************************************************************************
@@ -2226,8 +2472,7 @@ void convert_to_quantities()
 *             i.e. rebody().
 */
 
-void convert_body_to_quantity(b_id)
-body_id b_id;
+void convert_body_to_quantity(body_id b_id)
 {
   int gq;
   int meth1;
@@ -2283,11 +2528,14 @@ body_id b_id;
         if ( area_method_name[0] )
         { meth1 = find_method_instance(area_method_name);  /* user instance? */
           if ( meth1 < 0 )  /* try pre-defined method */
-            meth1 = new_method_instance(area_method_name,inst_name1);
+          { meth1 = new_method_instance(area_method_name,inst_name1);
+            METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE;
+          }
         }
         else if ( web.symmetric_content )
         { 
           meth1 = new_method_instance("edge_vector_integral",inst_name1);
+          METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE;
           METH_INSTANCE(meth1)->expr[0] = 
               (struct expnode *)mycalloc(SDIM,sizeof(struct expnode));
           for ( j = 0 ; j < 2 ; j++ )
@@ -2296,7 +2544,7 @@ body_id b_id;
             cmdptr = formula;
             METH_INSTANCE(meth1)->expr[j] = METH_INSTANCE(meth1)->expr[0] + j;
             datafile_flag = 1;
-            exparse(SDIM,METH_INSTANCE(meth1)->expr[j],USERCOPY);
+            exparse(SDIM,METH_INSTANCE(meth1)->expr[j],USERCOPY); line_no--;
             sprintf(METH_INSTANCE(meth1)->expr[j]->name,
                 "symmetric content component %d",j+1);
             datafile_flag = 0;
@@ -2306,8 +2554,9 @@ body_id b_id;
         else
         {
           meth1 = new_method_instance("edge_area",inst_name1);
+          METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE;
         }
-        METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE | BODY_INSTANCE;
+        METH_INSTANCE(meth1)->flags |= BODY_INSTANCE;
         METH_INSTANCE(meth1)->modulus = 1.0;
         attach_method_num(gq,meth1);
         set_body_volmeth(b_id,meth1);
@@ -2342,11 +2591,14 @@ body_id b_id;
         if ( volume_method_name[0] )
         { meth1 = find_method_instance(volume_method_name); /* user instance? */
           if ( meth1 < 0 )  /* try pre-defined method */
-            meth1 = new_method_instance(volume_method_name,inst_name1);
+          { meth1 = new_method_instance(volume_method_name,inst_name1);
+            METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE;
+          }
         }
         else if ( web.symmetric_content )
         {
           meth1 = new_method_instance("facet_vector_integral",inst_name1);
+          METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE;
           METH_INSTANCE(meth1)->expr[0] = 
             (struct expnode *)mycalloc(SDIM,sizeof(struct expnode));
           for ( j = 0 ; j < SDIM ; j++ )
@@ -2354,7 +2606,7 @@ body_id b_id;
             cmdptr = formula;
             METH_INSTANCE(meth1)->expr[j] = METH_INSTANCE(meth1)->expr[0] + j;
             datafile_flag = 1;
-            exparse(SDIM,METH_INSTANCE(meth1)->expr[j],USERCOPY);
+            exparse(SDIM,METH_INSTANCE(meth1)->expr[j],USERCOPY); line_no--;
             sprintf(METH_INSTANCE(meth1)->expr[j]->name,
                "symmetric content component %d",j+1);
             datafile_flag = 0;
@@ -2364,8 +2616,9 @@ body_id b_id;
         else
         {
           meth1 = new_method_instance("facet_volume",inst_name1);
+          METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE;
         }
-        METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE | BODY_INSTANCE;
+        METH_INSTANCE(meth1)->flags |= BODY_INSTANCE;
         METH_INSTANCE(meth1)->modulus = 1.0;
         attach_method_num(gq,meth1);
         set_body_volmeth(b_id,meth1);
@@ -2384,6 +2637,7 @@ body_id b_id;
   for ( j = 0 ; j < web.maxcon ; j++ )
   { struct constraint *con = get_constraint(j);
     vertex_id v_id;
+    struct method_instance *mi;
 
     if ( !(con->attr & CON_CONTENT) ) continue;
     if ( con->attr & NAMED_THING )
@@ -2399,16 +2653,18 @@ body_id b_id;
       else
       { meth1 = new_method_instance("edge_vector_integral",inst_name1);
       }
-      METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE | BODY_INSTANCE;
-      METH_INSTANCE(meth1)->connum = j; 
-      attach_method_num(gq,meth1);
-      con = get_constraint(j); /* may have moved */
-      if ( web.representation == STRING )
-        METH_INSTANCE(meth1)->expr[0]  = con->convect[0];
-      else
-        for ( k = 0 ; k < SDIM ; k++ ) 
-          METH_INSTANCE(meth1)->expr[k] = con->convect[k];
     }
+    mi = METH_INSTANCE(meth1);
+    mi->flags |= DEFAULT_INSTANCE | BODY_INSTANCE;
+    mi->connum = j; 
+    attach_method_num(gq,meth1);
+    con = get_constraint(j); /* may have moved */
+    if ( web.representation == STRING )
+      mi->expr[0]  = con->convect[0];
+    else
+      for ( k = 0 ; k < SDIM ; k++ ) 
+        mi->expr[k] = con->convect[k];
+    
     if ( web.representation == STRING )
     { FOR_ALL_VERTICES(v_id)
       if ( v_on_constraint(v_id,j) ) 
@@ -2496,15 +2752,16 @@ body_id b_id;
       else
       { meth1 = new_method_instance("edge_vector_integral",inst_name1);
       }
-      METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE | BODY_INSTANCE;
-      METH_INSTANCE(meth1)->connum = j;
-      attach_method_num(gq,meth1);
-      if ( web.representation == STRING )
-         METH_INSTANCE(meth1)->expr[0] = bdry->convect[0];
-      else
-         for ( k = 0 ; k < SDIM ; k++ ) 
+    }
+    METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE | BODY_INSTANCE;
+    METH_INSTANCE(meth1)->connum = j;
+    attach_method_num(gq,meth1);
+    if ( web.representation == STRING )
+       METH_INSTANCE(meth1)->expr[0] = bdry->convect[0];
+    else
+       for ( k = 0 ; k < SDIM ; k++ ) 
            METH_INSTANCE(meth1)->expr[k] = bdry->convect[k];
-     }
+     
      if ( web.representation == STRING )
      { FOR_ALL_VERTICES(v_id)
        if ( bdry == get_boundary(v_id) ) 
@@ -2556,8 +2813,7 @@ body_id b_id;
 *             Call convert_bodies_to_quantity() to apply quantities.
 */
 
-void convert_new_body_to_quantity(b_id)
-body_id b_id;
+void convert_new_body_to_quantity(body_id b_id)
 {
   int gq;
   int meth1;
@@ -2610,13 +2866,16 @@ body_id b_id;
      if ( meth1 < 0 )
      { /* have to create */
         if ( area_method_name[0] )
-        { meth1 = find_method_instance(area_method_name);  /* user instance? */
+        { meth1 = dup_method_instance(area_method_name,inst_name1);  /* user instance? */
           if ( meth1 < 0 )  /* try pre-defined method */
-            meth1 = new_method_instance(area_method_name,inst_name1);
+          { meth1 = new_method_instance(area_method_name,inst_name1);
+            METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE;
+          }
         }
         else if ( web.symmetric_content )
         { 
           meth1 = new_method_instance("edge_vector_integral",inst_name1);
+          METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE;
           METH_INSTANCE(meth1)->expr[0] = 
               (struct expnode *)mycalloc(SDIM,sizeof(struct expnode));
           for ( j = 0 ; j < SDIM ; j++ )
@@ -2630,7 +2889,7 @@ body_id b_id;
             METH_INSTANCE(meth1)->expr[j] = METH_INSTANCE(meth1)->expr[0] + j;
             old_datafile_flag = datafile_flag;
             datafile_flag = 1;
-            exparse(SDIM,METH_INSTANCE(meth1)->expr[j],USERCOPY);
+            exparse(SDIM,METH_INSTANCE(meth1)->expr[j],USERCOPY); line_no--;
             sprintf(METH_INSTANCE(meth1)->expr[j]->name,
                 "symmetric content component %d",j+1);
             datafile_flag = old_datafile_flag;
@@ -2642,12 +2901,15 @@ body_id b_id;
         else
         {
           meth1 = new_method_instance("edge_area",inst_name1);
+          METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE;
         }
-        METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE | BODY_INSTANCE;
-        METH_INSTANCE(meth1)->modulus = 1.0;
-        attach_method_num(gq,meth1);
-        set_body_volmeth(b_id,meth1);
+
      }
+             
+     METH_INSTANCE(meth1)->flags |= BODY_INSTANCE;
+     METH_INSTANCE(meth1)->modulus = 1.0;
+     attach_method_num(gq,meth1);
+     set_body_volmeth(b_id,meth1);
   }
   else  /* SOAPFILM */
   {
@@ -2655,14 +2917,18 @@ body_id b_id;
      if ( meth1 < 0 )
      { /* have to create */
         if ( volume_method_name[0] )
-        { meth1 = find_method_instance(volume_method_name); /* user instance? */
+        { meth1 = dup_method_instance(volume_method_name,inst_name1); /* user instance? */
           if ( meth1 < 0 )  /* try pre-defined method */
-            meth1 = new_method_instance(volume_method_name,inst_name1);
+          { meth1 = new_method_instance(volume_method_name,inst_name1);
+            METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE;
+          }
         }
         else if ( web.symmetric_content )
-        {
+        { struct method_instance *mi;
           meth1 = new_method_instance("facet_vector_integral",inst_name1);
-          METH_INSTANCE(meth1)->expr[0] = 
+          mi = METH_INSTANCE(meth1);
+          mi->flags |= DEFAULT_INSTANCE;
+          mi->expr[0] = 
             (struct expnode *)mycalloc(SDIM,sizeof(struct expnode));
           for ( j = 0 ; j < SDIM ; j++ )
           { int old_datafile_flag;
@@ -2670,11 +2936,11 @@ body_id b_id;
             int old_tok = tok;
             sprintf(formula,"x%d/%d",j+1,SDIM);
             cmdptr = formula;
-            METH_INSTANCE(meth1)->expr[j] = METH_INSTANCE(meth1)->expr[0] + j;
+            mi->expr[j] = mi->expr[0] + j;
             old_datafile_flag = datafile_flag;
             datafile_flag = 1;
-            exparse(SDIM,METH_INSTANCE(meth1)->expr[j],USERCOPY);
-            sprintf(METH_INSTANCE(meth1)->expr[j]->name,"symmetric content component %d",j+1);
+            exparse(SDIM,mi->expr[j],USERCOPY); line_no--;
+            sprintf(mi->expr[j]->name,"symmetric content component %d",j+1);
             datafile_flag = old_datafile_flag;
             cmdptr = old_cmdptr;
             tok = old_tok;
@@ -2683,12 +2949,13 @@ body_id b_id;
         else
         {
           meth1 = new_method_instance("facet_volume",inst_name1);
+          METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE;
         }
-        METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE | BODY_INSTANCE;
+        METH_INSTANCE(meth1)->flags |= BODY_INSTANCE;
         METH_INSTANCE(meth1)->modulus = 1.0;
-        attach_method_num(gq,meth1);
-        set_body_volmeth(b_id,meth1);
+        attach_method_num(gq,meth1);    
      }
+     set_body_volmeth(b_id,meth1);
   }
   create_pressure_quant(b_id);
 } /* end convert_new_body_to_quantity() */
@@ -2701,9 +2968,9 @@ body_id b_id;
 *
 * return: method number
 */
-int create_body_constraint_content_method(b_id,connum)
-body_id b_id;
-int connum;
+int create_body_constraint_content_method(
+  body_id b_id,
+  int connum)
 { struct constraint *con = get_constraint(connum);
   int k;
   int meth1;
@@ -2723,6 +2990,7 @@ int connum;
     { meth1 = new_method_instance("edge_vector_integral",inst_name1);
     }
     METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE | BODY_INSTANCE;
+    METH_INSTANCE(meth1)->connum = connum;
     con = get_constraint(connum); /* may have moved */
     if ( web.representation == STRING )
        METH_INSTANCE(meth1)->expr[0]  = con->convect[0];
@@ -2732,7 +3000,7 @@ int connum;
     attach_method_num(get_body_volquant(b_id),meth1);
   }
   return meth1;
-} 
+} // end create_body_constraint_content_method()
 
 /****************************************************************************
 *
@@ -2742,9 +3010,9 @@ int connum;
 *
 * return: method number
 */
-int create_body_boundary_content_method(b_id,bdrynum)
-body_id b_id;
-int bdrynum;
+int create_body_boundary_content_method(
+  body_id b_id,
+  int bdrynum)
 { struct boundary *bdry = web.boundaries + bdrynum;
   int k;
   int meth1;
@@ -2769,7 +3037,7 @@ int bdrynum;
         attach_method_num(get_body_volquant(b_id),meth1);
       }
     return meth1;
-  }
+} // end create_body_boundary_content_method()
 
 /****************************************************************************
 *
@@ -2792,7 +3060,10 @@ void convert_bodies_to_quantities()
   if ( web.representation == STRING )
   {
     FOR_ALL_EDGES(e_id)
-    { if ( get_eattr(e_id) & NONCONTENT ) continue;
+    { if ( get_eattr(e_id) & NONCONTENT ) 
+        continue;
+      check_edge_vol_methods(e_id);
+#ifdef ZZZZ
       fe = get_edge_fe(e_id); 
       if ( !valid_id(fe)  ) continue;
       f_id = get_fe_facet(fe);
@@ -2808,6 +3079,7 @@ void convert_bodies_to_quantities()
         fe = get_next_facet(fe);
         f_id = get_fe_facet(fe);
       }
+#endif
     }
   }
   else  /* SOAPFILM */
@@ -2832,27 +3104,31 @@ void convert_bodies_to_quantities()
 
     if ( !(con->attr & CON_CONTENT) ) continue;
     FOR_ALL_BODIES(b_id)
-    { if ( con->attr & NAMED_THING )
+    { struct method_instance *mi;
+      if ( con->attr & NAMED_THING )
         sprintf(inst_name1,"body_%d_%s_meth",ordinal(b_id)+1,con->name);
       else
         sprintf(inst_name1,"body_%d_con_%d_meth",ordinal(b_id)+1,j);
       meth1 = find_method_instance(inst_name1);
       if ( meth1 < 0 )
-      { /* have to create */
+      { /* have to create */     
         if ( web.representation ==  STRING )
         { meth1 = new_method_instance("vertex_scalar_integral",inst_name1);
         }
         else
         { meth1 = new_method_instance("edge_vector_integral",inst_name1);
         }
-        METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE | BODY_INSTANCE;
-        con = get_constraint(j); /* may have moved */
-        if ( web.representation == STRING )
-           METH_INSTANCE(meth1)->expr[0]  = con->convect[0];
-        else
-          for ( k = 0 ; k < SDIM ; k++ ) 
-           METH_INSTANCE(meth1)->expr[k] = con->convect[k];
       }
+      mi = METH_INSTANCE(meth1);
+      mi->flags |= DEFAULT_INSTANCE | BODY_INSTANCE;
+      METH_INSTANCE(meth1)->connum = j;
+      con = get_constraint(j); /* may have moved */
+      if ( web.representation == STRING )
+         mi->expr[0]  = con->convect[0];
+      else
+         for ( k = 0 ; k < SDIM ; k++ ) 
+            mi->expr[k] = con->convect[k];
+      
     }
   }
   if ( web.representation == STRING )
@@ -2972,7 +3248,8 @@ void convert_bodies_to_quantities()
 
     if ( !(bdry->attr & CON_CONTENT) ) continue;
     FOR_ALL_BODIES(b_id)
-    { sprintf(inst_name1,"body_%d_bdry_%s_meth",ordinal(b_id)+1,bdry->name);
+    { struct method_instance *mi;
+      sprintf(inst_name1,"body_%d_bdry_%s_meth",ordinal(b_id)+1,bdry->name);
       meth1 = find_method_instance(inst_name1);
       if ( meth1 < 0 )
       { /* have to create */
@@ -2982,14 +3259,15 @@ void convert_bodies_to_quantities()
         else
         { meth1 = new_method_instance("edge_vector_integral",inst_name1);
         }
-        METH_INSTANCE(meth1)->flags |= DEFAULT_INSTANCE | BODY_INSTANCE;
-        if ( web.representation == STRING )
-           METH_INSTANCE(meth1)->expr[0] = bdry->convect[0];
-        else
-          for ( k = 0 ; k < SDIM ; k++ ) 
-           METH_INSTANCE(meth1)->expr[k] = bdry->convect[k];
-        attach_method_num(get_body_volquant(b_id),meth1);
       }
+      mi = METH_INSTANCE(meth1);
+      mi->flags |= DEFAULT_INSTANCE | BODY_INSTANCE;
+      if ( web.representation == STRING )
+         mi->expr[0] = bdry->convect[0];
+      else
+        for ( k = 0 ; k < SDIM ; k++ ) 
+           mi->expr[k] = bdry->convect[k];
+      attach_method_num(get_body_volquant(b_id),meth1);
     }
   }
   if ( web.representation == STRING )
@@ -3059,15 +3337,15 @@ void convert_bodies_to_quantities()
     FOR_ALL_BODIES(b_id)
       create_pressure_quant(b_id);
    */
-}
+} // end convert_bodies_to_quantities()
+
 /***************************************************************************
 *
 *  function: create_pressure_quant()
 *
 *  purpose: create a named quantity for the ambient pressure energy.
 */
-void create_pressure_quant(b_id)
-body_id b_id;
+void create_pressure_quant(body_id b_id)
 {
   if ( web.pressure_flag )
   { /* create formula and do compound quantity */
@@ -3097,7 +3375,7 @@ body_id b_id;
     sprintf(formula,"-ambient_pressure_value*(body[%d].target*(log(%s)-log(body[%d].target))-(%s-body[%d].target))",
        i,volsum,i,volsum,i);
     cmdptr = formula;
-    exparse(0,&(GEN_QUANT(q)->expr),USERCOPY);
+    exparse(0,&(GEN_QUANT(q)->expr),USERCOPY); line_no--;
     sprintf(msg,"%s formula",qname);
     strncpy(GEN_QUANT(q)->expr.name,msg,EXPNAMESIZE-1);
     cmdptr = NULL;
@@ -3112,7 +3390,7 @@ body_id b_id;
     temp_free(volsum);
     temp_free(formula);
   }  
-}
+} // end create_pressure_quant()
 
 /*****************************************************************************
 *
@@ -3122,7 +3400,7 @@ body_id b_id;
 *          be the first '{'.
 */
 void read_array_initializer(struct array *a)
-  { char *spot;
+{ char *spot;
     char *spots[MAXARRAYDIMS];
     int depth;
     int blocksize;
@@ -3140,10 +3418,12 @@ void read_array_initializer(struct array *a)
     { 
       if ( depth == a->dim )
       { int k;
-        for ( k = 0 ; ; k++ )
+        for ( k = 0 ; ;  )
         { if ( read_single_value(a->datatype,spot) )
           { if ( k < a->sizes[depth-1] )
-              spot += a->itemsize;
+            { spot += a->itemsize;
+              k++;
+            }
             else kb_error(2132,"Too many initializers.\n",DATAFILE_ERROR);
           }          
           else
@@ -3159,8 +3439,14 @@ void read_array_initializer(struct array *a)
         spots[depth] = spot;
         items[depth]++;
         if ( depth > 0 && items[depth] > a->sizes[depth-1] )
-           kb_error(2539,"Too many initializers.\n",DATAFILE_ERROR);
+        { kb_error(2539,"Too many initializers.\n",DATAFILE_ERROR);
+          return;
+        }
         depth++; 
+        if ( depth > a->dim )
+        { kb_error(7398,"Array initializer has too many dimensions.\n",DATAFILE_ERROR);
+          return;
+        }
         items[depth] = 0;
         if ( depth != a->dim ) tok = yylex();
       }
@@ -3182,7 +3468,7 @@ void read_array_initializer(struct array *a)
         kb_error(2540,errmsg,DATAFILE_ERROR);
       }
     }
-  } /* end read_array_initializer() */
+} /* end read_array_initializer() */
 
 /****************************************************************************
 *
@@ -3225,12 +3511,16 @@ void define_array(void)
   }
 
   tok = yylex(); /* dispose of IDENT_ */
-  if ( tok == DATATYPE_ )
+  if ( tok == DATATYPE_TOK )
   { datatype = yylval.datatype;
     itemsize = datatype_size[datatype];
   }
+  else if ( tok == STRING_TOK ) // since "string" also used for model type
+  { datatype = STRING_TYPE;
+    itemsize = datatype_size[datatype];
+  }
   else
-  { kb_error(2130,"Need an array data type.\n",DATAFILE_ERROR);
+  { kb_error(2130,"Need an array data type.  Assuming REAL.\n",WARNING);
     datatype = REAL_TYPE;
     itemsize = datatype_size[datatype];
   }
@@ -3274,10 +3564,10 @@ void define_array(void)
      a->datastart += a->itemsize - rem;
 
   /* Initialization */
-  if ( (tok == '=') || (tok == ASSIGN_) ) /* have initial values */
+  if ( (tok == '=') || (tok == ASSIGN_TOK) ) /* have initial values */
     read_array_initializer(a);
 
-}
+} // end define_array()
 
 
 /****************************************************************************
@@ -3328,4 +3618,4 @@ void check_forwards()
     }
   }
 
-}
+} // end check_forwards()

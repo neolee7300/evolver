@@ -13,7 +13,7 @@
 #include "include.h"
 #include "ytab.h"
 
-void do_line ARGS(( char *));
+void do_line( char *);
 
 /*******************************************************************
 *
@@ -100,7 +100,7 @@ void main_help()
   for ( i = 0 ; qhelp[i] ; i++ )
      outstring(qhelp[i]);
 #endif
-}
+} // end main_help()
 
 /*********************************************************************
 *
@@ -145,7 +145,8 @@ void graph_help()
 
   for ( i = 0 ; i < n ; i++ )
      { outstring(ghelp_strings[i]); outstring("\n"); }
-}
+
+} // end graph_help()
 
 /*********************************************************************************
 *
@@ -158,7 +159,7 @@ void graph_help()
 static char buff[30000];  /* text buffer */
 #define LINESIZE 75
 static int pre_flag;
-void printbuff ARGS((void));
+void printbuff (void);
 
 void printbuff()
 { char *spot,*s,*d;
@@ -215,7 +216,8 @@ void printbuff()
      }
   }
   buff[0] = 0;
-}
+
+} // end printbuff()
 
 /******************************************************************
 *
@@ -227,8 +229,7 @@ void printbuff()
 
 static int ul_level;
 
-void do_line(line)
-char *line;
+void do_line(char *line)
 { 
   char *spot,*c,*b,*bb;
 
@@ -281,7 +282,8 @@ char *line;
   }
   while ( *spot );
   if ( pre_flag ) strcat(buff,"\n");
-}
+
+}  // end do_line()
 
 /**************************************************************************
 *
@@ -291,16 +293,16 @@ char *line;
 *          hopefully superceded by new_text_help()
 *
 */
-#define RELMAX 30
+#define RELMAX 100
 static struct relinfo { char filename[20];
                       char name[40]; } info[RELMAX];
 
 static char name[100] = "name=\"";
 
-void old_html_help(keyword, /* string to look for */
-                  found)   /* flag, set if previously found, and want related */
-char *keyword;
-int found;
+void old_html_help(
+   char *keyword, /* string to look for */
+   int found   /* flag, set if previously found, and want related */
+   )
 { 
   int printflag = 0;
   int relcount = 0;
@@ -383,7 +385,7 @@ print_related:
        outstring(msg);
      }
   }
-}
+}  // end old_html_help()
 
 /***************************************************************************
 *
@@ -397,15 +399,27 @@ print_related:
 
 char *text_help_file = "evhelp.txt";
 
-int new_text_help(keyword, /* string to look for */
-                  found)   /* flag, set if previously found, and want related */
-char *keyword;
-int found;
+int new_text_help(
+   char *keyword, /* string to look for */
+   int found   /* flag, set if previously found, and want related */
+)
 { FILE *fd;
-  int keylen = strlen(keyword);
+  int keylen = (int)strlen(keyword);
   char line[1000];
+  char line_lowercase[1000];  // for case-insensitive matching
+  char keyword_lowercase[100];
   int i=0,n;
   int relcount = 0;
+
+  if ( keylen == 1 )
+  { keyword_lowercase[0] = keyword[0];
+  }
+  else
+  {
+    for ( i = 0 ; i < keylen ; i++ )
+      keyword_lowercase[i] = tolower(keyword[i]);
+  }
+  keyword_lowercase[keylen] = 0;
 
   /* now check text doc file */ 
 
@@ -418,23 +432,29 @@ int found;
 
   /* Find keyword in  <--- keyword ---> line */
   while ( fgets(line,sizeof(line)-1,fd)  )
-  { char *keyspot;
+  { char *keyspot,*c,*cc;
     if ( strncmp(line,"<---",4) != 0 ) continue;
 #ifndef MPI_EVOLVER
     if ( strstr(line,"MPI Evolver") )
       continue;
 #endif
-    keyspot = strstr(line,keyword);
+
+
+    for ( c = line, cc = line_lowercase ; *c ; c++,cc++ ) 
+      *cc = (keylen == 1) ? *c : tolower(*c);
+    *cc = 0;
+
+    keyspot = strstr(line_lowercase,keyword_lowercase);
     if ( keyspot == NULL ) continue;
 
-    if ( (keyspot[-2] == '-') && (keyspot[keylen+2] == '-') )
+    if ( (keyspot[-2] == '-') && (keyspot[keylen+1] == '-') )
     { int lines_done = 0;
       int blanklines = 0;
       /* found exact match */
       found = 1;   
 
       /* print nice title bar */
-      outstring("<");
+      outstring("\n<");
       for ( i = 1 ; i < (70 - keylen)/2 ; i++ )
         outstring("-");
       outstring(" ");
@@ -467,11 +487,16 @@ int found;
 
       /* next title line falls through to relevance recording */
     }
-    if ( strstr(line,keyword) && (relcount < RELMAX) )
+    
+    for ( c = line, cc = line_lowercase ; *c ; c++,cc++ ) 
+      *cc = tolower(*c);
+    *cc = 0;
+
+    if ( strstr(line_lowercase,keyword_lowercase) && (relcount < RELMAX) )
     { char *spot = strchr(line,' '); 
       int spaceflag = 0;
       if ( spot )
-         for ( spot++, i = 0 ; !((spot[0] == ' ') && (spot[1] == '-')) ; spot++, i++ )
+         for ( spot++, i = 0 ; *spot && !(((spot[0] == ' ')||(spot[0] == '-')) && (spot[1] == '-')) ; spot++, i++ )
          { info[relcount].name[i] = *spot;
            if ( *spot == ' ' ) 
              spaceflag = 1;
@@ -510,7 +535,7 @@ int found;
   }
   fclose(fd);
   return 1;
-}
+} // end new_text_help()
 
 /***************************************************************************
 *
@@ -519,12 +544,12 @@ int found;
 * purpose: Print help for keyword.
 */
 
-void keyword_help(keyword)
-char *keyword;
+void keyword_help(char *keyword)
 { 
   int type;
   int found = 0;
   int entry;
+  int i;
  
 #ifndef NOPIPE
   if ( outfd == stdout )
@@ -554,12 +579,16 @@ char *keyword;
 
   /* search parameter names */
   entry = lookup_global_hash(keyword,0,0,HASH_LOOK);
-  if ( entry != -1 )
+  if ( entry )
     switch   ( entry & NAMETYPEMASK )
     { 
       case VARIABLENAME:
       { struct global *gp = globals((entry & INDEXMASK)|EPHGLOBAL);
-        if ( gp->flags & (SUBROUTINE|PROCEDURE_NAME) )
+        if ( gp->flags & SUBROUTINE )
+        {  sprintf(msg,"\n%s: user-defined subroutine.\n\n   ",keyword);
+           outstring(msg);
+        } 
+        else if ( gp->flags & PROCEDURE_NAME )
         {  sprintf(msg,"\n%s: user-defined procedure.  Prototype:\n\n   ",keyword);
            outstring(msg);
            list_procedure_proto(gp);
@@ -671,30 +700,37 @@ char *keyword;
           found = 1;
           goto help_exit;
         }
-     break;
+        break;
 
       case QUANTITYNAME:
       { struct gen_quant *g = GEN_QUANT(entry & INDEXMASK);
         sprintf(msg,"\n%s: user-defined named quantity.\n\n",g->name);
         outstring(msg);
         found = 1;
-        goto help_exit;} 
-        break;
+        goto help_exit;
+      } 
+      break;
 
       case METHODNAME:
       { struct method_instance *mi = METH_INSTANCE(entry & INDEXMASK);
-        sprintf(msg,"\n%s: user-defined named method, belongs to quantity %s.\n\n",   
-        keyword, GEN_QUANT(mi->quant)->name);
-        outstring(msg);
+        int j;
+        for ( j = 0 ; j < MMAXQUANTS ; j++ )
+        { if ( mi->quants[j] < 0 )
+            continue;
+          sprintf(msg,"\n%s: user-defined named method, belongs to quantity %s.\n\n",   
+            keyword, GEN_QUANT(mi->quants[0])->name);
+          outstring(msg);
+        }
         found = 1;
-        goto help_exit;} 
-        break;
+        goto help_exit;
+      } 
+      break;
     }
   
     /* search extra attributes */
   for ( type = 0 ; type <= BODY ; type++ )
   { struct extra *ex;
-    int i,k;
+    int k;
 
     for ( i = 0, ex = EXTRAS(type) ;
              i < web.skel[type].extra_count ; i++ , ex++ )
@@ -712,7 +748,18 @@ char *keyword;
       } 
   }
    
+  /* search built-in datatypes */
+  for ( i = 0 ; i < sizeof(datatype_name)/sizeof(char*) ; i++ )
+    if ( stricmp(keyword,datatype_name[i]) == 0 )
+    { sprintf(msg,"\n%s: reserved type name.\n\n",keyword);
+      outstring(msg);
+      found = 1;
+      goto help_exit;
+    }
+ 
+
 help_exit:
+
 
 /* find_related: */
 
@@ -739,8 +786,9 @@ help_exit:
 *
 *  Nonfunctional yet.
 */
-void error_help(keyword)
-char *keyword;  /* with error number as string */
+void error_help(
+  char *keyword  /* with error number as string */
+)
 { 
   outstring("Help by error number not available.\n");
 #ifdef HAVEHLP
@@ -770,4 +818,4 @@ char *keyword;  /* with error number as string */
   
   fclose(fd);
 #endif
-}
+} // end error_help()

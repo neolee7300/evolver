@@ -27,17 +27,16 @@ struct fstruct { vertex_id v[MAXCOORD];  /* face verts */
                  facet_id  f_id[2];        /* facets involved */
                } *facelist;
 
-int void_test2 ARGS((struct fstruct *));
-int scomp ARGS((vertex_id *,vertex_id *));
+int void_test2(struct fstruct *);
+int scomp(vertex_id *,vertex_id *);
 
-int scomp(a,b)
-vertex_id *a,*b;
+int scomp(vertex_id *a,vertex_id *b)
 { int i;
   for ( i = 0 ; i < web.dimension ; i++,a++,b++ )
      if ( *a < *b ) return -1;
      else if ( *a > *b ) return 1;
   return 0; /* equal */
-}
+} // end scomp()
 
 int simplex_equiangulate()
 {
@@ -216,7 +215,7 @@ int simplex_equiangulate()
       }
   if ( flipcount > 0 ) top_timestamp = ++global_timestamp;
   return flipcount;
-}
+} // end simplex_equiangulate()
 
 
 /*******************************************************************
@@ -230,8 +229,7 @@ int simplex_equiangulate()
 *             2+j if yes and connector outside on side j
 */
 
-int void_test2(fp)
-struct fstruct *fp;
+int void_test2(struct fstruct *fp)
 {
     REAL *x[MAXCOORD+1];
     REAL ss[MAXCOORD];  /* squares of sides */
@@ -282,8 +280,9 @@ struct fstruct *fp;
       for ( j = 0 ; j < web.dimension ; j++ )
          if ( q[j] < 0.0 ) retval = 2+j;
     }
- return retval;
-}
+    return retval;
+
+} // end void_test2()
 
 /*****************************************************************************
 *
@@ -305,12 +304,19 @@ void simplex_delaunay_test()
     }
   }
 
-}
+} // end simplex_delaunay_test()
 
+/*****************************************************************************
+*
+* function: void_test()
+*
+* purpose: used by simplex_delaunay_test()
+*/
 
-vertex_id void_test(v,dim)
-vertex_id *v;
-int dim;
+vertex_id void_test(
+  vertex_id *v,
+  int dim
+)
 {
     REAL *x[MAXCOORD+1];
     REAL ss[MAXCOORD];  /* squares of sides */
@@ -319,8 +325,8 @@ int dim;
     REAL center[MAXCOORD];
     REAL lam[MAXCOORD];
     vertex_id v_id,bad_v = NULLID;
-  REAL **mat = dmatrix(0,web.dimension-1,0,web.dimension-1);
-  REAL **side = dmatrix(0,SDIM-1,0,SDIM-1);
+    REAL **mat = dmatrix(0,web.dimension-1,0,web.dimension-1);
+    REAL **side = dmatrix(0,SDIM-1,0,SDIM-1);
 
     /* first, calculate center of void */
     x[0] = get_coord(v[0]);
@@ -362,8 +368,8 @@ erroutstring(msg);
          bad_v = v_id;
          break;
       }
- free_matrix(side);
- free_matrix(mat);
- return bad_v;
-}
+  free_matrix(side);
+  free_matrix(mat);
+  return bad_v;
+} // end void_test()
 

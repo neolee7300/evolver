@@ -23,9 +23,9 @@ long sqcurve_init_timestamp; /* when last initialized */
 long sqcurve_grad_init_timestamp; /* when last initialized */
 
 /* local prototypes */
-void sqcurve_energy_precalc ARGS((vertex_id *,REAL (*)[MAXCOORD],WRAPTYPE*));
-void sqcurve_grad_precalc ARGS((vertex_id *,edge_id *,REAL (*)[MAXCOORD],
-    WRAPTYPE*));
+void sqcurve_energy_precalc (vertex_id *,REAL (*)[MAXCOORD],WRAPTYPE*);
+void sqcurve_grad_precalc (vertex_id *,edge_id *,REAL (*)[MAXCOORD],
+    WRAPTYPE*);
 
 /***********************************************************************
 *
@@ -34,9 +34,10 @@ void sqcurve_grad_precalc ARGS((vertex_id *,edge_id *,REAL (*)[MAXCOORD],
 *  Purpose: Initializes data structures for square curvature.
 */
 
-void sqcurve_method_init(mode,mi)
-int mode; /* METHOD_VALUE or METHOD_GRADIENT */
-struct method_instance *mi;
+void sqcurve_method_init(
+  int mode, /* METHOD_VALUE or METHOD_GRADIENT */
+  struct method_instance *mi
+)
 { int k,n;
   facet_id f_id;
   struct gen_quant_method *gm;
@@ -191,17 +192,17 @@ struct method_instance *mi;
       if ( (get_vattr(vv_id) & CONSTRAINT) && !(sqcurve_ignore_constr) )
       { conmap_t * conmap = get_v_constraint_map(vv_id);
         int i,j,oncount = 0;
-         struct constraint *con[MAXCONPER];
+         struct constraint *con[MAXCONHIT];
          REAL perp[MAXCOORD];
          REAL dummy;
 
          for ( j = 1 ; j <= (int)conmap[0] ; j++ )
-          if ( conmap[j] & CON_HIT_BIT )
-                con[oncount++] = get_constraint(conmap[j]);
+          if ( (conmap[j] & CON_HIT_BIT) && (oncount < web.sdim) )
+             con[oncount++] = get_constraint(conmap[j]);
 
          /* stuff for gradient of projection operator */
          for ( j = 0 ; j < oncount ; j++ )
-             eval_second(con[j]->formula,get_coord(vv_id),SDIM,&dummy,
+           eval_second(con[j]->formula,get_coord(vv_id),SDIM,&dummy,
                   grad[j],seconds[j],vv_id);
 
          /* construct matrix A */
@@ -248,7 +249,7 @@ struct method_instance *mi;
      }
      sqcurve_grad_init_timestamp = global_timestamp; 
   }
-}
+} // end sqcurve_method_init()
 
 /********************************************************************
 *
@@ -258,10 +259,11 @@ struct method_instance *mi;
 *
 */
 
-void sqcurve_energy_precalc(v_id,side,wraps)
-vertex_id *v_id;  /* vertex list for facet */
-REAL (*side)[MAXCOORD];  /* side vectors */
-WRAPTYPE *wraps; /* in case of symmetry group */
+void sqcurve_energy_precalc(
+  vertex_id *v_id,  /* vertex list for facet */
+  REAL (*side)[MAXCOORD],  /* side vectors */
+  WRAPTYPE *wraps /* in case of symmetry group */
+)
 { 
   REAL t1t1,t1t2,t2t2;
   REAL det;
@@ -330,8 +332,8 @@ WRAPTYPE *wraps; /* in case of symmetry group */
           vc[i]->normal[j] += normal[j];
     }
   }
-}
-
+} // end sqcurve_energy_precalc()
+ 
 
 /************************************************************************
 *
@@ -341,11 +343,12 @@ WRAPTYPE *wraps; /* in case of symmetry group */
 *
 */
 
-void sqcurve_grad_precalc(v_id,e_id,side,wraps)
-vertex_id *v_id; /* vertex list of facet */
-edge_id *e_id;     /* edge list */
-REAL (*side)[MAXCOORD];  /* side vectors */
-WRAPTYPE *wraps;
+void sqcurve_grad_precalc(
+  vertex_id *v_id, /* vertex list of facet */
+  edge_id *e_id,     /* edge list */
+  REAL (*side)[MAXCOORD],  /* side vectors */
+  WRAPTYPE *wraps
+)
 { 
   REAL det;
   struct v_curve_t *vc[FACET_VERTS];
@@ -459,7 +462,7 @@ WRAPTYPE *wraps;
          for ( j = 0 ; j < SDIM ; j++ )
             vc[i]->normal[j] += normal[j];
     }
-}
+} // end sqcurve_grad_precalc()
 
 /***********************************************************************
 *
@@ -472,7 +475,7 @@ void sqcurve_method_cleanup()
 {
   if ( v_curve ) { temp_free((char*)v_curve); v_curve = NULL; }
   if ( e_curve ) { temp_free((char*)e_curve); e_curve = NULL; }
-}
+} // end sqcurve_method_cleanup()
 
 /*************************************************************************
 *
@@ -483,8 +486,7 @@ void sqcurve_method_cleanup()
 *
 */
 
-REAL sqcurve_method_value(v_info)
-struct qinfo *v_info;
+REAL sqcurve_method_value(struct qinfo *v_info)
 {
   vertex_id v_id = v_info->v[0];
   REAL h,venergy;
@@ -493,23 +495,23 @@ struct qinfo *v_info;
   struct v_curve_t *vc;
   REAL denom,f;
   REAL area; /* curvature normalization area */
+  struct method_instance *mi = METH_INSTANCE(v_info->method);
 
   /* kludge check here, needed for info_only individual attributes */
   if ( sqcurve_init_timestamp < global_timestamp ) 
-    sqcurve_method_init(METHOD_VALUE,METH_INSTANCE(v_info->method));
+    sqcurve_method_init(METHOD_VALUE,mi);
 
   if ( v_curve == NULL )
     sqcurve_method_init(METHOD_VALUE,NULL);
 
   vc = v_curve + ordv;
-  if ((attr & BOUNDARY) && 
-         !(METH_INSTANCE(v_info->method)->flags & IGNORE_CONSTR))
+  if ((attr & BOUNDARY) && !(mi->flags & IGNORE_CONSTR))
      return 0.0;
-  if ((attr & FIXED) && !(METH_INSTANCE(v_info->method)->flags & IGNORE_FIXED))
+  if ((attr & FIXED) && !(mi->flags & IGNORE_FIXED))
      return 0.0;
   if ( vc->area == 0.0 ) return 0.0;
 
-  if ( METH_INSTANCE(v_info->method)->gen_method != sq_mean_curvature_mi )
+  if ( mi->gen_method != sq_mean_curvature_mi )
   { /* need to check facet orientation consistency */
     edge_id eid,starteid;
     eid = starteid = get_vertex_edge(v_id);
@@ -533,16 +535,15 @@ struct qinfo *v_info;
   if ( !boundary_curvature_flag )
   { vc->a = vc->area; area = vc->area/3; } 
   else { area = vc->area/3; }
-  if ( (attr & CONSTRAINT) && 
-       !(METH_INSTANCE(v_info->method)->flags & IGNORE_CONSTR) )
+  if ( (attr & CONSTRAINT) && !(mi->flags & IGNORE_CONSTR) )
   { conmap_t * conmap = get_v_constraint_map(v_id);
     int j,oncount = 0;
-    struct constraint *con[MAXCONPER];
+    struct constraint *con[MAXCONHIT];
     REAL perp[MAXCOORD];
 
     for ( j = 1 ; j <= (int)conmap[0] ; j++ )
-         if ( conmap[j] & CON_HIT_BIT )
-               con[oncount++] = get_constraint(conmap[j]);
+      if ( (conmap[j] & CON_HIT_BIT) && (oncount < web.sdim) )
+         con[oncount++] = get_constraint(conmap[j]);
 
     constr_proj(TANGPROJ,oncount,con,get_coord(v_id),
                         vc->force,perp,NULL,NO_DETECT,v_id);
@@ -554,8 +555,7 @@ struct qinfo *v_info;
     for ( j = 0 ; j < SDIM ; j++ )
                   vc->normal[j] -= perp[j];
   }
-  if ( METH_INSTANCE(v_info->method)->gen_method == 
-                  normal_sq_mean_curvature_mi )
+  if ( mi->gen_method == normal_sq_mean_curvature_mi )
   { f = SDIM_dot(vc->force,vc->force);
     denom = SDIM_dot(vc->force,vc->normal);
     if ( denom == 0.0 )  h = 0.0;
@@ -567,7 +567,7 @@ struct qinfo *v_info;
     venergy = h*h;
   }
   else 
-   if ( METH_INSTANCE(v_info->method)->gen_method==mix_sq_mean_curvature_mi )
+   if ( mi->gen_method == mix_sq_mean_curvature_mi )
    { /* normal_sq_mean part */
      f = SDIM_dot(vc->force,vc->force);
      denom = SDIM_dot(vc->force,vc->normal);
@@ -600,8 +600,7 @@ struct qinfo *v_info;
      }
      venergy = term*term;
    }
-   else if ( METH_INSTANCE(v_info->method)->gen_method 
-                 == eff_area_sq_mean_curvature_mi )
+   else if ( mi->gen_method == eff_area_sq_mean_curvature_mi )
    { f = SDIM_dot(vc->force,vc->force);
      denom = SDIM_dot(vc->normal,vc->normal);
      if ( denom == 0.0 ) venergy = 0.0;
@@ -612,7 +611,7 @@ struct qinfo *v_info;
      venergy = SDIM_dot(vc->force,vc->force)/area/area/4;
 
    return venergy*vc->a/3;
-}
+} // end sqcurve_method_value()
 
 /*************************************************************************
 *
@@ -622,8 +621,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL sqcurve_method_grad(v_info)                
-struct qinfo *v_info;
+REAL sqcurve_method_grad(struct qinfo *v_info)
 {
   vertex_id v_id = v_info->v[0];
   edge_id e_id,ee_id,eee_id;
@@ -641,6 +639,7 @@ struct qinfo *v_info;
   REAL  ad[MAXCOORD];
   REAL venergy = 0.0;
   REAL *grad = v_info->grad[0]; 
+  struct method_instance *mi = METH_INSTANCE(v_info->method);
 
   if ( div_normal_curvature_flag ) 
       kb_error(1761,"Force not implemented yet for div_normal_curvature.\n",
@@ -648,9 +647,9 @@ struct qinfo *v_info;
 
   for ( i = 0 ; i < SDIM ; i++ ) grad[i] = 0.0;
 
-  if ((attr & BOUNDARY) && !(METH_INSTANCE(v_info->method)->flags & IGNORE_CONSTR))
+  if ((attr & BOUNDARY) && !(mi->flags & IGNORE_CONSTR))
          return 0.0;
-  if ((attr & FIXED) && !(METH_INSTANCE(v_info->method)->flags & IGNORE_FIXED))
+  if ((attr & FIXED) && !(mi->flags & IGNORE_FIXED))
          return 0.0;
   if ( vc->area == 0.0 ) return 0.0;
   if ( !boundary_curvature_flag ) {  area = a = vc->a/3; } 
@@ -661,7 +660,7 @@ struct qinfo *v_info;
     else ad[i] = vc->force[i]/3;
 
   /* vertex self-second derivatives */
-  if ( METH_INSTANCE(v_info->method)->gen_method==normal_sq_mean_curvature_mi )
+  if ( mi->gen_method==normal_sq_mean_curvature_mi )
   { e = SDIM_dot(vc->force,vc->force);
     denom = SDIM_dot(vc->force,vc->normal);
     if ( denom != 0.0 )
@@ -685,7 +684,7 @@ struct qinfo *v_info;
        for ( i = 0 ; i < SDIM ; i++ ) f[i] =0.0;
   }
   else
-  if ( METH_INSTANCE(v_info->method)->gen_method==mix_sq_mean_curvature_mi )
+  if ( mi->gen_method==mix_sq_mean_curvature_mi )
   {
     /* normal_sq_mean part */
     e = SDIM_dot(vc->force,vc->force);
@@ -731,7 +730,7 @@ struct qinfo *v_info;
     }
     venergy = h*h;
   }
-  else if ( METH_INSTANCE(v_info->method)->gen_method == eff_area_sq_mean_curvature_mi )
+  else if ( mi->gen_method == eff_area_sq_mean_curvature_mi )
   { e = SDIM_dot(vc->force,vc->force);
     denom = SDIM_dot(vc->normal,vc->normal);
     if ( denom != 0.0 )
@@ -753,8 +752,7 @@ struct qinfo *v_info;
     venergy = e*3/vc->area/4;
   }
 
-  if ( h0_flag  && 
-    !(METH_INSTANCE(v_info->method)->gen_method==normal_sq_mean_curvature_mi) )
+  if ( h0_flag  && !(mi->gen_method==normal_sq_mean_curvature_mi) )
     {
       REAL net,sim;
       REAL fd[MAXCOORD],simd[MAXCOORD];
@@ -810,7 +808,7 @@ struct qinfo *v_info;
     vc2 = v_curve + loc_ordinal(headv);
     
     if ( (vc1->area == 0.0) || (vc2->area == 0.0) ) continue;
-    if ( METH_INSTANCE(v_info->method)->gen_method == normal_sq_mean_curvature_mi )
+    if ( mi->gen_method == normal_sq_mean_curvature_mi )
      { facetedge_id fe_a;
         facetedge_id fe_b;
         REAL sa[MAXCOORD],sb[MAXCOORD];
@@ -874,8 +872,7 @@ struct qinfo *v_info;
           else  for ( i = 0 ; i < SDIM ; i++ ) cross2[i] += s[i];
         }
      }
-    else if ( METH_INSTANCE(v_info->method)->gen_method 
-                  == eff_area_sq_mean_curvature_mi )
+    else if ( mi->gen_method == eff_area_sq_mean_curvature_mi )
      { 
         facetedge_id fe_a;
         facetedge_id fe_b;
@@ -923,22 +920,18 @@ struct qinfo *v_info;
     }
   
     if ( inverted(eee_id) )
-    { int tattr = get_vattr(tailv);
-      if ( (!(tattr & FIXED) || 
-                    (METH_INSTANCE(v_info->method)->flags & IGNORE_FIXED))
-           && (!(tattr & BOUNDARY) || 
-                    (METH_INSTANCE(v_info->method)->flags & IGNORE_CONSTR))
+    { ATTR tattr = get_vattr(tailv);
+      if ( (!(tattr & FIXED) || (mi->flags & IGNORE_FIXED))
+           && (!(tattr & BOUNDARY) || (mi->flags & IGNORE_CONSTR))
       )
       { /* force on head due to curvature at tail */
-        if ( METH_INSTANCE(v_info->method)->gen_method 
-                      == normal_sq_mean_curvature_mi )
+        if ( mi->gen_method == normal_sq_mean_curvature_mi )
           for ( i = 0 ; i < SDIM ; i++ )
           { f[i] = fudge11*SDIM_dot(vc1->force,ec->deriv2[i])
                  - fudge12*(cross1[i]+SDIM_dot(vc1->normal,ec->deriv2[i]))
                  + fudge13*ec->deriv[1][i] ;
           }
-        else if (METH_INSTANCE(v_info->method)->gen_method
-          ==eff_area_sq_mean_curvature_mi )
+        else if ( mi->gen_method == eff_area_sq_mean_curvature_mi )
             for ( i = 0 ; i < SDIM ; i++ )
             { if ( denom1 != 0.0 )
                   f[i] = 6*SDIM_dot(vc1->force,ec->deriv2[i])/denom1*vc1->area
@@ -950,8 +943,7 @@ struct qinfo *v_info;
           for ( i = 0 ; i < SDIM ; i++ )
             f[i] = (- 4/3.0*e1*ec->deriv[1][i]
             + 2*SDIM_dot(vc1->force,ec->deriv2[i]))/vc1->area*3.0/4;
-         if ( h0_flag && !(METH_INSTANCE(v_info->method)->gen_method 
-                == normal_sq_mean_curvature_mi) )
+         if ( h0_flag && !(mi->gen_method == normal_sq_mean_curvature_mi) )
           { REAL fd[MAXCOORD],net;
             fe = get_edge_fe(e_id);
             get_edge_side(get_fe_edge(get_next_edge(fe)),wa);
@@ -984,20 +976,18 @@ struct qinfo *v_info;
          }
       }
       else /* not inverted */
-      if ( (!(get_vattr(headv) & FIXED) || 
-                    (METH_INSTANCE(v_info->method)->flags & IGNORE_FIXED))
-     && (!(get_vattr(headv) & BOUNDARY) || 
-                    (METH_INSTANCE(v_info->method)->flags & IGNORE_CONSTR))
+      if ( (!(get_vattr(headv) & FIXED) ||(mi->flags & IGNORE_FIXED))
+     && (!(get_vattr(headv) & BOUNDARY) ||(mi->flags & IGNORE_CONSTR))
       )
       { /* force on tail due to curvature at head */
-         if ( METH_INSTANCE(v_info->method)->gen_method == normal_sq_mean_curvature_mi )
+         if ( mi->gen_method == normal_sq_mean_curvature_mi )
           for ( i = 0 ; i < SDIM ; i++ )
           { f[i] = fudge23*ec->deriv[0][i] - fudge22*cross2[i];
             for ( j = 0 ; j < SDIM ; j++ )
               f[i] += fudge21*vc2->force[j]*ec->deriv2[j][i]
                               - fudge22*vc2->normal[j]*ec->deriv2[j][i];
          }
-         else if ( METH_INSTANCE(v_info->method)->gen_method == eff_area_sq_mean_curvature_mi )
+         else if ( mi->gen_method == eff_area_sq_mean_curvature_mi )
           for ( i = 0 ; i < SDIM ; i++ )
           { if ( denom2 != 0.0 )
             { f[i] = 3*e2/denom2*ec->deriv[0][i] 
@@ -1014,8 +1004,7 @@ struct qinfo *v_info;
               f[i] += 2*vc2->force[j]*ec->deriv2[j][i]/vc2->area*3.0/4;
           }
   
-         if ( h0_flag &&
-            !(METH_INSTANCE(v_info->method)->gen_method == normal_sq_mean_curvature_mi) )
+         if ( h0_flag && !(mi->gen_method == normal_sq_mean_curvature_mi) )
           { REAL fd[MAXCOORD],net;
             fe = get_edge_fe(e_id);
             get_edge_side(get_fe_edge(get_next_edge(fe)),wa);
@@ -1064,33 +1053,19 @@ struct qinfo *v_info;
 *
 *  function: sqcurve_string_init()
 *
-*  purpose:  
+*  purpose: Initialization for sqcurve_string evaluation.
 */
-void sqcurve_string_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void sqcurve_string_init(
+  int mode,
+  struct method_instance *mi
+ )
 { 
   if ( web.modeltype != LINEAR )
     kb_error(2864,"Method sqcurve_string only for LINEAR model.\n",
        RECOVERABLE);
 
   sqcurve_energy_string_init(); /* sets up curve_power */
-}
-
-void sqcurve_string_marked_init(mode,mi)
-int mode;
-struct method_instance *mi;
-{ int eltype;
-
-  if ( web.modeltype != LINEAR )
-    kb_error(2865,"Method sqcurve_string only for LINEAR model.\n",
-       RECOVERABLE);
-
-  marked_edge_attr = find_extra(MARKED_EDGE_ATTR_NAME,&eltype);
-  if ( eltype != EDGE )
-      kb_error(2184,"sqcurve_string_mark should be an edge attribute.\n",
-        RECOVERABLE);
-}
+} // end sqcurve_string_init()
 
 /************************************************************************
 *
@@ -1101,19 +1076,19 @@ struct method_instance *mi;
 *
 */
 
-REAL sqcurve_string_value(v_info)
-struct qinfo *v_info;
+REAL sqcurve_string_value(struct qinfo *v_info)
 {
   REAL s1,s2,s1s2;  /* edge lengths */
   REAL *side1 = v_info->sides[0][0],*side2 = v_info->sides[0][1];
   REAL energy;
   REAL hh,a1,a2;
   REAL power;
+  struct method_instance *mi = METH_INSTANCE(v_info->method);
 
   if ( v_info->vcount < 3 ) return 0.;
 
-  if ( METH_INSTANCE(v_info->method)->flags & METH_PARAMETER_1 )
-     power = METH_INSTANCE(v_info->method)->parameter_1;
+  if ( mi->flags & METH_PARAMETER_1 )
+     power = mi->parameter_1;
   else power = curve_power;
   s1 = sqrt(SDIM_dot(side1,side1));
   s2 = sqrt(SDIM_dot(side2,side2));
@@ -1127,7 +1102,7 @@ struct qinfo *v_info;
   energy = a2*pow(hh,power/2);
 
   return energy;
-}
+} // end sqcurve_string_value()
 
 /************************************************************************
 *
@@ -1138,8 +1113,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL sqcurve_string_grad(v_info)
-struct qinfo *v_info;
+REAL sqcurve_string_grad(struct qinfo *v_info)
 {
   REAL s1,s2,s1s2;  /* edge lengths */
   REAL *side1 = v_info->sides[0][0],*side2 = v_info->sides[0][1];
@@ -1150,11 +1124,12 @@ struct qinfo *v_info;
   REAL *side[2];
   REAL term; /* common factor */
   REAL power;
+  struct method_instance *mi = METH_INSTANCE(v_info->method);
 
   if ( v_info->vcount < 3 ) return 0.0;
 
-  if ( METH_INSTANCE(v_info->method)->flags & METH_PARAMETER_1 )
-     power = METH_INSTANCE(v_info->method)->parameter_1;
+  if ( mi->flags & METH_PARAMETER_1 )
+     power = mi->parameter_1;
   else power = curve_power;
 
   s1 = sqrt(SDIM_dot(side1,side1));
@@ -1193,7 +1168,7 @@ struct qinfo *v_info;
      }
   return energy;
 
-}
+} // end sqcurve_string_grad()
 
 
 /************************************************************************
@@ -1202,11 +1177,9 @@ struct qinfo *v_info;
 *
 *  purpose:  Calculate square curvature hessian for string model
 *                Works locally vertex by vertex. 
-*
 */
 
-REAL sqcurve_string_hess(v_info)
-struct qinfo *v_info;
+REAL sqcurve_string_hess(struct qinfo *v_info)
 {
   REAL s1,s2,s1s2;  /* edge lengths */
   REAL *side1 = v_info->sides[0][0],*side2 = v_info->sides[0][1];
@@ -1219,15 +1192,16 @@ struct qinfo *v_info;
   REAL ****h = v_info->hess;
   REAL term; /* common factor */
   REAL power;
+  struct method_instance *mi = METH_INSTANCE(v_info->method);
 
   if ( v_info->vcount < 3 ) return 0.0;
 
-  if ( METH_INSTANCE(v_info->method)->flags & METH_PARAMETER_1 )
-     power = METH_INSTANCE(v_info->method)->parameter_1;
+  if ( mi->flags & METH_PARAMETER_1 )
+     power = mi->parameter_1;
   else power = curve_power;
 
   if ( power != 2 )
-     kb_error(1762,"Hessian not implemented for curvature_power != 2.\n",
+     kb_error(1763,"Hessian not implemented for curvature_power != 2.\n",
         RECOVERABLE);
 
   s1 = sqrt(SDIM_dot(side1,side1));
@@ -1300,7 +1274,293 @@ struct qinfo *v_info;
          h[0][0][i][ii] += f;
       }
   return energy;
-}
+} // end sqcurve_string_hess()
+
+/************************************************************************
+*
+*  function: sqcurve_string_marked_init()
+*
+*  purpose: Initialization for sqcurve_string_marked evaluation.
+*           If parameter_2 present in method, mark is tested for
+*           bit present, else just nonzero mark.
+*/
+void sqcurve_string_marked_init(
+  int mode,
+  struct method_instance *mi
+)
+{ int eltype;
+
+  if ( web.modeltype != LINEAR )
+    kb_error(2662,"Method sqcurve_string_mark only for LINEAR model.\n",
+       RECOVERABLE);
+
+  sqcurve_energy_string_init(); /* sets up curve_power */
+
+  marked_edge_attr = find_extra(MARKED_EDGE_ATTR_NAME,&eltype);
+
+  if ( eltype != EDGE )
+      kb_error(2661,"sqcurve_string_mark should be an edge attribute.\n",
+        RECOVERABLE);
+} // end sqcurve_string_marked_init()
+
+/************************************************************************
+*
+*  function: sqcurve_string_marked_value()
+*
+*  purpose:  Calculate square curvature energy for string model
+*            Works locally vertex by vertex. Assumes two edges per vertex.
+*
+*/
+
+REAL sqcurve_string_marked_value(struct qinfo *v_info)
+{
+  REAL s1,s2,s1s2;  /* edge lengths */
+  REAL *side1 = NULL,*side2 = NULL;
+  REAL energy;
+  REAL hh,a1,a2;
+  REAL power;
+  struct method_instance *mi = METH_INSTANCE(v_info->method);
+  int k,k1=0,k2=0;
+  int mark = (int)(mi->parameter_2);
+  
+  // find the marked edges
+  for ( k = 0 ; k < v_info->vcount ; k++ )
+  { if ( mark ? (v_info->marked[k] & mark) : v_info->marked[k] )
+    { if ( side1 == NULL ) 
+      { side1 = v_info->sides[0][k]; k1 = k; }
+	  else if ( side2 == NULL )
+	  { side2 = v_info->sides[0][k]; k2 = k; }
+	  else 
+	  { 
+	    sprintf(errmsg,"More than 2 marked edges at vertex %s\n",ELNAME(v_info->id));
+		kb_error(5798,errmsg,RECOVERABLE);
+	  }
+    }
+  }
+
+  if ( k2 == 0 ) return 0.0;
+
+  if ( mi->flags & METH_PARAMETER_1 )
+     power = mi->parameter_1;
+  else power = curve_power;
+  s1 = sqrt(SDIM_dot(side1,side1));
+  s2 = sqrt(SDIM_dot(side2,side2));
+  s1s2 = SDIM_dot(side1,side2);
+
+  a1 = 1 + s1s2/s1/s2;
+  a2 = (s1 + s2)/2;
+  if ( (a1 <= 0.0) || (a2 == 0.0) ) return 0.0;
+
+  hh = (2*a1+12*a1*a1/36)/a2/a2;
+  energy = a2*pow(hh,power/2);
+
+  return energy;
+} // end sqcurve_string_marked_value()
+
+/************************************************************************
+*
+*  function: sqcurve_string_marked_grad()
+*
+*  purpose:  Calculate square curvature force for string model
+*                Works locally vertex by vertex. 
+*
+*/
+
+REAL sqcurve_string_marked_grad(struct qinfo *v_info)
+{
+  REAL s1,s2,s1s2;  /* edge lengths */
+  REAL *side1 = NULL,*side2 = NULL;
+  int  i,k,k1=0,k2=0;
+  REAL hh,a1,a2,energy;
+  REAL a1g[2][MAXCOORD],a2g[2][MAXCOORD];
+  REAL s[2];
+  REAL *side[2];
+  REAL term; /* common factor */
+  REAL power;
+  struct method_instance *mi = METH_INSTANCE(v_info->method);
+  int mark = (int)(mi->parameter_2);
+
+  // find the marked edges
+  for ( k = 0 ; k < v_info->vcount ; k++ )
+  { if ( mark ? (v_info->marked[k] & mark) : v_info->marked[k] )
+    { if ( side1 == NULL ) 
+      { side1 = v_info->sides[0][k]; k1 = k; }
+	  else if ( side2 == NULL )
+	  { side2 = v_info->sides[0][k]; k2 = k; }
+	  else 
+	  { 
+	    sprintf(errmsg,"More than 2 marked edges at vertex %s\n",ELNAME(v_info->id));
+		kb_error(6015,errmsg,RECOVERABLE);
+	  }
+    }
+  }
+
+  if ( k2 == 0 ) return 0.0;
+
+  if ( mi->flags & METH_PARAMETER_1 )
+     power = mi->parameter_1;
+  else power = curve_power;
+
+  s1 = sqrt(SDIM_dot(side1,side1));
+  s2 = sqrt(SDIM_dot(side2,side2));
+  s1s2 = SDIM_dot(side1,side2);
+
+  a1 = 2 + 2*s1s2/s1/s2;
+  a2 = (s1 + s2)/2;
+  if (a2 == 0.0) return 0.0;
+
+  hh = (a1+3*a1*a1/36)/a2/a2;
+  if ( hh <= 0.0 )
+  { hh = 0.0;
+    energy = 0.0;
+  }
+  else
+    energy = a2*pow(hh,power/2);
+
+  side[0] = side1; side[1] = side2; s[0] = s1; s[1] = s2;
+  for ( k = 0 ; k < 2 ; k++ )
+  { REAL coeff = 2*s1s2/s[k]/s[k]/s[k]/s[1-k];
+     for ( i = 0 ; i < SDIM ; i++ )
+        { a1g[k][i] = 2*side[1-k][i]/s1/s2 - coeff*side[k][i];
+          a2g[k][i] = 0.5*side[k][i]/s[k];
+        }
+  }
+  for ( i = 0 ; i < SDIM ; i++ ) v_info->grad[0][i] = 0.0;
+  term = a2*pow(hh,power/2-1); 
+  for ( k = 0 ; k < 2 ; k++ )
+     for ( i = 0 ; i < SDIM ; i++ )
+     { REAL f;
+        f = a2g[k][i]*energy/a2 + term*power/2
+              *(a1g[k][i]*(1+6*a1/36)/a2/a2 - (2*a1+6*a1*a1/36)/a2/a2/a2*a2g[k][i]);
+        v_info->grad[k?k2+1:k1+1][i] = f; 
+        v_info->grad[0][i] += -f; 
+     }
+  return energy;
+
+} // end sqcurve_string_marked_grad()
+
+
+/************************************************************************
+*
+*  function: sqcurve_string_marked_hess()
+*
+*  purpose:  Calculate square curvature hessian for string model
+*                Works locally vertex by vertex. 
+*/
+
+REAL sqcurve_string_marked_hess(struct qinfo *v_info)
+{
+  REAL s1,s2,s1s2;  /* edge lengths */
+  REAL *side1 = NULL,*side2 = NULL;
+  REAL *side[2];
+  int  i,k,kk,ii,k1=0,k2=0;
+  REAL a1,a2,energy;
+  REAL a1g[2][MAXCOORD],a2g[2][MAXCOORD];
+  REAL a1h[2][2][MAXCOORD][MAXCOORD],a2h[2][2][MAXCOORD][MAXCOORD];
+  REAL s[2];
+  REAL ****h = v_info->hess;
+  REAL term; /* common factor */
+  REAL power;
+  struct method_instance *mi = METH_INSTANCE(v_info->method);
+  int mark = (int)(mi->parameter_2);
+
+  // find the marked edges
+  for ( k = 0 ; k < v_info->vcount ; k++ )
+  { if ( mark ? (v_info->marked[k] & mark) : v_info->marked[k] )
+    { if ( side1 == NULL ) 
+      { side1 = v_info->sides[0][k]; k1 = k; }
+	  else if ( side2 == NULL )
+	  { side2 = v_info->sides[0][k]; k2 = k; }
+	  else 
+	  { 
+	    sprintf(errmsg,"More than 2 marked edges at vertex %s\n",ELNAME(v_info->id));
+		kb_error(5799,errmsg,RECOVERABLE);
+	  }
+    }
+  }
+
+  if ( k2 == 0 ) return 0.0;
+
+  if ( mi->flags & METH_PARAMETER_1 )
+     power = mi->parameter_1;
+  else power = curve_power;
+
+  if ( power != 2 )
+     kb_error(1762,"Hessian not implemented for curvature_power != 2.\n",
+        RECOVERABLE);
+
+  s1 = sqrt(SDIM_dot(side1,side1));
+  s2 = sqrt(SDIM_dot(side2,side2));
+  s1s2 = SDIM_dot(side1,side2);
+
+  a1 = 1 + s1s2/s1/s2;
+  a2 = (s1 + s2)/2;
+  if ( a2 == 0.0 ) return 0.0;
+
+  energy = 2*(a1+6*a1*a1/36)/a2;
+
+  side[0] = side1; side[1] = side2; s[0] = s1; s[1] = s2;
+  for ( k = 0 ; k < 2 ; k++ )
+  { term = s1s2/s[k]/s[k]/s[k]/s[1-k];
+     for ( i = 0 ; i < SDIM ; i++ )
+        { a1g[k][i] = side[1-k][i]/s1/s2 - term*side[k][i];
+          a2g[k][i] = 0.5*side[k][i]/s[k];
+        }
+  }
+  for ( i = 0 ; i < SDIM ; i++ ) v_info->grad[0][i] = 0.0;
+  term = (a1+6*a1*a1/36)/a2/a2;
+  for ( k = 0 ; k < 2 ; k++ )
+     for ( i = 0 ; i < SDIM ; i++ )
+     { REAL f = 2*(a1g[k][i]*(1+12*a1/36)/a2 - term*a2g[k][i]);
+        v_info->grad[k?k2+1:k1+1][i] = f; 
+        v_info->grad[0][i] += -f; 
+     }
+
+  /* hessian */
+  memset((char*)a1h,0,sizeof(a1h));
+  memset((char*)a2h,0,sizeof(a2h));
+  for ( k = 0 ; k < 2 ; k++ )
+  { REAL terma = 3*s1s2/s[k]/s[k]/s[k]/s[k]/s[k]/s[1-k];
+     REAL termb = s1s2/s[k]/s[k]/s[k]/s[1-k]/s[1-k]/s[1-k];
+     REAL termc = 1/s[k]/s[1-k]/s[1-k]/s[1-k];
+     term = 1/s[k]/s[k]/s[k]/s[1-k];
+     for ( i = 0 ; i < SDIM ; i++ )
+     { a1h[k][1-k][i][i] += 1/s1/s2;
+        for ( ii = 0 ; ii < SDIM ; ii++ )
+        { a1h[k][k][i][ii] += -side[1-k][i]*term*side[k][ii];
+          a1h[k][1-k][i][ii] += 
+              -side[1-k][i]*termc*side[1-k][ii];
+        }
+        for ( ii = 0 ; ii < SDIM ; ii++ )
+        { a1h[k][k][i][ii] += -side[1-k][ii]*term*side[k][i];
+          a1h[k][1-k][i][ii] += -side[k][ii]*term*side[k][i];
+          a1h[k][k][i][ii] += terma*side[k][i]*side[k][ii];
+          a1h[k][1-k][i][ii] += termb*side[k][i]*side[1-k][ii];
+        }
+        a1h[k][k][i][i] += - s1s2*term;
+        a2h[k][k][i][i] += 0.5/s[k];
+        for ( ii = 0 ; ii < SDIM ; ii++ )
+          a2h[k][k][i][ii] += -0.5*side[k][i]/s[k]/s[k]/s[k]*side[k][ii];
+
+     }
+  }
+  for ( k = 0 ; k < 2 ; k++ )
+    for ( kk = 0 ; kk < 2 ; kk++ )
+     for ( i = 0 ; i < SDIM ; i++ )
+      for ( ii = 0 ; ii < SDIM ; ii++ )
+      { REAL f = 2*((a1h[k][kk][i][ii]*(1+12*a1/36)+12*a1g[k][i]*a1g[kk][ii]/36)/a2
+                         - a1g[k][i]*(1+12*a1/36)*a2g[kk][ii]/a2/a2
+                         - a1g[kk][ii]*(1+12*a1/36)*a2g[k][i]/a2/a2
+                         - (a1+6*a1*a1/36)*a2h[k][kk][i][ii]/a2/a2
+                         + 2*(a1+6*a1*a1/36)*a2g[k][i]*a2g[kk][ii]/a2/a2/a2);
+         h[k?k2+1:k1+1][kk?k2+1:k1+1][i][ii] += f;
+         h[k?k2+1:k1+1][0][i][ii] += -f;
+         h[0][kk?k2+1:k1+1][i][ii] += -f;
+         h[0][0][i][ii] += f;
+      }
+  return energy;
+
+} // end sqcurve_string_marked_hess()
 
 /*************************************************************************
     Square curvature for string with intrinsic curvature
@@ -1314,11 +1574,12 @@ struct qinfo *v_info;
 *
 *  function: sqcurve2_string_init()
 *
-*  purpose:  
+*  purpose:  Initialization for evaluation of sqcurve2_string method.
 */
-void sqcurve2_string_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void sqcurve2_string_init(
+  int mode,
+  struct method_instance *mi
+)
 { int eltype;
   int k;
   
@@ -1339,7 +1600,7 @@ struct method_instance *mi;
     }
   }
 
-}
+} // end sqcurve2_string_init()
 
 /************************************************************************
 *
@@ -1350,8 +1611,7 @@ struct method_instance *mi;
 *
 */
 
-REAL sqcurve2_string_value(v_info)
-struct qinfo *v_info;
+REAL sqcurve2_string_value(struct qinfo *v_info)
 {
   REAL s1,s2,s1xs2;  /* edge lengths */
   REAL *side1 = v_info->sides[0][0],*side2 = v_info->sides[0][1];
@@ -1377,7 +1637,7 @@ struct qinfo *v_info;
   energy = a2*hh;
 
   return energy;
-}
+} // end sqcurve2_string_value()
 
 /************************************************************************
 *
@@ -1388,8 +1648,7 @@ struct qinfo *v_info;
 *
 */
 
-REAL sqcurve2_string_grad(v_info)
-struct qinfo *v_info;
+REAL sqcurve2_string_grad(struct qinfo *v_info)
 {
   REAL s1,s2,s1xs2;  /* edge lengths */
   REAL *side1 = v_info->sides[0][0],*side2 = v_info->sides[0][1];
@@ -1436,7 +1695,7 @@ struct qinfo *v_info;
     }
   return energy;
 
-}
+} // end sqcurve2_string_grad()
 
 /*************************************************************************
               square mean curvature for string, version 3
@@ -1448,16 +1707,17 @@ struct qinfo *v_info;
 *
 *  function: sqcurve3_string_init()
 *
-*  purpose:  
+*  purpose:   Initialization for evaluation of sqcurve3_string method.
 */
-void sqcurve3_string_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void sqcurve3_string_init(
+  int mode,
+  struct method_instance *mi
+)
 { 
   if ( web.modeltype != LINEAR )
     kb_error(4864,"Method sqcurve3_string only for LINEAR model.\n",
        RECOVERABLE);
-}
+} // end sqcurve3_string_init()
 
 /************************************************************************
 *
@@ -1468,9 +1728,10 @@ struct method_instance *mi;
 *
 */
 
-REAL sqcurve3_string_all(v_info,mode)
-struct qinfo *v_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, METHOD_HESSIAN */
+REAL sqcurve3_string_all(
+  struct qinfo *v_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, METHOD_HESSIAN */
+)
 {
   REAL s1,s2,s1s2;  /* edge lengths */
   REAL *side1 = v_info->sides[0][0],*side2 = v_info->sides[0][1];
@@ -1560,8 +1821,14 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, METHOD_HESSIAN */
                 + (2*a1+a1*a1/3)*dda2[k][kk][i][j];
        
   return energy;
-}
+} // end sqcurve3_string_all()
 
+/************************************************************************
+*
+*  function: sqcurve3_string_value(),sqcurve3_string_grad(),sqcurve3_string_hess()
+*
+*  purpose:  Wrappers for sqcurve3_string method.
+*/
 REAL sqcurve3_string_value(v_info)
 struct qinfo *v_info;
 { return sqcurve3_string_all(v_info,METHOD_VALUE);
@@ -1589,17 +1856,18 @@ struct qinfo *v_info;
                 so could set up other methods easily.
 **************************************************************************/
 
-REAL sq_mean_curv_cyl_all ARGS(( struct qinfo *, int, REAL ));
+REAL sq_mean_curv_cyl_all ( struct qinfo *, int, REAL );
 
 /************************************************************************
 *
 *  function: sq_mean_curv_cyl_init()
 *
-*  purpose:  
+*  purpose:   Initialization for evaluation of sq_mean_curv_cyl method.
 */
-void sq_mean_curv_cyl_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void sq_mean_curv_cyl_init(
+  int mode,
+  struct method_instance *mi
+)
 { int k;
   int eltype;
 
@@ -1619,14 +1887,19 @@ struct method_instance *mi;
       h0_value = globals(k)->value.real;
     }
   }
+} // end sq_mean_curv_cyl_init()
 
-
-}
-
-REAL sq_mean_curv_cyl_all(v_info,mode,power)
-struct qinfo *v_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, METHOD_HESSIAN */
-REAL power;
+/************************************************************************
+*
+*  function: sq_mean_curv_cyl_all()
+*
+*  purpose:  Implementationfor evaluation of sq_mean_curv_cyl method.
+*/
+REAL sq_mean_curv_cyl_all(
+  struct qinfo *v_info,
+  int mode, /* METHOD_VALUE, METHOD_GRADIENT, METHOD_HESSIAN */
+  REAL power
+)
 {
   REAL s1,s2;  /* edge lengths */
   REAL *side1 = v_info->sides[0][0],*side2 = v_info->sides[0][1];
@@ -1666,7 +1939,7 @@ REAL power;
     REAL dx_dx0=-1,dx_dx1=1,dx_dy0=0,dx_dy1=0;
     REAL dss_dx0,dss_dx1,dss_dy0,dss_dy1;
     REAL dhterm_dx0,dhterm_dx1,dhterm_dy0,dhterm_dy1;
-    REAL dprod_dx0,dprod_dy0,dprod_dx1,dprod_dy1;
+    REAL dprod_dx0,dprod_dx1,dprod_dy1;
     
     REAL dss_dx0_dx0,dss_dx0_dx1,dss_dx0_dy0=0,dss_dx0_dy1=0;
     REAL dss_dx1_dx0,dss_dx1_dx1,dss_dx1_dy0=0,dss_dx1_dy1=0;
@@ -1678,10 +1951,9 @@ REAL power;
     REAL dhterm_dy0_dx0,dhterm_dy0_dx1,dhterm_dy0_dy0,dhterm_dy0_dy1;
     REAL dhterm_dy1_dx0,dhterm_dy1_dx1,dhterm_dy1_dy0,dhterm_dy1_dy1;
     
-    REAL dprod_dx0_dx0,dprod_dx0_dx1,dprod_dx0_dy0,dprod_dx0_dy1;
-    REAL dprod_dx1_dx0,dprod_dx1_dx1,dprod_dx1_dy0,dprod_dx1_dy1;
-    REAL dprod_dy0_dx0,dprod_dy0_dx1,dprod_dy0_dy0,dprod_dy0_dy1;
-    REAL dprod_dy1_dx0,dprod_dy1_dx1,dprod_dy1_dy0,dprod_dy1_dy1;
+    REAL dprod_dx0_dx0,dprod_dx0_dy1;
+    REAL dprod_dx1_dy1;
+    REAL dprod_dy1_dy1;
        
     hterm = sign*2*dx/ss - h0_value;
     for ( prod = 1.0, k = 0 ; k < power ; k++ )
@@ -1704,7 +1976,6 @@ REAL power;
     dhterm_dy1 = sign*2*(      - dx/ss/ss*dss_dy1);
     dprod_dx0 = power*gradprod*dhterm_dx0;
     dprod_dx1 = power*gradprod*dhterm_dx1;
-    dprod_dy0 = power*gradprod*dhterm_dy0;
     dprod_dy1 = power*gradprod*dhterm_dy1;
     v_info->grad[0][0] = dprod_dx0*M_PI*ss/4 +prod*M_PI*dss_dx0/4;
     v_info->grad[0][1] = 0.0; /* assuming constrained to axis */
@@ -1765,37 +2036,12 @@ REAL power;
     
     dprod_dx0_dx0 = power*(power-1)*hessprod*dhterm_dx0*dhterm_dx0
         + power*gradprod*dhterm_dx0_dx0;
-    dprod_dx0_dx1 = power*(power-1)*hessprod*dhterm_dx0*dhterm_dx1
-        + power*gradprod*dhterm_dx0_dx1;
-    dprod_dx0_dy0 = power*(power-1)*hessprod*dhterm_dx0*dhterm_dy0
-        + power*gradprod*dhterm_dx0_dy0;
     dprod_dx0_dy1 = power*(power-1)*hessprod*dhterm_dx0*dhterm_dy1
         + power*gradprod*dhterm_dx0_dy1;
    
-    dprod_dx1_dx0 = power*(power-1)*hessprod*dhterm_dx1*dhterm_dx0
-        + power*gradprod*dhterm_dx1_dx0;
-    dprod_dx1_dx1 = power*(power-1)*hessprod*dhterm_dx1*dhterm_dx1
-        + power*gradprod*dhterm_dx1_dx1;
-    dprod_dx1_dy0 = power*(power-1)*hessprod*dhterm_dx1*dhterm_dy0
-        + power*gradprod*dhterm_dx1_dy0;
     dprod_dx1_dy1 = power*(power-1)*hessprod*dhterm_dx1*dhterm_dy1
         + power*gradprod*dhterm_dx1_dy1;
       
-    dprod_dy0_dx0 = power*(power-1)*hessprod*dhterm_dy0*dhterm_dx0
-        + power*gradprod*dhterm_dy0_dx0;
-    dprod_dy0_dx1 = power*(power-1)*hessprod*dhterm_dy0*dhterm_dx1
-        + power*gradprod*dhterm_dy0_dx1;
-    dprod_dy0_dy0 = power*(power-1)*hessprod*dhterm_dy0*dhterm_dy0
-        + power*gradprod*dhterm_dy0_dy0;
-    dprod_dy0_dy1 = power*(power-1)*hessprod*dhterm_dy0*dhterm_dy1
-        + power*gradprod*dhterm_dy0_dy1;
-    
-    dprod_dy1_dx0 = power*(power-1)*hessprod*dhterm_dy1*dhterm_dx0
-        + power*gradprod*dhterm_dy1_dx0;
-    dprod_dy1_dx1 = power*(power-1)*hessprod*dhterm_dy1*dhterm_dx1
-        + power*gradprod*dhterm_dy1_dx1;
-    dprod_dy1_dy0 = power*(power-1)*hessprod*dhterm_dy1*dhterm_dy0
-        + power*gradprod*dhterm_dy1_dy0;
     dprod_dy1_dy1 = power*(power-1)*hessprod*dhterm_dy1*dhterm_dy1
         + power*gradprod*dhterm_dy1_dy1;
   
@@ -2245,7 +2491,7 @@ REAL power;
 
   return energy;
 
-}
+} // end sq_mean_curv_cyl_all(:
 
 /************************************************************************
 *
@@ -2256,11 +2502,10 @@ REAL power;
 *
 */
 
-REAL sq_mean_curv_cyl_value(v_info)
-struct qinfo *v_info;
+REAL sq_mean_curv_cyl_value(struct qinfo *v_info)
 {
   return sq_mean_curv_cyl_all(v_info,METHOD_VALUE,2.0);
-}
+} // end sq_mean_curv_cyl_value()
 
 /************************************************************************
 *
@@ -2271,11 +2516,10 @@ struct qinfo *v_info;
 *
 */
 
-REAL sq_mean_curv_cyl_grad(v_info)
-struct qinfo *v_info;
+REAL sq_mean_curv_cyl_grad(struct qinfo *v_info)
 {
   return sq_mean_curv_cyl_all(v_info,METHOD_GRADIENT,2.0);
-}
+} // end sq_mean_curv_cyl_grad()
 
 /************************************************************************
 *
@@ -2286,11 +2530,10 @@ struct qinfo *v_info;
 *
 */
 
-REAL sq_mean_curv_cyl_hess(v_info)
-struct qinfo *v_info;
+REAL sq_mean_curv_cyl_hess(struct qinfo *v_info)
 {
   return sq_mean_curv_cyl_all(v_info,METHOD_HESSIAN,2.0);
-}
+} // end sq_mean_curv_cyl_hess()
 
 /*************************************************************************
    Square gaussian curvature for surface of revolution in string model.
@@ -2300,7 +2543,7 @@ struct qinfo *v_info;
    Includes 2*pi factor.
 **************************************************************************/
 
-REAL sq_gauss_curv_cyl_all ARGS(( struct qinfo *, int));
+REAL sq_gauss_curv_cyl_all( struct qinfo *, int);
 
 /************************************************************************
 *
@@ -2309,15 +2552,16 @@ REAL sq_gauss_curv_cyl_all ARGS(( struct qinfo *, int));
 *  purpose:  Any overall initialization needed each time the method
 *            is evaluated.
 */
-void sq_gauss_curv_cyl_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void sq_gauss_curv_cyl_init(
+  int mode,
+  struct method_instance *mi
+)
 { 
   if ( web.modeltype != LINEAR )
      kb_error(4486,"sq_gaussian_curv_cyl method only for LINEAR model.\n",
         RECOVERABLE);
 
-}
+} // end sq_gauss_curv_cyl_init()
 
 /************************************************************************
 *
@@ -2327,9 +2571,10 @@ struct method_instance *mi;
 *          method.
 */
 
-REAL sq_gauss_curv_cyl_all(v_info,mode)
-struct qinfo *v_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+REAL sq_gauss_curv_cyl_all(
+  struct qinfo *v_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
+)
 { REAL energy = 0.0;
 
   /* Notes on incoming data:
@@ -2360,7 +2605,7 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 
   return energy;
 
-}
+} // end sq_gauss_curv_cyl_all()
 
 /************************************************************************
 *
@@ -2369,14 +2614,12 @@ int mode; /* METHOD_VALUE, METHOD_GRADIENT, or METHOD_HESSIAN */
 *  purpose:  Calculate square gaussian curvature energy for surface
 *            of revolution in string model.
 *            Works locally vertex by vertex. Assumes two edges per vertex.
-*
 */
 
-REAL sq_gauss_curv_cyl_value(v_info)
-struct qinfo *v_info;
+REAL sq_gauss_curv_cyl_value(struct qinfo *v_info)
 {
   return sq_gauss_curv_cyl_all(v_info,METHOD_VALUE);
-}
+} // end sq_gauss_curv_cyl_value()
 
 /************************************************************************
 *
@@ -2384,14 +2627,12 @@ struct qinfo *v_info;
 *
 *  purpose:  Calculate square gaussian curvature gradient for 
 *            surface of revolution in string model.
-*
 */
 
-REAL sq_gauss_curv_cyl_grad(v_info)
-struct qinfo *v_info;
+REAL sq_gauss_curv_cyl_grad(struct qinfo *v_info)
 {
   return sq_gauss_curv_cyl_all(v_info,METHOD_GRADIENT);
-}
+} // end sq_gauss_curv_cyl_grad()
 
 /************************************************************************
 *
@@ -2399,11 +2640,9 @@ struct qinfo *v_info;
 *
 *  purpose:  Calculate square curvature hessian for surface of revolution
 *            in string model.
-*
 */
 
-REAL sq_gauss_curv_cyl_hess(v_info)
-struct qinfo *v_info;
+REAL sq_gauss_curv_cyl_hess(struct qinfo *v_info)
 {
   return sq_gauss_curv_cyl_all(v_info,METHOD_HESSIAN);
-}
+} // end sq_gauss_curv_cyl_hess()

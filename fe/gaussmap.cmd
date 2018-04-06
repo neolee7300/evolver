@@ -64,3 +64,8 @@ calc_gaussarea := {
    printf "Gauss map area: %18.15f or %18.15f*pi\n",gaussarea,gaussarea/pi;
 }
      
+// End gaussmap.cmd
+
+// Usage: gaussmap
+//        revert
+

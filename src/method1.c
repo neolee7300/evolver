@@ -16,34 +16,28 @@
 /***********************************************************************
    null_length - just sets edge length and returns 0 for everything.
 ***********************************************************************/
-REAL null_length_value(e_info)
-struct qinfo *e_info;
+REAL null_length_value(struct qinfo *e_info)
 { q_edge_tension_value(e_info);
   return 0.0;
 }
-REAL null_length_grad(e_info)
-struct qinfo *e_info;
+REAL null_length_grad(struct qinfo *e_info)
 { return 0.0;
 }
-REAL null_length_hess(e_info)
-struct qinfo *e_info;
+REAL null_length_hess(struct qinfo *e_info)
 { return 0.0;
 }
 
 /***********************************************************************
    null_area - just sets facet length and returns 0 for everything.
 ***********************************************************************/
-REAL null_area_value(f_info)
-struct qinfo *f_info;
+REAL null_area_value(struct qinfo *f_info)
 { q_facet_tension_value(f_info);
   return 0.0;
 }
-REAL null_area_grad(f_info)
-struct qinfo *f_info;
+REAL null_area_grad(struct qinfo *f_info)
 { return 0.0;
 }
-REAL null_area_hess(f_info)
-struct qinfo *f_info;
+REAL null_area_hess(struct qinfo *f_info)
 { return 0.0;
 }
 /*********************************************************************
@@ -60,9 +54,10 @@ struct qinfo *f_info;
 *
 */
 
-void vertex_scalar_integral_init(mode,mi)
-int mode;
-struct method_instance  *mi;
+void vertex_scalar_integral_init(
+  int mode,
+  struct method_instance  *mi
+)
 {
 }
 
@@ -74,8 +69,7 @@ struct method_instance  *mi;
 *
 */
 
-REAL vertex_scalar_integral(v_info)
-struct qinfo *v_info;
+REAL vertex_scalar_integral(struct qinfo *v_info)
 { REAL area;
   struct method_instance *mi = METH_INSTANCE(v_info->method);
   
@@ -89,7 +83,9 @@ struct qinfo *v_info;
     facetedge_id fe;
     facet_id f_id;
 
-    b_id = GEN_QUANT(mi->quant)->b_id;
+    if ( !valid_id(e_id) || !valid_id(fe_id) )
+      return 0.0;
+    b_id = GEN_QUANT(mi->quants[0])->b_id;
     fe = fe_id;
     do
     { f_id = get_fe_facet(fe);
@@ -104,7 +100,7 @@ struct qinfo *v_info;
   }
 
   return area;
-}
+} // end vertex_scalar_integral()
 
 /*********************************************************************
 *
@@ -114,15 +110,15 @@ struct qinfo *v_info;
 *
 */
 
-REAL vertex_scalar_integral_grad(v_info)
-struct qinfo *v_info;
+REAL vertex_scalar_integral_grad(struct qinfo *v_info)
 { REAL value = 0.0;
+  struct method_instance *mi = METH_INSTANCE(v_info->method);
 
-  eval_all(METH_INSTANCE(v_info->method)->expr[0],v_info->x[0],SDIM,&value,
+  eval_all(mi->expr[0],v_info->x[0],SDIM,&value,
      v_info->grad[0],v_info->id);
 
   return value;
-}
+} // end vertex_scalar_integral_grad()
 
 /*********************************************************************
 *
@@ -132,15 +128,15 @@ struct qinfo *v_info;
 *
 */
 
-REAL vertex_scalar_integral_hess(v_info)
-struct qinfo *v_info;
+REAL vertex_scalar_integral_hess(struct qinfo *v_info)
 { 
   REAL value = 0.0;
+  struct method_instance *mi = METH_INSTANCE(v_info->method); 
 
-  eval_second(METH_INSTANCE(v_info->method)->expr[0],v_info->x[0],SDIM,&value,
+  eval_second(mi->expr[0],v_info->x[0],SDIM,&value,
         v_info->grad[0], v_info->hess[0][0],v_info->id);
   return value;
-}
+} // end vertex_scalar_integral_hess()
 
 
 /*********************************************************************
@@ -155,9 +151,10 @@ struct qinfo *v_info;
 *
 */
 
-void q_edge_tension_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void q_edge_tension_init(
+int mode, /* energy or gradient */
+struct method_instance *mi
+)
 {
 }
 
@@ -168,15 +165,16 @@ struct method_instance *mi;
 *  purpose:  General quantity value of edge tension.
 */
  
-REAL q_edge_tension_value(e_info)
-struct qinfo *e_info;
+REAL q_edge_tension_value(struct qinfo *e_info)
 { REAL energy;
+  struct method_instance *mi = METH_INSTANCE(e_info->method); 
+
   if ( web.modeltype == QUADRATIC ) return edge_length_q_value(e_info);
   if ( web.modeltype == LAGRANGE ) 
       return lagrange_edge_tension_value(e_info);
   energy = sqrt(SDIM_dot(e_info->sides[0][0],e_info->sides[0][0]));
 
-  if ( METH_INSTANCE(e_info->method)->flags & DEFAULT_INSTANCE )
+  if ( mi->flags & DEFAULT_INSTANCE )
   { 
 #ifdef SHARED_MEMORY
      if ( nprocs > 1 ) 
@@ -187,11 +185,11 @@ struct qinfo *e_info;
      set_edge_length(e_info->id,energy);
   }
   
-  if ( METH_INSTANCE(e_info->method)->flags & USE_DENSITY )
+  if ( mi->flags & USE_DENSITY )
     energy *= get_edge_density(e_info->id);
     
   return energy; 
-}
+} // end q_edge_tension_value()
 
 
 /*********************************************************************
@@ -201,11 +199,11 @@ struct qinfo *e_info;
 *  purpose:  General quantity value and gradient of edge tension.
 */
 
-REAL q_edge_tension_gradient(e_info)
-struct qinfo *e_info;
+REAL q_edge_tension_gradient(struct qinfo *e_info)
 { REAL energy;
   REAL fudge;
   int j;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   if ( web.modeltype == QUADRATIC ) 
      return edge_length_q_grad(e_info);
@@ -213,7 +211,7 @@ struct qinfo *e_info;
       return lagrange_edge_tension_grad(e_info);
   energy = sqrt(SDIM_dot(e_info->sides[0][0],e_info->sides[0][0]));
   fudge = 1/energy;
-  if ( METH_INSTANCE(e_info->method)->flags & USE_DENSITY )
+  if ( mi->flags & USE_DENSITY )
   {  REAL density = get_edge_density(e_info->id);
      energy *= density; fudge *= density;
   }
@@ -222,7 +220,7 @@ struct qinfo *e_info;
        e_info->grad[1][j] =  e_info->sides[0][0][j]*fudge;
      }
   return energy;
-}
+} // end q_edge_tension_gradient()
 
 /*********************************************************************
 *
@@ -234,19 +232,19 @@ struct qinfo *e_info;
 *     coordinate i of vertex m of the edge and coordinate j of vertex n.
 */
 
-REAL q_edge_tension_hessian(e_info)
-struct qinfo *e_info;
+REAL q_edge_tension_hessian(struct qinfo *e_info)
 { REAL energy;
   int i,j;
   REAL e1,e3,ss;
   REAL fudge,len;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   if ( web.modeltype == QUADRATIC ) return edge_length_q_hess(e_info);
   if ( web.modeltype == LAGRANGE )  return lagrange_edge_tension_hess(e_info);
 
   energy = len = sqrt(SDIM_dot(e_info->sides[0][0],e_info->sides[0][0]));
   fudge = 1/len;
-  if ( METH_INSTANCE(e_info->method)->flags & USE_DENSITY )
+  if ( mi->flags & USE_DENSITY )
   {  REAL density = get_edge_density(e_info->id);
      energy *= density; fudge *= density;
   }
@@ -271,7 +269,7 @@ struct qinfo *e_info;
       e_info->hess[1][0][i][i] -= e1;
     }
   return energy;
-}
+} // end q_edge_tension_hessian()
 
 
 /*********************************************************************
@@ -288,11 +286,11 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_length_q_value(e_info)
-struct qinfo *e_info;
+REAL edge_length_q_value(struct qinfo *e_info)
 { int j,k,m;
   REAL value = 0.0;
   REAL tang[MAXCOORD];
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   for ( m = 0 ; m < gauss1D_num ; m++ )
   { for ( j = 0 ; j < SDIM ; j ++ )
@@ -302,7 +300,7 @@ struct qinfo *e_info;
     }
     value += gauss1Dwt[m]*sqrt(SDIM_dot(tang,tang));
   }
-  if ( METH_INSTANCE(e_info->method)->flags & DEFAULT_INSTANCE )
+  if ( mi->flags & DEFAULT_INSTANCE )
   {
 #ifdef SHARED_MEMORY
      if ( nprocs > 1 ) 
@@ -312,10 +310,10 @@ struct qinfo *e_info;
      binary_tree_add(web.total_area_addends,value);
      set_edge_length(e_info->id,value); 
   }
-  if ( METH_INSTANCE(e_info->method)->flags & USE_DENSITY )
+  if ( mi->flags & USE_DENSITY )
       value *= get_edge_density(e_info->id);
   return value;
-}
+} // end edge_length_q_value()
 
 /*********************************************************************
 *
@@ -325,15 +323,15 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_length_q_grad(e_info)
-struct qinfo *e_info;
+REAL edge_length_q_grad(struct qinfo *e_info)
 { int m,k,j;
   REAL value = 0.0;
   REAL len,fudge;
   REAL tang[MAXCOORD];
   REAL density;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
-  if ( METH_INSTANCE(e_info->method)->flags & USE_DENSITY )
+  if ( mi->flags & USE_DENSITY )
      density = get_edge_density(e_info->id);
   else density = 1.0;
 
@@ -356,7 +354,7 @@ struct qinfo *e_info;
   }
 
   return density*value;
-}
+} // end edge_length_q_grad()
 
 /*********************************************************************
 *
@@ -366,16 +364,16 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_length_q_hess(e_info)
-struct qinfo *e_info;
+REAL edge_length_q_hess(struct qinfo *e_info)
 { int m,j,jj,k,kk;
   REAL value = 0.0;
   REAL len,density,fudge;
   REAL sumgrad[2][MAXCOORD];
   REAL sumhess[2][2][MAXCOORD][MAXCOORD];
   REAL tang[MAXCOORD];
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
-  if ( METH_INSTANCE(e_info->method)->flags & USE_DENSITY )
+  if ( mi->flags & USE_DENSITY )
      density = get_edge_density(e_info->id);
   else density = 1.0;
 
@@ -405,7 +403,7 @@ struct qinfo *e_info;
   }
 
   return density*value;
-}
+} // end edge_length_q_hess()
 
 
 /*********************************************************************
@@ -422,22 +420,22 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_scalar_integral(e_info)
-struct qinfo *e_info;
+REAL edge_scalar_integral(struct qinfo *e_info)
 { int m;
   REAL value = 0.0;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   if ( web.modeltype == QUADRATIC ) return edge_scalar_integral_q(e_info);
   if ( web.modeltype == LAGRANGE ) return edge_scalar_integral_lagr(e_info);
 
   for ( m = 0 ; m < gauss1D_num ; m++ )
   { e_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
-    value += gauss1Dwt[m]*eval(METH_INSTANCE(e_info->method)->expr[0],
+    value += gauss1Dwt[m]*eval(mi->expr[0],
               e_info->gauss_pt[m], e_info->id,NULL);
   }
   value *= sqrt(SDIM_dot(e_info->sides[0][0],e_info->sides[0][0]));
   return value;
-}
+} // end edge_scalar_integral()
 
 /*********************************************************************
 *
@@ -447,12 +445,12 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_scalar_integral_grad(e_info)
-struct qinfo *e_info;
+REAL edge_scalar_integral_grad(struct qinfo *e_info)
 { int m,j;
   REAL value = 0.0;
   REAL len,val;
   REAL derivs[MAXCOORD];
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   if ( web.modeltype == QUADRATIC ) return edge_scalar_integral_q_grad(e_info);
   if ( web.modeltype == LAGRANGE ) return edge_scalar_integral_lagr_grad(e_info);
@@ -463,8 +461,7 @@ struct qinfo *e_info;
   len = sqrt(SDIM_dot(e_info->sides[0][0],e_info->sides[0][0]));
   for ( m = 0 ; m < gauss1D_num ; m++ )
   { e_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
-    eval_all(METH_INSTANCE(e_info->method)->expr[0],e_info->gauss_pt[m],SDIM,&val,
-                                                   derivs,e_info->id);
+    eval_all(mi->expr[0],e_info->gauss_pt[m],SDIM,&val,derivs,e_info->id);
     value += gauss1Dwt[m]*val;
     for ( j = 0 ; j < SDIM ; j++ )
     { e_info->grad[0][j] += gauss1Dwt[m]*gauss1poly[0][m]*derivs[j]*len;
@@ -477,7 +474,7 @@ struct qinfo *e_info;
   }
 
   return len*value;
-}
+} // end edge_scalar_integral_grad()
 
 /*********************************************************************
 *
@@ -487,8 +484,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_scalar_integral_hess(e_info)
-struct qinfo *e_info;
+REAL edge_scalar_integral_hess(struct qinfo *e_info)
 { int m,j,k,i;
   REAL value = 0.0;
   REAL len,sum,val;
@@ -496,6 +492,7 @@ struct qinfo *e_info;
   REAL lengrad[2][MAXCOORD],sumgrad[2][MAXCOORD];
   REAL lenhess[2][2][MAXCOORD][MAXCOORD],sumhess[2][2][MAXCOORD][MAXCOORD];
   MAT2D(second,MAXCOORD,MAXCOORD);
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   if ( web.modeltype == QUADRATIC ) return edge_scalar_integral_q_hess(e_info);
   if ( web.modeltype == LAGRANGE ) return edge_scalar_integral_lagr_hess(e_info);
@@ -513,7 +510,7 @@ struct qinfo *e_info;
   memset((char*)sumhess,0,sizeof(sumhess));
   for ( m = 0 ; m < gauss1D_num ; m++ )
   { e_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
-    eval_second(METH_INSTANCE(e_info->method)->expr[0],e_info->gauss_pt[m],SDIM,&val,
+    eval_second(mi->expr[0],e_info->gauss_pt[m],SDIM,&val,
                                                  derivs,second,e_info->id);
     sum += gauss1Dwt[m]*val;
     for ( j = 0 ; j < SDIM ; j++ )
@@ -559,7 +556,7 @@ struct qinfo *e_info;
             + lengrad[m][j]*sumgrad[i][k] + sumgrad[m][j]*lengrad[i][k]
             + len*sumhess[m][i][j][k];
   return value;
-}
+} // end edge_scalar_integral_hess()
 
 
 /*********************************************************************
@@ -576,11 +573,11 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_scalar_integral_q(e_info)
-struct qinfo *e_info;
+REAL edge_scalar_integral_q(struct qinfo *e_info)
 { int j,k,m;
   REAL value = 0.0;
   REAL tang[MAXCOORD];
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   for ( m = 0 ; m < gauss1D_num ; m++ ) 
   { for ( j = 0 ; j < SDIM ; j ++ )
@@ -589,11 +586,11 @@ struct qinfo *e_info;
            tang[j] += gauss1polyd[k][m]*e_info->x[k][j];
       }
     e_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
-    value += gauss1Dwt[m]*eval(METH_INSTANCE(e_info->method)->expr[0],
+    value += gauss1Dwt[m]*eval(mi->expr[0],
              e_info->gauss_pt[m],e_info->id,NULL)*sqrt(SDIM_dot(tang,tang));
   }
   return value;
-}
+} // end edge_scalar_integral_q()
 
 /*********************************************************************
 *
@@ -603,20 +600,20 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_scalar_integral_q_grad(e_info)
-struct qinfo *e_info;
+REAL edge_scalar_integral_q_grad(struct qinfo *e_info)
 { int m,k,j;
   REAL value = 0.0;
   REAL len,val;
   REAL derivs[MAXCOORD];
   REAL tang[MAXCOORD];
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   for ( j = 0 ; j < SDIM ; j++ )
      for ( m = 0 ; m < edge_ctrl ; m++ )
         e_info->grad[m][j] = 0.0;
   for ( m = 0 ; m < gauss1D_num ; m++ )
   { e_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
-    eval_all(METH_INSTANCE(e_info->method)->expr[0],e_info->gauss_pt[m],SDIM,&val,
+    eval_all(mi->expr[0],e_info->gauss_pt[m],SDIM,&val,
                                                          derivs,e_info->id);
     for ( j = 0 ; j < SDIM ; j ++ )
     { tang[j] = 0.0;
@@ -633,7 +630,7 @@ struct qinfo *e_info;
   }
 
   return value;
-}
+} // end edge_scalar_integral_q_grad()
 
 /*********************************************************************
 *
@@ -643,8 +640,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_scalar_integral_q_hess(e_info)
-struct qinfo *e_info;
+REAL edge_scalar_integral_q_hess(struct qinfo *e_info)
 { int m,j,jj,k,kk;
   REAL value = 0.0;
   REAL len,val;
@@ -653,13 +649,14 @@ struct qinfo *e_info;
   REAL sumhess[2][2][MAXCOORD][MAXCOORD];
   MAT2D(second,MAXCOORD,MAXCOORD);
   REAL tang[MAXCOORD];
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   /* derivatives of gaussian sum part */
   memset((char*)sumgrad,0,sizeof(sumgrad));
   memset((char*)sumhess,0,sizeof(sumhess));
   for ( m = 0 ; m < gauss1D_num ; m++ )
   { e_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
-    eval_second(METH_INSTANCE(e_info->method)->expr[0],e_info->gauss_pt[m],SDIM,&val,
+    eval_second(mi->expr[0],e_info->gauss_pt[m],SDIM,&val,
                                                     derivs,second,e_info->id);
     for ( j = 0 ; j < SDIM ; j ++ )
     { tang[j] = 0.0;
@@ -686,7 +683,7 @@ struct qinfo *e_info;
   }
 
   return value;
-}
+} // end edge_scalar_integral_q_hess()
 
 
 /*********************************************************************
@@ -703,20 +700,20 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_scalar_integral_lagr(e_info)
-struct qinfo *e_info;
+REAL edge_scalar_integral_lagr(struct qinfo *e_info)
 { int m;
   REAL value = 0.0;
   struct gauss_lag *gl = &gauss_lagrange[1][web.gauss1D_order];
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   for ( m = 0 ; m < gl->gnumpts ; m++ )
   { e_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
     value += gl->gausswt[m]
-         *eval(METH_INSTANCE(e_info->method)->expr[0],e_info->gauss_pt[m],e_info->id,NULL)
+         *eval(mi->expr[0],e_info->gauss_pt[m],e_info->id,NULL)
          *sqrt(SDIM_dot(e_info->sides[m][0],e_info->sides[m][0]));
   }
   return value;
-}
+} // end edge_scalar_integral_lagr()
 
 /*********************************************************************
 *
@@ -726,19 +723,18 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_scalar_integral_lagr_grad(e_info)
-struct qinfo *e_info;
+REAL edge_scalar_integral_lagr_grad(struct qinfo *e_info)
 { int m,k,j;
   REAL value = 0.0;
   REAL len,val;
   REAL derivs[MAXCOORD];
   REAL *tang;
   struct gauss_lag *gl = &gauss_lagrange[1][web.gauss1D_order];
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   for ( m = 0 ; m < gl->gnumpts ; m++ )
   { e_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
-    eval_all(METH_INSTANCE(e_info->method)->expr[0],e_info->gauss_pt[m],SDIM,&val,
-                                                         derivs,e_info->id);
+    eval_all(mi->expr[0],e_info->gauss_pt[m],SDIM,&val,derivs,e_info->id);
     tang = e_info->sides[m][0];
     len = sqrt(SDIM_dot(tang,tang));
     if ( len == 0.0 ) continue;
@@ -750,7 +746,7 @@ struct qinfo *e_info;
               + val*tang[j]/len*gl->gpolypart[m][0][k]);
   }
   return value;
-}
+} // end edge_scalar_integral_lagr_grad()
 
 /*********************************************************************
 *
@@ -760,8 +756,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_scalar_integral_lagr_hess(e_info)
-struct qinfo *e_info;
+REAL edge_scalar_integral_lagr_hess(struct qinfo *e_info)
 { int m,j,jj,k,kk;
   REAL value = 0.0;
   REAL len,val;
@@ -771,13 +766,14 @@ struct qinfo *e_info;
   MAT2D(second,MAXCOORD,MAXCOORD);
   REAL *tang;
   struct gauss_lag *gl = &gauss_lagrange[1][web.gauss1D_order];
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   /* derivatives of gaussian sum part */
   memset((char*)sumgrad,0,sizeof(sumgrad));
   memset((char*)sumhess,0,sizeof(sumhess));
   for ( m = 0 ; m < gl->gnumpts ; m++ )
   { e_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
-    eval_second(METH_INSTANCE(e_info->method)->expr[0],e_info->gauss_pt[m],SDIM,&val,
+    eval_second(mi->expr[0],e_info->gauss_pt[m],SDIM,&val,
                                                      derivs,second,e_info->id);
     tang = e_info->sides[m][0];
     len = sqrt(SDIM_dot(tang,tang));
@@ -801,7 +797,7 @@ struct qinfo *e_info;
   }
 
   return value;
-}
+} // end edge_scalar_integral_lagr_hess()
 
 
 /*********************************************************************
@@ -818,23 +814,23 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_vector_integral(e_info)
-struct qinfo *e_info;
+REAL edge_vector_integral(struct qinfo *e_info)
 { int m,j;
   REAL value=0.0;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
+
   if ( web.modeltype == QUADRATIC ) return edge_vector_integral_q(e_info);
   if ( web.modeltype == LAGRANGE ) return edge_vector_integral_lagrange(e_info);
   for (  m = 0 ; m < gauss1D_num ; m++ )
   { e_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
     for ( j = 0 ; j < SDIM ; j++ )
     { REAL green;
-      green = gauss1Dwt[m]*eval(METH_INSTANCE(e_info->method)->expr[j],
-                       e_info->gauss_pt[m], e_info->id,NULL);
+      green = gauss1Dwt[m]*eval(mi->expr[j],e_info->gauss_pt[m],e_info->id,NULL);
       value += e_info->sides[0][0][j]*green;
     }
   }  
   return (get_eattr(e_info->id) & NEGBOUNDARY) ? -value : value;
-}
+} // end edge_vector_integral()
 
 /*********************************************************************
 *
@@ -844,15 +840,14 @@ struct qinfo *e_info;
 *
 */
 
-
-REAL edge_vector_integral_grad(e_info)
-struct qinfo *e_info;
+REAL edge_vector_integral_grad(struct qinfo *e_info)
 { int m,j,k;
   REAL value = 0.0;
   REAL val[MAXCOORD];
   REAL derivs[MAXCOORD][MAXCOORD];
   REAL sum;
   REAL sign = (get_eattr(e_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   if ( web.modeltype == QUADRATIC ) return edge_vector_integral_q_grad(e_info);
   if ( web.modeltype == LAGRANGE ) 
@@ -864,7 +859,7 @@ struct qinfo *e_info;
   { REAL weight = sign*gauss1Dwt[m];
     e_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
     for ( j = 0 ; j < SDIM ; j++ ) 
-      eval_all(METH_INSTANCE(e_info->method)->expr[j],e_info->gauss_pt[m],SDIM,
+      eval_all(mi->expr[j],e_info->gauss_pt[m],SDIM,
         val+j, derivs[j],e_info->id);
     value += gauss1Dwt[m]*SDIM_dot(val,e_info->sides[0][0]);
     for ( k = 0 ; k < SDIM ; k++ )
@@ -876,7 +871,7 @@ struct qinfo *e_info;
   }
 
   return sign*value;
-}
+} // end edge_vector_integral_grad()
 
 /*********************************************************************
 *
@@ -886,8 +881,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_vector_integral_hess(e_info)
-struct qinfo *e_info;
+REAL edge_vector_integral_hess(struct qinfo *e_info)
 { int m,i,j,k;
   REAL value = 0.0;
   REAL val[MAXCOORD];
@@ -895,6 +889,7 @@ struct qinfo *e_info;
   REAL sum;
   MAT3D(second,MAXCOORD,MAXCOORD,MAXCOORD);
   REAL sign = (get_eattr(e_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   if ( web.modeltype == QUADRATIC ) return edge_vector_integral_q_hess(e_info);
   if ( web.modeltype == LAGRANGE ) 
@@ -903,7 +898,7 @@ struct qinfo *e_info;
   { REAL weight = sign*gauss1Dwt[m];
     e_info->gauss_pt[m][2*SDIM] = m; /* kludge for attr interpolation. */
     for ( j = 0 ; j < SDIM ; j++ ) 
-      eval_second(METH_INSTANCE(e_info->method)->expr[j],e_info->gauss_pt[m],SDIM,val+j,
+      eval_second(mi->expr[j],e_info->gauss_pt[m],SDIM,val+j,
                                               derivs[j],second[j],e_info->id);
     value += weight*SDIM_dot(val,e_info->sides[0][0]);
     for ( k = 0 ; k < SDIM ; k++ )
@@ -930,7 +925,7 @@ struct qinfo *e_info;
   }
 
   return value;
-}
+} // end edge_vector_integral_hess()
 
 
 /*********************************************************************
@@ -947,12 +942,12 @@ struct qinfo *e_info;
 *
 */
 
-REAL edge_vector_integral_q(e_info)
-struct qinfo *e_info;
+REAL edge_vector_integral_q(struct qinfo *e_info)
 { int m,j,k;
   REAL value=0.0;
   REAL tang[MAXCOORD];
   REAL sign = (get_eattr(e_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   for ( m = 0 ; m < gauss1D_num ; m++ )
   { REAL weight = sign*gauss1Dwt[m];
@@ -961,12 +956,12 @@ struct qinfo *e_info;
      { tang[j] = 0.0;
         for ( k = 0 ; k < edge_ctrl ; k++ )
           tang[j] += gauss1polyd[k][m]*e_info->x[k][j];
-        value += weight*tang[j]*eval(METH_INSTANCE(e_info->method)->expr[j],
+        value += weight*tang[j]*eval(mi->expr[j],
                           e_info->gauss_pt[m],e_info->id,NULL);
      }
   }
   return value;
-}
+} // end edge_vector_integral_q()
 
 /*********************************************************************
 *
@@ -976,9 +971,7 @@ struct qinfo *e_info;
 *
 */
 
-
-REAL edge_vector_integral_q_grad(e_info)
-struct qinfo *e_info;
+REAL edge_vector_integral_q_grad(struct qinfo *e_info)
 { int m,j,k,i;
   REAL value = 0.0;
   REAL val[MAXCOORD];
@@ -986,6 +979,7 @@ struct qinfo *e_info;
   REAL sum;
   REAL tang[MAXCOORD];
   REAL sign = (get_eattr(e_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   for ( m = 0 ; m < gauss1D_num ; m++ )
   { REAL weight = sign*gauss1Dwt[m];
@@ -996,7 +990,7 @@ struct qinfo *e_info;
            tang[j] += gauss1polyd[k][m]*e_info->x[k][j];
     }
     for ( j = 0 ; j < SDIM ; j++ ) 
-      eval_all(METH_INSTANCE(e_info->method)->expr[j],e_info->gauss_pt[m],SDIM,val+j,
+      eval_all(mi->expr[j],e_info->gauss_pt[m],SDIM,val+j,
                                                    derivs[j],e_info->id);
     value += weight*SDIM_dot(val,tang);
     for ( k = 0 ; k < SDIM ; k++ )
@@ -1009,7 +1003,7 @@ struct qinfo *e_info;
   }
 
   return value;
-}
+} // end edge_vector_integral_q_grad()
 
 /*********************************************************************
 *
@@ -1019,9 +1013,7 @@ struct qinfo *e_info;
 *
 */
 
-
-REAL edge_vector_integral_q_hess(e_info)
-struct qinfo *e_info;
+REAL edge_vector_integral_q_hess(struct qinfo *e_info)
 { int m,i,j,k,ii,kk;
   REAL value = 0.0;
   REAL val[MAXCOORD];
@@ -1030,6 +1022,7 @@ struct qinfo *e_info;
   MAT3D(second,MAXCOORD,MAXCOORD,MAXCOORD);
   REAL tang[MAXCOORD];
   REAL sign = (get_eattr(e_info->id) & NEGBOUNDARY) ? -1.0 : 1.0;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   for ( m = 0 ; m < gauss1D_num ; m++ )
   { REAL weight = sign*gauss1Dwt[m];
@@ -1040,7 +1033,7 @@ struct qinfo *e_info;
           tang[j] += gauss1polyd[k][m]*e_info->x[k][j];
     }
     for ( j = 0 ; j < SDIM ; j++ ) 
-      eval_second(METH_INSTANCE(e_info->method)->expr[j],e_info->gauss_pt[m],SDIM,
+      eval_second(mi->expr[j],e_info->gauss_pt[m],SDIM,
         val+j, derivs[j],second[j],e_info->id);
     value += weight*SDIM_dot(val,tang);
     for ( k = 0 ; k < SDIM ; k++ )
@@ -1066,7 +1059,7 @@ struct qinfo *e_info;
   }
 
   return value;
-}
+} // end edge_vector_integral_q_hess()
 
 
 
@@ -1081,10 +1074,10 @@ struct qinfo *e_info;
 *  purpose: value of area integral on edge
 */
 
-REAL q_edge_area(e_info)
-struct qinfo *e_info;
+REAL q_edge_area(struct qinfo *e_info)
 { REAL **x;
   REAL area;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   if ( web.torus_flag ) area = q_edge_torus_area(e_info);
   else if ( web.modeltype == QUADRATIC ) area = q_edge_area_q(e_info);
@@ -1096,14 +1089,14 @@ struct qinfo *e_info;
     area = (x[0][1]+x[1][1])*(x[0][0] - x[1][0])/2;
   }
 
-  if ( METH_INSTANCE(e_info->method)->flags & DEFAULT_INSTANCE )
+  if ( mi->flags & DEFAULT_INSTANCE )
   { /* add to facet area */
     body_id b_id,bb_id;
     facetedge_id fe_id = get_edge_fe(e_info->id);
     facetedge_id fe;
     facet_id f_id;
 
-    b_id = GEN_QUANT(METH_INSTANCE(e_info->method)->quant)->b_id;
+    b_id = GEN_QUANT(mi->quants[0])->b_id;
     fe = fe_id;
     do
     { f_id = get_fe_facet(fe);
@@ -1118,7 +1111,7 @@ struct qinfo *e_info;
   }
 
   return area;
-}
+} // end q_edge_area()
 
 /**********************************************************************
 *
@@ -1127,8 +1120,7 @@ struct qinfo *e_info;
 *  purpose: value and gradient of area integral on edge
 */
 
-REAL q_edge_area_grad(e_info)
-struct qinfo *e_info;
+REAL q_edge_area_grad(struct qinfo *e_info)
 { REAL **x,**g;
   REAL area;
 
@@ -1146,7 +1138,7 @@ struct qinfo *e_info;
   g[0][1] = (x[0][0] - x[1][0])/2;
   g[1][1] = (x[0][0] - x[1][0])/2;
   return area;
-}
+} // end q_edge_area_grad()
 
 
 /**********************************************************************
@@ -1156,8 +1148,7 @@ struct qinfo *e_info;
 *  purpose: value and gradient and hessian of area integral on edge
 */
 
-REAL q_edge_area_hess(e_info)
-struct qinfo *e_info;
+REAL q_edge_area_hess(struct qinfo *e_info)
 { REAL **x,**g,****h;
   REAL area;
 
@@ -1185,7 +1176,7 @@ struct qinfo *e_info;
   h[1][1][1][0] -= 0.5;
 
   return area;
-}
+} // end q_edge_area_hess()
 
 
 /**********************************************************************
@@ -1199,8 +1190,7 @@ struct qinfo *e_info;
 *  purpose: value of area integral on edge
 */
 
-REAL q_edge_area_q(e_info)
-struct qinfo *e_info;
+REAL q_edge_area_q(struct qinfo *e_info)
 { REAL **x;
   REAL area;
   int i,j;
@@ -1216,7 +1206,7 @@ struct qinfo *e_info;
         }
 
   return area;
-}
+} // end q_edge_area_q()
 
 /**********************************************************************
 *
@@ -1225,8 +1215,7 @@ struct qinfo *e_info;
 *  purpose: value and gradient of area integral on edge
 */
 
-REAL q_edge_area_q_grad(e_info)
-struct qinfo *e_info;
+REAL q_edge_area_q_grad(struct qinfo *e_info)
 { REAL **x,**g;
   REAL area;
   int i,j,k;
@@ -1249,7 +1238,7 @@ struct qinfo *e_info;
         }
 
   return area;
-}
+} // end q_edge_area_q_grad()
 
 
 /**********************************************************************
@@ -1259,8 +1248,7 @@ struct qinfo *e_info;
 *  purpose: value and gradient and hessian of area integral on edge
 */
 
-REAL q_edge_area_q_hess(e_info)
-struct qinfo *e_info;
+REAL q_edge_area_q_hess(struct qinfo *e_info)
 { REAL **x,**g,****h;
   REAL area;
   int i,j;
@@ -1283,7 +1271,7 @@ struct qinfo *e_info;
         }
 
   return area;
-}
+} // end q_edge_area_q_hess()
 
 
 /**********************************************************************
@@ -1297,8 +1285,7 @@ struct qinfo *e_info;
 *  purpose: value of area integral on edge
 */
 
-REAL q_edge_area_lagrange(e_info)
-struct qinfo *e_info;
+REAL q_edge_area_lagrange(struct qinfo *e_info)
 { REAL **x;
   REAL area;
   struct gauss_lag *gl = &gauss_lagrange[web.dimension][web.gauss1D_order];
@@ -1319,7 +1306,7 @@ struct qinfo *e_info;
   }
      
   return area;
-}
+} // end q_edge_area_lagrange()
 
 /**********************************************************************
 *
@@ -1328,8 +1315,7 @@ struct qinfo *e_info;
 *  purpose: value and gradient of area integral on edge
 */
 
-REAL q_edge_area_lagrange_grad(e_info)
-struct qinfo *e_info;
+REAL q_edge_area_lagrange_grad(struct qinfo *e_info)
 { REAL **x,**g;
   REAL area;
   int m,k;
@@ -1355,7 +1341,7 @@ struct qinfo *e_info;
   }
 
   return area;
-}
+} // end q_edge_area_lagrange_grad()
 
 
 /**********************************************************************
@@ -1365,8 +1351,7 @@ struct qinfo *e_info;
 *  purpose: value and gradient and hessian of area integral on edge
 */
 
-REAL q_edge_area_lagrange_hess(e_info)
-struct qinfo *e_info;
+REAL q_edge_area_lagrange_hess(struct qinfo *e_info)
 { REAL **x,**g,****h;
   REAL area;
   int m,k,kk;
@@ -1397,7 +1382,7 @@ struct qinfo *e_info;
   }
 
   return area;
-}
+} // end q_edge_area_lagrange_hess()
 
 
 /**********************************************************************
@@ -1411,8 +1396,7 @@ struct qinfo *e_info;
 *  purpose: value of area integral on edge
 */
 
-REAL q_edge_torus_area(e_info)
-struct qinfo *e_info;
+REAL q_edge_torus_area(struct qinfo *e_info)
 { REAL **x;
   REAL area;
   REAL **dx = web.inverse_periods;
@@ -1438,7 +1422,7 @@ struct qinfo *e_info;
   area += WRAPNUM(wrap)*u[1][0];
 
   return area*web.torusv;
-}
+} // end q_edge_torus_area()
 
 /**********************************************************************
 *
@@ -1447,8 +1431,7 @@ struct qinfo *e_info;
 *  purpose: value and gradient of area integral on edge
 */
 
-REAL q_edge_torus_area_grad(e_info)
-struct qinfo *e_info;
+REAL q_edge_torus_area_grad(struct qinfo *e_info)
 { REAL **x;
   REAL area;
   REAL **dx = web.inverse_periods;
@@ -1479,7 +1462,7 @@ struct qinfo *e_info;
 
   mat_mult(g,dx,e_info->grad,EDGE_VERTS,SDIM,SDIM);
   return area*web.torusv;
-}
+} // end q_edge_torus_area_grad()
 
 
 /**********************************************************************
@@ -1489,8 +1472,7 @@ struct qinfo *e_info;
 *  purpose: value and gradient and hessian of area integral on edge
 */
 
-REAL q_edge_torus_area_hess(e_info)
-struct qinfo *e_info;
+REAL q_edge_torus_area_hess(struct qinfo *e_info)
 { REAL **x;
   REAL area;
   REAL **dx = web.inverse_periods;
@@ -1543,7 +1525,7 @@ struct qinfo *e_info;
     }
 
   return area*web.torusv;
-}
+} // end q_edge_torus_area_hess()
 
 
 /**********************************************************************
@@ -1557,8 +1539,7 @@ struct qinfo *e_info;
 *  purpose: value of area integral on edge
 */
 
-REAL q_edge_torus_area_q(e_info)
-struct qinfo *e_info;
+REAL q_edge_torus_area_q(struct qinfo *e_info)
 { REAL **x;
   REAL area;
   REAL **dx = web.inverse_periods;
@@ -1584,7 +1565,7 @@ struct qinfo *e_info;
   area += WRAPNUM(wrap)*u[2][0];
 
   return area*web.torusv;
-}
+} // end q_edge_torus_area_q()
 
 /**********************************************************************
 *
@@ -1593,8 +1574,7 @@ struct qinfo *e_info;
 *  purpose: value and gradient of area integral on edge
 */
 
-REAL q_edge_torus_area_q_grad(e_info)
-struct qinfo *e_info;
+REAL q_edge_torus_area_q_grad(struct qinfo *e_info)
 { REAL **x;
   REAL area;
   REAL **dx = web.inverse_periods;
@@ -1632,7 +1612,7 @@ struct qinfo *e_info;
   mat_mult(g,dx,e_info->grad,edge_ctrl,SDIM,SDIM);
 
   return area*web.torusv;
-}
+} // end q_edge_torus_area_q_grad()
 
 
 /**********************************************************************
@@ -1642,8 +1622,7 @@ struct qinfo *e_info;
 *  purpose: value and gradient and hessian of area integral on edge
 */
 
-REAL q_edge_torus_area_q_hess(e_info)
-struct qinfo *e_info;
+REAL q_edge_torus_area_q_hess(struct qinfo *e_info)
 { REAL **x;
   REAL area;
   REAL **dx = web.inverse_periods;
@@ -1692,7 +1671,7 @@ struct qinfo *e_info;
       tr_mat_mul(dx,temph,e_info->hess[i][ii],SDIM,SDIM,SDIM);
     }
   return area*web.torusv;
-}
+} // end q_edge_torus_area_q_hess()
 
 
 /**********************************************************************
@@ -1706,8 +1685,7 @@ struct qinfo *e_info;
 *  purpose: value of area integral on edge
 */
 
-REAL q_edge_torus_area_lagrange(e_info)
-struct qinfo *e_info;
+REAL q_edge_torus_area_lagrange(struct qinfo *e_info)
 { REAL **x;
   REAL area;
   struct gauss_lag *gl = &gauss_lagrange[web.dimension][web.gauss1D_order];
@@ -1736,7 +1714,7 @@ struct qinfo *e_info;
   area += WRAPNUM(wrap)*u[ctrl-1][0];
 
   return area * web.torusv;
-}
+} // end q_edge_torus_area_lagrange()
 
 /**********************************************************************
 *
@@ -1745,8 +1723,7 @@ struct qinfo *e_info;
 *  purpose: value and gradient of area integral on edge
 */
 
-REAL q_edge_torus_area_lagrange_grad(e_info)
-struct qinfo *e_info;
+REAL q_edge_torus_area_lagrange_grad(struct qinfo *e_info)
 { REAL **x;
   REAL area;
   int m,j,k,i;
@@ -1790,7 +1767,7 @@ struct qinfo *e_info;
       g[k][j] *= web.torusv;
   mat_mult(g,web.inverse_periods,e_info->grad,ctrl,SDIM,SDIM);
   return area*web.torusv;
-}
+} // end q_edge_torus_area_lagrange_grad()
 
 
 /**********************************************************************
@@ -1800,8 +1777,7 @@ struct qinfo *e_info;
 *  purpose: value and gradient and hessian of area integral on edge
 */
 
-REAL q_edge_torus_area_lagrange_hess(e_info)
-struct qinfo *e_info;
+REAL q_edge_torus_area_lagrange_hess(struct qinfo *e_info)
 { REAL **x,****h;
   REAL area;
   int i,ii,j;
@@ -1858,7 +1834,7 @@ struct qinfo *e_info;
           tr_mat_mul(web.inverse_periods,temph,e_info->hess[i][ii],SDIM,SDIM,SDIM);
         }
   return area*web.torusv;
-}
+} // end q_edge_torus_area_lagrange_hess()
 
 
 /*******************************************************************
@@ -1884,9 +1860,10 @@ static REAL hooke_length, hooke_power;
 *    No special prep.
 */
 
-void hooke_energy_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void hooke_energy_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 {
   if ( web.modeltype != LINEAR )
      kb_error(1766,"hooke_energy only for LINEAR model.\n",RECOVERABLE);
@@ -1910,7 +1887,7 @@ struct method_instance *mi;
     globals(length_param)->flags |=  ORDINARY_PARAM;
   }
   hooke_length =  globals(length_param)->value.real; 
-}
+} // end hooke_energy_init()
 
 /*******************************************************************
 *
@@ -1920,8 +1897,7 @@ struct method_instance *mi;
 *
 */
 
-REAL hooke_energy(e_info)
-struct qinfo *e_info;
+REAL hooke_energy(struct qinfo *e_info)
 {
   REAL d,diff;
 
@@ -1929,7 +1905,7 @@ struct qinfo *e_info;
   diff = fabs(d - hooke_length);
   if ( hooke_power == 0.0 ) return -log(diff);
   return pow(diff,hooke_power);
-}
+} // end hooke_energy()
 
 
 
@@ -1941,8 +1917,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL hooke_energy_gradient(e_info)
-struct qinfo *e_info;
+REAL hooke_energy_gradient(struct qinfo *e_info)
 {
   REAL d,diff,coeff;
   REAL energy;
@@ -1965,7 +1940,7 @@ struct qinfo *e_info;
         e_info->grad[1][j] = coeff*e_info->sides[0][0][j];
      }
   return energy;
-}
+} // end hooke_energy_gradient()
 
 
 
@@ -1978,8 +1953,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL hooke_energy_hessian(e_info)
-struct qinfo *e_info;
+REAL hooke_energy_hessian(struct qinfo *e_info)
 {
   REAL d,diff,coeff,egrad,ehess;
   REAL energy;
@@ -2052,7 +2026,7 @@ struct qinfo *e_info;
      }
   } 
   return energy;
-}
+} // end hooke_energy_hessian()
 
 
 /*******************************************************************
@@ -2078,9 +2052,10 @@ static int hooke2_attr;  /* index number of hooke_size attribute */
 *
 */
 
-void hooke2_energy_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void hooke2_energy_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 { edge_id e_id;
 
   if ( web.modeltype != LINEAR )
@@ -2089,10 +2064,10 @@ struct method_instance *mi;
 
   exponent_param = lookup_global(POWER2_NAME);
   if ( exponent_param < 0 ) /* missing, so add */
-        { exponent_param = add_global(POWER2_NAME);
-          globals(exponent_param)->value.real = 2.0;  /* default */
-          globals(exponent_param)->flags |=  ORDINARY_PARAM;
-        }
+  { exponent_param = add_global(POWER2_NAME);
+    globals(exponent_param)->value.real = 2.0;  /* default */
+    globals(exponent_param)->flags |=  ORDINARY_PARAM;
+  }
   hooke2_power =  globals(exponent_param)->value.real; 
 
   /* extra edge atribute */
@@ -2100,14 +2075,14 @@ struct method_instance *mi;
   if ( hooke2_attr < 0 ) /* not found */
   { int one = 1;
     hooke2_attr = add_attribute(EDGE,HOOKE2_ATTR_NAME,REAL_TYPE,0,&one /*dim*/,
-          DUMP_ATTR,NULL);
+          DUMP_ATTR,NULL,MPI_NO_PROPAGATE);
      FOR_ALL_EDGES(e_id)  /* initialize to current length */
      { calc_edge(e_id);
         *((REAL*)(get_extra(e_id,hooke2_attr))) = get_edge_length(e_id);
      }
   }
-}
-
+} // end hooke2_energy_init()
+ 
 /*******************************************************************
 *
 *  function: hooke2_energy
@@ -2116,8 +2091,7 @@ struct method_instance *mi;
 *
 */
 
-REAL hooke2_energy(e_info)
-struct qinfo *e_info;
+REAL hooke2_energy(struct qinfo *e_info)
 {
   REAL d,diff;
 
@@ -2125,7 +2099,7 @@ struct qinfo *e_info;
   diff = fabs(d - *((REAL*)get_extra(e_info->id,hooke2_attr)));
   if ( hooke2_power == 0.0 ) return -log(diff);
   return pow(diff,hooke2_power);
-}
+} // end hooke2_energy()
 
 
 
@@ -2137,8 +2111,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL hooke2_energy_gradient(e_info)
-struct qinfo *e_info;
+REAL hooke2_energy_gradient(struct qinfo *e_info)
 {
   REAL d,diff,coeff;
   REAL energy;
@@ -2161,7 +2134,7 @@ struct qinfo *e_info;
      e_info->grad[1][j] = coeff*e_info->sides[0][0][j];
   }
   return energy;
-}
+} // end hooke2_energy_gradient()
 
 
 /*******************************************************************
@@ -2172,8 +2145,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL hooke2_energy_hessian(e_info)
-struct qinfo *e_info;
+REAL hooke2_energy_hessian(struct qinfo *e_info)
 {
   REAL d,diff,coeff,egrad,ehess;
   REAL energy;
@@ -2246,7 +2218,7 @@ struct qinfo *e_info;
      }
   } 
   return energy;
-}
+} // end hooke2_energy_hessian()
 
 
 /*******************************************************************
@@ -2273,9 +2245,10 @@ static int frickenhaus_flag; /* special feature for S. Frickenhaus */
 *
 */
 
-void hooke3_energy_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void hooke3_energy_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 { edge_id e_id;
   int n;
 
@@ -2295,7 +2268,7 @@ struct method_instance *mi;
   if ( hooke3_attr < 0 ) /* not found */
   { int one = 1;
     hooke3_attr = add_attribute(EDGE,HOOKE3_ATTR_NAME,REAL_TYPE,0,&one /*dim*/,
-          DUMP_ATTR,NULL);
+          DUMP_ATTR,NULL,MPI_NO_PROPAGATE);
      FOR_ALL_EDGES(e_id)  /* initialize to current length */
      { calc_edge(e_id);
         *((REAL*)(get_extra(e_id,hooke3_attr))) = get_edge_length(e_id);
@@ -2305,7 +2278,7 @@ struct method_instance *mi;
   n = lookup_global("frickenhaus_flag");
   if ( (n >= 0) && (globals(n)->value.real != 0.0) ) frickenhaus_flag = 1;
   else frickenhaus_flag = 0;
-}
+} // end hooke3_energy_init()
 
 /*******************************************************************
 *
@@ -2315,8 +2288,7 @@ struct method_instance *mi;
 *
 */
 
-REAL hooke3_energy(e_info)
-struct qinfo *e_info;
+REAL hooke3_energy(struct qinfo *e_info)
 {
   REAL d,diff,length;
 
@@ -2331,7 +2303,7 @@ struct qinfo *e_info;
   diff = fabs(d - length);
   if ( hooke3_power == 0.0 ) return -log(diff);
   return 0.5*pow(diff,hooke3_power)/length;
-}
+} // hooke3_energy()
 
 
 
@@ -2343,8 +2315,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL hooke3_energy_gradient(e_info)
-struct qinfo *e_info;
+REAL hooke3_energy_gradient(struct qinfo *e_info)
 {
   REAL d,diff,coeff;
   REAL energy;
@@ -2370,7 +2341,7 @@ struct qinfo *e_info;
      e_info->grad[1][j] = coeff*e_info->sides[0][0][j];
   }
   return energy;
-}
+} // end hooke3_energy_gradient()
 
 
 /*******************************************************************
@@ -2381,8 +2352,7 @@ struct qinfo *e_info;
 *
 */
 
-REAL hooke3_energy_hessian(e_info)
-struct qinfo *e_info;
+REAL hooke3_energy_hessian(struct qinfo *e_info)
 {
   REAL d,diff,coeff,egrad,ehess;
   REAL energy;
@@ -2459,7 +2429,7 @@ struct qinfo *e_info;
      }
   } 
   return energy;
-}
+} // end hooke3_energy_hessian()
 
 /*********************************************************************
 
@@ -2477,18 +2447,18 @@ the short chords, found with cross product.
 
 *********************************************************************/
 
-void circ_debug ARGS((REAL,REAL,REAL,REAL,REAL*,REAL*,REAL*,REAL*));
-void circular_arc_aux ARGS((REAL,REAL,REAL,REAL,REAL*, REAL [][2],
+void circ_debug(REAL,REAL,REAL,REAL,REAL*,REAL*,REAL*,REAL*);
+void circular_arc_aux (REAL,REAL,REAL,REAL,REAL*, REAL [][2],
     REAL [][2][3][2], REAL *,REAL [][2],REAL [][2][3][2],REAL *,REAL [][2],
-    REAL [][2][3][2], REAL *,REAL [][2],REAL [][2][3][2],int));
-REAL cirf ARGS((REAL));
-REAL cirfp ARGS((REAL));
-REAL cirfpp ARGS((REAL));
-REAL circular_arc_length_all ARGS(( struct qinfo *, int ));
-REAL caf ARGS((REAL));
-REAL cafp ARGS((REAL));
-REAL cafpp ARGS((REAL));
-REAL circular_arc_area_all ARGS(( struct qinfo *, int ));
+    REAL [][2][3][2], REAL *,REAL [][2],REAL [][2][3][2],int);
+REAL cirf(REAL);
+REAL cirfp(REAL);
+REAL cirfpp(REAL);
+REAL circular_arc_length_all( struct qinfo *, int );
+REAL caf(REAL);
+REAL cafp(REAL);
+REAL cafpp(REAL);
+REAL circular_arc_area_all( struct qinfo *, int );
 
 /*********************************************************************
 *
@@ -2497,14 +2467,15 @@ REAL circular_arc_area_all ARGS(( struct qinfo *, int ));
 *  purpose:  check that we are in quadratic model.
 */
 
-void circular_arc_length_init(mode,mi)
-int mode; /* energy or gradient */
-struct method_instance *mi;
+void circular_arc_length_init(
+  int mode, /* energy or gradient */
+  struct method_instance *mi
+)
 { 
   if ( (web.modeltype == LAGRANGE) && (web.lagrange_order >= 2) )
     kb_error(3371,"circular_arc_length method needs LINEAR or QUADRATIC model.\n",RECOVERABLE);
   circular_arc_flag = 1;
-}
+} // end circular_arc_length_init()
 
 /************************************************************************
 *
@@ -2513,8 +2484,16 @@ struct method_instance *mi;
 * purpose: calculate various quantities common to circular arc functions
 *
 */
-void circ_debug(dx1,dy1,dx2,dy2,chord,sinth,costh,angle)
-REAL dx1,dx2,dy1,dy2,*chord,*sinth,*costh,*angle;
+void circ_debug(
+  REAL dx1,
+  REAL dx2,
+  REAL dy1,
+  REAL dy2,
+  REAL *chord, // returned values
+  REAL *sinth,
+  REAL *costh,
+  REAL *angle
+)
 { REAL denom1,denom2;
   denom1 = sqrt(dx1*dx1+dy1*dy1);
   denom2 = sqrt(dx2*dx2+dy2*dy2);
@@ -2523,16 +2502,16 @@ REAL dx1,dx2,dy1,dy2,*chord,*sinth,*costh,*angle;
   *sinth = (dx1*dy2 - dy1*dx2)/denom1/denom2;
   *costh = (dx1*dx2 + dy1*dy2)/denom1/denom2;
   *angle = atan2(*sinth,*costh);
-}
+} // end circ_debug()
 
-void circular_arc_aux(dx1,dy1,dx2,dy2,chordptr,dchord,ddchord,sinthptr,dsinth,
-  ddsinth,costhptr,dcosth,ddcosth,angleptr,dangle,ddangle,mode)
-REAL dx1,dy1,dx2,dy2;
-REAL *chordptr,dchord[][2],ddchord[][2][3][2];
-REAL *sinthptr,dsinth[][2],ddsinth[][2][3][2];
-REAL *costhptr,dcosth[][2],ddcosth[][2][3][2];
-REAL *angleptr,dangle[][2],ddangle[][2][3][2];
-int mode;
+void circular_arc_aux(
+  REAL dx1, REAL dy1, REAL dx2,REAL dy2,
+  REAL *chordptr,REAL dchord[][2], REAL ddchord[][2][3][2],
+  REAL *sinthptr,REAL dsinth[][2], REAL ddsinth[][2][3][2],
+  REAL *costhptr,REAL dcosth[][2], REAL ddcosth[][2][3][2],
+  REAL *angleptr,REAL dangle[][2], REAL ddangle[][2][3][2],
+  int mode
+)
 { REAL chord,sinth,costh,angle;
   REAL denom1,denom2;
   int i,j,ii,jj;
@@ -2762,7 +2741,7 @@ int mode;
 #endif
 
    return;
-}
+} // end void circular_arc_aux()
 
 /*********************************************************************
 *
@@ -2772,17 +2751,17 @@ int mode;
 *
 */
 
-REAL circular_arc_length_value(e_info)
-struct qinfo *e_info;
+REAL circular_arc_length_value(struct qinfo *e_info)
 { 
   REAL value = 0.0;
   REAL dx1,dx2,dy1,dy2,sinth,costh,chord,angle;
   REAL density = 1.0;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   if ( web.modeltype != QUADRATIC ) 
        return q_edge_tension_value(e_info);
 
-  if ( METH_INSTANCE(e_info->method)->flags & USE_DENSITY )
+  if ( mi->flags & USE_DENSITY )
       density = get_edge_density(e_info->id);
 
   dx1 = e_info->x[1][0] - e_info->x[0][0];
@@ -2809,31 +2788,30 @@ struct qinfo *e_info;
     }
   }
 
-  if ( METH_INSTANCE(e_info->method)->flags & DEFAULT_INSTANCE )
+  if ( mi->flags & DEFAULT_INSTANCE )
   { binary_tree_add(web.total_area_addends,value);
     set_edge_length(e_info->id,value); 
   }
 
   value *= density;
   return value;
-}
+} // end circular_arc_length_value()
 
-REAL cirf(th)
-REAL th;
+REAL cirf(REAL th)
 { if ( th == 0.0 ) return 1.0;
   return th/sin(th);
 }
 
-REAL cirfp(th)
-REAL th;
+// Derivative of cirf()
+REAL cirfp(REAL th)
 { if ( fabs(th) < .1 )
    return th*(1./3 + th*th*(7./90 + th*th*(31./2520
        + th*th*(127./75600 + th*th*73./342144))));
   return (sin(th)-th*cos(th))/sin(th)/sin(th);
 }
 
-REAL cirfpp(th)
-REAL th;
+// Second derivative of cirf()
+REAL cirfpp(REAL th)
 { REAL s,c;
   if ( fabs(th) < .1 )
    return (1./3 + th*th*(7./30 + th*th*(31./504
@@ -2852,9 +2830,10 @@ REAL th;
 *    value() moves midpoints.
 */
 
-REAL circular_arc_length_all(e_info,mode)
-struct qinfo *e_info;
-int mode;
+REAL circular_arc_length_all(
+  struct qinfo *e_info,
+  int mode
+)
 { int i,j,ii,jj;
   REAL angle,value = 0.0;
   REAL dx1,dx2,dy1,dy2,sinth,costh,chord;
@@ -2867,11 +2846,12 @@ int mode;
   REAL ddcosth[3][2][3][2];
   REAL ddangle[3][2][3][2];
   REAL density = 1.0;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   if ( web.modeltype != QUADRATIC )
        return q_edge_tension_gradient(e_info);
 
-  if ( METH_INSTANCE(e_info->method)->flags & USE_DENSITY )
+  if ( mi->flags & USE_DENSITY )
       density = get_edge_density(e_info->id);
 
   dx1 = e_info->x[1][0] - e_info->x[0][0];
@@ -2885,7 +2865,7 @@ int mode;
   value = chord*cirf(angle);
 
   if ( mode == METHOD_VALUE )
-   if ( METH_INSTANCE(e_info->method)->flags & DEFAULT_INSTANCE )
+   if ( mi->flags & DEFAULT_INSTANCE )
      binary_tree_add(web.total_area_addends,value);
 
   value *= density;
@@ -2912,23 +2892,21 @@ int mode;
   return value;
 } /* end circular_arc_length_all */
  
-REAL circular_arc_length_grad(e_info)
-struct qinfo *e_info;
+REAL circular_arc_length_grad(struct qinfo *e_info)
 { if ( web.modeltype != QUADRATIC )
        return q_edge_tension_gradient(e_info);
   return circular_arc_length_all(e_info,METHOD_GRADIENT);
-}
+} // end circular_arc_length_grad()
 
-REAL circular_arc_length_hess(e_info)
-struct qinfo *e_info;
+REAL circular_arc_length_hess(struct qinfo *e_info)
 { if ( web.modeltype != QUADRATIC )
        return q_edge_tension_hessian(e_info);
   return circular_arc_length_all(e_info,METHOD_HESSIAN);
-}
+} // end circular_arc_length_hess()
 
-REAL edge_symmetric_area_all ARGS(( struct qinfo *, int)); 
-REAL spherical_arc_length_all ARGS(( struct qinfo *, int)); 
-REAL spherical_arc_area_all ARGS(( struct qinfo *, int,int)); 
+REAL edge_symmetric_area_all ( struct qinfo *, int); 
+REAL spherical_arc_length_all ( struct qinfo *, int); 
+REAL spherical_arc_area_all ( struct qinfo *, int,int); 
 
 /**********************************************************************
 *
@@ -3195,6 +3173,7 @@ int mode;
 REAL circular_arc_area_value(e_info)
 struct qinfo *e_info;
 { REAL area;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   if ( web.modeltype != QUADRATIC )
   { if ( web.symmetric_content )
@@ -3205,14 +3184,14 @@ struct qinfo *e_info;
   else
     area = circular_arc_area_all(e_info,METHOD_VALUE);
 
-  if ( METH_INSTANCE(e_info->method)->flags & DEFAULT_INSTANCE )
+  if ( mi->flags & DEFAULT_INSTANCE )
   { /* add to facet area */
     body_id b_id,bb_id;
     facetedge_id fe_id = get_edge_fe(e_info->id);
     facetedge_id fe;
     facet_id f_id;
 
-    b_id = GEN_QUANT(METH_INSTANCE(e_info->method)->quant)->b_id;
+    b_id = GEN_QUANT(mi->quants[0])->b_id;
     fe = fe_id;
     do
     { f_id = get_fe_facet(fe);
@@ -3290,21 +3269,22 @@ int mode;
   REAL density = 1.0;
   REAL radius = sqrt(SDIM_dot(e_info->x[0],e_info->x[0]));
   REAL c,value;
+  struct method_instance *mi = METH_INSTANCE(e_info->method);
 
   /* Linear mode only for now */
 
-  if ( METH_INSTANCE(e_info->method)->flags & USE_DENSITY )
-      density = get_edge_density(e_info->id);
+  if ( mi->flags & USE_DENSITY )
+    density = get_edge_density(e_info->id);
 
   c = SDIM_dot(e_info->sides[0][0],e_info->sides[0][0]);
   value = 2*radius*asin(sqrt(c)/2/radius);
   
 
   if ( mode == METHOD_VALUE )
-   if ( METH_INSTANCE(e_info->method)->flags & DEFAULT_INSTANCE )
-   { binary_tree_add(web.total_area_addends,value);
-     set_edge_length(e_info->id,value); 
-   }
+    if ( mi->flags & DEFAULT_INSTANCE )
+    { binary_tree_add(web.total_area_addends,value);
+      set_edge_length(e_info->id,value); 
+    }
 
   value *= density;
   if ( mode == METHOD_VALUE ) return value;
@@ -3373,9 +3353,10 @@ struct qinfo *e_info;
 #define NORTH 1
 #define SOUTH -1
 
-void spherical_arc_area_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void spherical_arc_area_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   if ( web.modeltype != LINEAR )
     kb_error(3944,"spherical_arc_area only in LINEAR mode.\n",RECOVERABLE);

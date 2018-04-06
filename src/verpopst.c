@@ -48,7 +48,7 @@ int verpop_str()
   }
 
   return popcount;
-}
+} // end verpop_str()
 
 /**************************************************************************
 *
@@ -56,8 +56,7 @@ int verpop_str()
 *
 * purpose: try popping given vertex; implements pop vertex in string model.
 */
-int pop_string_vertex(v_id)
-vertex_id v_id;
+int pop_string_vertex(vertex_id v_id)
 { int valence = get_vertex_evalence(v_id);
   int popcount = 0;
   if ( valence == 0 ) popcount = dissolve_vertex(v_id);
@@ -66,28 +65,19 @@ vertex_id v_id;
   else if ( (valence >= 2) && (get_vattr(v_id) & (CONSTRAINT|BOUNDARY)) )
      popcount = poponest(v_id,valence); 
   return popcount;
-} 
+} // end pop_string_vertex()
   
 /*****************************************************************************
 *
 *  function: poponest()
 *
 *  purpose: pop vertex with more that 3 edges
-*
 */
 
-/* comparison routine for qsort */
-static int vecomp(a,b)
-struct veredge *a,*b;
-{
-  if ( a->v_id < b->v_id ) return -1;
-  if ( a->v_id > b->v_id ) return 1;
-  return 0;
-}
-
-int poponest(v_id,edges)
-vertex_id v_id; 
-int edges;  /* number of edges at this vertex */
+int poponest(
+  vertex_id v_id,
+  int edges  /* number of edges at this vertex */
+)
 { edge_id e_id;
   int i,j;
   vertex_id new_v;
@@ -217,7 +207,7 @@ loopbottom:
   }
   temp_free((char *)side);
   return 1;
-}
+} // end poponest()
 
 
 /*****************************************************************************
@@ -227,7 +217,6 @@ loopbottom:
 *  purpose: pop vertex with more that 3 edges with variable density
 *           Finds pair with greatest net force, allowing for force
 *             of introduced edge.
-*
 */
 
 struct side_t { edge_id e_id;    /* which edge */
@@ -238,24 +227,25 @@ struct side_t { edge_id e_id;    /* which edge */
               int degfree;  /* degrees of freedom */
             } ;
 
-int anglecomp ARGS((struct side_t *,struct side_t *));
-
-int anglecomp(a,b)
-struct side_t *a,*b;
+int anglecomp(
+  struct side_t *a,
+  struct side_t *b
+)
 { REAL aa = atan2(a->vec[1],a->vec[0]);
   REAL bb = atan2(b->vec[1],b->vec[0]);
   if ( aa < bb ) return -1;
   if ( aa > bb ) return 1;
   return 0;
-}
+} // end anglecomp()
 
-int new_popverst(v_id,edges)
-vertex_id v_id; /* vertex being popped */
-int edges;  /* number of edges at this vertex */
+int new_popverst(
+  vertex_id v_id, /* vertex being popped */
+  int edges  /* number of edges at this vertex */
+)
 {
   int i,j,m;
   int besti;
-  vertex_id new_v;
+  vertex_id new_v = NULLID;
   edge_id new_e;
   edge_id e_id,first_e;
   edge_id e1,e2; /* edges to be pulled out */
@@ -266,7 +256,7 @@ int edges;  /* number of edges at this vertex */
   struct side_t *side;
   REAL bestmove[MAXCOORD];
   facetedge_id fe_id,new_fe1,new_fe2,other_fe;
-  int attr1,attr2,attrv;
+  ATTR attr1,attr2,attrv;
   REAL cosa;
   facetedge_id fe;
   int degfree; /* degrees of freedom of popping vertex */
@@ -469,18 +459,64 @@ order_succeed: ;
     if ( (side[0].degfree > degfree) && (side[1].degfree > degfree) &&
           (degfree >= 1) && (cosa < 0.0)  )
     { /* split apart along constraint rather than make Y */
+      facetedge_id start_fe,prev_fe;
+      facet_id f_id;
+
+      // Check to see we are not splitting edge chain into disjoint parts
+      fe = start_fe = get_edge_fe(e1);
+      if ( valid_id(start_fe) )
+        do
+        { prev_fe = get_prev_edge(fe);
+          if ( valid_id(prev_fe) )
+          { // make sure we have complete loop
+            facetedge_id ffe = fe;
+            while ( valid_id(ffe) && !equal_id(ffe,prev_fe) )
+            { ffe = get_next_edge(ffe);
+            };
+            if ( !equal_id(ffe,prev_fe) )
+            { if ( verbose_flag )
+              { sprintf(msg,"Not splitting vertex %s since that would create two separate edge chains for facet %s\n",
+                  ELNAME(v_id),ELNAME2(get_fe_facet(fe)));
+                outstring(msg);
+              }
+              return 0;
+            }
+          }
+          fe = get_next_facet(fe);
+        } while ( !equal_id(fe,start_fe) );
+
       if ( verbose_flag )
       { sprintf(msg,"Popping vertex %s.\n",ELNAME(v_id));
         outstring(msg);
       }
-      new_v = dup_vertex(v_id);  /* new vertex in same spot, to be pulled out */
+      new_v = dup_vertex(v_id);  /* new vertex in same spot, to be pulled away */
       attrv = get_vattr(new_v);
       remove_vertex_edge(v_id,e2);
       set_edge_tailv(e2,new_v);
-      fe = get_edge_fe(e1);
-      set_prev_edge(fe,inverse_id(fe));
-      fe = get_edge_fe(e2);
-      set_prev_edge(fe,inverse_id(fe));
+
+      fe = start_fe = get_edge_fe(e1);
+      if ( valid_id(start_fe) )
+      do 
+      {
+        set_prev_edge(fe,NULLID);
+        fe = get_next_facet(fe);
+        f_id = get_fe_facet(fe);
+        if ( !inverted(f_id) )
+          set_facet_fe(f_id,fe); // new start of edge chain
+      } while ( !equal_id(fe,start_fe) );
+
+      fe = start_fe = get_edge_fe(e2);
+      if ( valid_id(start_fe) )
+      do 
+      {
+        set_prev_edge(fe,NULLID);
+        fe = get_next_facet(fe);
+        f_id = get_fe_facet(fe);
+        if ( !inverted(f_id) )
+          set_facet_fe(f_id,fe); // new start of edge chain
+      } while ( !equal_id(fe,start_fe) );
+
+
       goto newpop_exit;
     }
   }
@@ -545,8 +581,12 @@ order_succeed: ;
         set_prev_edge(fe_c,inverse_id(fe_b));
         set_prev_edge(fe_d,inverse_id(fe_a));
         if ( !equal_id(f_id[0],f_id[2]) )
-        { /* merge f_id[2] into f_id[1] */
+        { /* merge f_id[2] into f_id[0] */
           facetedge_id fe = fe_c;
+          if ( b_id[2] != b_id[0] )
+          { set_facet_body(f_id[2],NULLID);
+            set_facet_body(f_id[2],b_id[0]);
+          }
           do
           { set_fe_facet(fe,f_id[0]);
             fe = get_next_edge(fe);
@@ -556,7 +596,7 @@ order_succeed: ;
           { set_fe_facet(fe,f_id[0]);
             fe = get_prev_edge(fe);
           } while ( valid_id(fe) && !equal_element(f_id[0],get_fe_facet(fe)) );
-          set_facet_body(f_id[2],NULLID);
+          set_facet_fe(f_id[2],NULLID); // so freeing doesn't wipe body
           free_element(f_id[2]);
         } 
       }
@@ -573,8 +613,7 @@ order_succeed: ;
         xnew[i] += -0.05*x0[i] + 0.05*x1[i] + 0.05*x2[i] - 0.05*x3[i];
       }
  
-      temp_free((char *)side);
-      return 1;
+      goto newpop_exit;
     }
     /* else fall through and do ordinary wedge splitting */
   }
@@ -615,6 +654,11 @@ order_succeed: ;
       }
 
       /* check to see if better than what we have */
+      if ( (edges == 3) && ((side[i].degfree <= 1)||(side[i+1].degfree <= 1)) )
+      { // one fixed wall, so make sure less than 90 degree angle
+        if ( dot(side[i].vec,side[i+1].vec,SDIM) < 0 )
+          continue;
+      }
       for ( m = 0 ; m < SDIM ; m++ )
       { f[m] = (side[i].density*side[i].vec[m]/side[i].norm 
                + side[i+1].density*side[i+1].vec[m]/side[i+1].norm);          
@@ -684,11 +728,7 @@ order_succeed: ;
   /* want to be careful here; new vertex and edge should get union of 
      properties of the two wedge edges */
   unset_attr(new_v,FIXED);
-  if ( attrv & CONSTRAINT )
-  { conmap_t *map = get_v_constraint_map(new_v);
-    for ( i = map[0] ; i >= 0 ; i-- ) map[i] = 0;
-    unset_attr(new_v,CONSTRAINT);
-  }
+  unset_v_all_constraints(new_v);
   if ( attrv & BOUNDARY )
   { set_boundary_num(new_v,0);
     unset_attr(new_v,BOUNDARY);
@@ -727,7 +767,7 @@ order_succeed: ;
     fe_id = side[besti].fe;
     fe_id = inverse_id(fe_id);
     other_fe = get_next_edge(fe_id);
-    if ( !equal_element(side[besti+1].e_id,get_fe_edge(other_fe)) )
+    if ( valid_id(other_fe) && !equal_element(side[besti+1].e_id,get_fe_edge(other_fe)) )
     { new_fe1 = new_facetedge(f1,new_e);
       set_edge_fe(new_e,new_fe1);
       set_prev_edge(other_fe,inverse_id(new_fe1));
@@ -736,6 +776,18 @@ order_succeed: ;
       set_next_edge(new_fe1,inverse_id(fe_id));
       set_next_facet(new_fe1,new_fe1);
       set_prev_facet(new_fe1,new_fe1);
+    }
+    if ( !valid_id(other_fe) )
+    { // pulling 2 edges off constraint probably,
+      // so just extend facet to new edge
+      new_fe1 = new_facetedge(f1,new_e);
+      set_edge_fe(new_e,new_fe1);
+      set_next_edge(fe_id,inverse_id(new_fe1));
+      set_next_edge(new_fe1,inverse_id(fe_id));
+      set_next_facet(new_fe1,new_fe1);
+      set_prev_facet(new_fe1,new_fe1);
+      if ( !inverted(f1) )
+        set_facet_fe(f1,new_fe1); // start of chain
     }
   }
 
@@ -746,7 +798,7 @@ order_succeed: ;
     { /* install new facetedge */
       fe_id = inverse_id(fe_id);
       other_fe = get_next_edge(fe_id);
-      if ( !equal_element(side[besti+1].e_id,get_fe_edge(other_fe)) )
+      if ( valid_id(other_fe) && !equal_element(side[besti+1].e_id,get_fe_edge(other_fe)) )
       { 
         new_fe1 = new_facetedge(f1,new_e);
         set_edge_fe(new_e,new_fe1);
@@ -757,6 +809,19 @@ order_succeed: ;
         set_next_facet(new_fe1,new_fe1);
         set_prev_facet(new_fe1,new_fe1);
       }
+      else if ( !valid_id(other_fe) )
+      { // just extend facet to new edge; probably pulling 2 off constraint
+        new_fe1 = new_facetedge(f1,new_e);
+        set_edge_fe(new_e,new_fe1);
+        set_next_edge(fe_id,inverse_id(new_fe1));
+        set_next_edge(new_fe1,inverse_id(fe_id));
+        set_next_facet(new_fe1,new_fe1);
+        set_prev_facet(new_fe1,new_fe1);
+        if ( !inverted(f1) )
+          set_facet_fe(f1,new_fe1); // start of chain
+
+      }
+
     }
   }
 
@@ -765,13 +830,32 @@ order_succeed: ;
   {
     fe_id = side[besti+1].fe;
     other_fe = get_prev_edge(fe_id);
-    if ( !equal_element(side[besti].e_id,get_fe_edge(other_fe)) )
+    if ( valid_id(other_fe) && !equal_element(side[besti].e_id,get_fe_edge(other_fe)) )
     { new_fe2 = new_facetedge(f2,new_e);
       set_edge_fe(new_e,new_fe2);
       set_next_edge(other_fe,new_fe2);
       set_prev_edge(fe_id,new_fe2);
       set_next_edge(new_fe2,fe_id);
       set_prev_edge(new_fe2,other_fe);
+
+      if ( valid_id(new_fe1) )
+      { set_prev_facet(new_fe1,new_fe2);
+        set_next_facet(new_fe1,new_fe2);
+        set_prev_facet(new_fe2,new_fe1);
+        set_next_facet(new_fe2,new_fe1);
+      } else
+      { set_next_facet(new_fe2,new_fe2);
+        set_prev_facet(new_fe2,new_fe2);
+      }
+    }
+    else if ( !valid_id(other_fe) )
+    { // just extend facet to new edge; probably pulling 2 off constraint.
+      new_fe2 = new_facetedge(f2,new_e);
+      set_edge_fe(new_e,new_fe2);
+      set_prev_edge(fe_id,new_fe2);
+      set_next_edge(new_fe2,fe_id);
+      if ( !inverted(f2) )
+        set_facet_fe(f2,new_fe2);  // is at start of chain
 
       if ( valid_id(new_fe1) )
       { set_prev_facet(new_fe1,new_fe2);
@@ -791,7 +875,7 @@ order_succeed: ;
     if ( valid_id(f2) )
     {
       other_fe = get_prev_edge(fe_id);
-      if ( !equal_element(side[besti].e_id,get_fe_edge(other_fe)) )
+      if ( valid_id(other_fe) && !equal_element(side[besti].e_id,get_fe_edge(other_fe)) )
       { new_fe2 = new_facetedge(f2,new_e);
         set_edge_fe(new_e,new_fe2);
         set_next_edge(other_fe,new_fe2);
@@ -809,6 +893,26 @@ order_succeed: ;
           set_prev_facet(new_fe2,new_fe2);
         }
       }
+      else if ( !valid_id(other_fe) )
+      { // just extend facet to new edge; just pulling off constraint
+        new_fe2 = new_facetedge(f2,new_e);
+        set_edge_fe(new_e,new_fe2);
+        set_prev_edge(fe_id,new_fe2);
+        set_next_edge(new_fe2,fe_id);
+        if ( !inverted(f2) )
+          set_facet_fe(f2,new_fe2);  // is at start of chain
+
+        if ( valid_id(new_fe1) )
+        { set_prev_facet(new_fe1,new_fe2);
+          set_next_facet(new_fe1,new_fe2);
+          set_prev_facet(new_fe2,new_fe1);
+          set_next_facet(new_fe2,new_fe1);
+        } else
+        { set_next_facet(new_fe2,new_fe2);
+          set_prev_facet(new_fe2,new_fe2);
+        }
+      }
+
     }
   }                
 
@@ -824,10 +928,17 @@ order_succeed: ;
 
 newpop_exit:
   temp_free((char *)side);
+
+  if ( everything_quantities_flag )
+  { // get all content methods right
+    if ( valid_id(new_v) )
+      assure_v_constraints(new_v);
+    assure_v_constraints(v_id);
+  }
   if ( (edges > 4) || ((edges > 2) && (degfree < SDIM)) )
     return 1 + new_popverst(v_id,edges-1); /* recurse if need */
   return 1;
-}
+} // end new_popverst()
 
 /******************************************************************************
     Autopop and autochop functions.
@@ -888,8 +999,7 @@ void autopop_cleanup()
 *           Soapfilm model: also detects for facets disappearing.
 */
 
-void autopop_detect(scale)
-REAL scale;  /* scale factor for motion */
+void autopop_detect(REAL scale  /* scale factor for motion */)
 {
   edge_id e_id;
   REAL minlength = sqrt(2*scale); /* stability critical length */
@@ -928,7 +1038,7 @@ REAL scale;  /* scale factor for motion */
     { if ( (length < minlength) || 
           (length + dx <= (runge_kutta_flag ? 0.52*length : 0.0)) )
       { if ( immediate_autopop_flag )
-        { int ret = eliminate_edge(e_id); 
+        { int ret = delete_edge(e_id); 
           if ( ret ) free_element(e_id); 
           continue; /* next edge */
         }
@@ -978,8 +1088,8 @@ REAL scale;  /* scale factor for motion */
       }
       if ( (area_rate < 0) && (area + scale*area_rate <= minlength*perim/2) )
       { if ( immediate_autopop_flag )
-          eliminate_facet(f_id);
-        else /* add to list */
+          delete_facet(f_id);
+        else if ( autopop_flag ) /* add to list */
           autopop_list[autopop_count++] = f_id;
       }
     } /* end facet loop */
@@ -994,7 +1104,6 @@ REAL scale;  /* scale factor for motion */
 *  purpose: After motion, eliminate edges found by autopop_detect()
 *           and pop any resulting bad vertices.
 *           In soapfilm model, can also delete facets.
-*
 */
 
 void autopop_pop()
@@ -1019,11 +1128,11 @@ void autopop_pop()
   for ( k = 0 ; k < autopop_count ; k++ )
   { if ( id_type(autopop_list[k]) == EDGE ) 
     { if ((get_eattr(autopop_list[k])&ALLOCATED) && 
-                         eliminate_edge(autopop_list[k]))
+                         delete_edge(autopop_list[k]))
         free_element(autopop_list[k]);
     }
     else
-      eliminate_facet(autopop_list[k]);
+      delete_facet(autopop_list[k]);
   }
   if ( autopop_count )
   {
@@ -1049,7 +1158,7 @@ void autopop_pop()
 
   free_discards(DISCARDS_SOME); /* prevents auto pileup */
 
-}
+} // end autopop_pop()
 
 
 /***********************************************************************
@@ -1090,5 +1199,5 @@ void autochop_chop()
   autochop_list = NULL;
   autochop_count = 0;
 
-}
+} // end autochop_chop()
 

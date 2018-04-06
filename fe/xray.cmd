@@ -22,6 +22,17 @@ xray := {
   local xx,yy,jitterx,jittery,minx,miny,maxx,maxy,tension_cutoff;
   local dx,dy,ax,ay,az,bx,by,bz,cx,cy,cz,hix,hiy,lox,loy,maxi,maxj;
   local mini,minj,fsign,xyarea,ii,jj,area1,area2,area3,maxr,xpts,ypts;
+  local results;
+
+  if space_dimension != 3 then
+  { errprintf "The 'xray' command must be run in three-dimensional space.\n";
+    abort;
+  };
+
+  if surface_dimension == 1 then
+  { errprintf "The 'xray' command is not meant for the string model.\n";
+    abort;
+  };
 
   define results real[xgridsize][ygridsize];
   for ( xx := 1 ; xx <= xgridsize ; xx += 1 )
@@ -108,10 +119,10 @@ xray := {
   /* output results in postscript format, making low density white */
   xpts := 500; ypts := 500; // point size of image
   // using kludges to get %% stuff to print right on Windows and Unix
-  printf "%!"; printf"PS-Adobe-3.0 EPSF-3.0\n";
-  printf "%%"; printf"BoundingBox: 0 0 %d %d\n",xpts,ypts;
-  printf "%%"; printf"Creator: Surface Evolver xray.cmd\n";
-  printf "%%"; printf"EndComments\n\n";
+  printf "%%!"; printf"PS-Adobe-3.0 EPSF-3.0\n";
+  printf "%%%%"; printf"BoundingBox: 0 0 %d %d\n",xpts,ypts;
+  printf "%%%%"; printf"Creator: Surface Evolver xray.cmd\n";
+  printf "%%%%"; printf"EndComments\n\n";
   printf "%f %f scale\n",xpts/xgridsize,ypts/ygridsize;
   printf "/px { newpath setgray moveto 1 0 rlineto 0 1 rlineto -1 0 rlineto closepath fill} def\n";
   for ( ii := 0 ; ii < xgridsize ; ii += 1 )
@@ -123,3 +134,8 @@ xray := {
 }
 
     
+// End xray.cmd
+
+// Usage: set xgridsize and ygridsize to the desired resolution, 
+// i.e. pixels across and down and give the command
+//        xray >>> "filename.ps"

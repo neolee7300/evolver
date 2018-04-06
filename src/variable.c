@@ -2,7 +2,7 @@
 *  This file is part of the Surface Evolver source code.     *
 *  Programmer:  Ken Brakkf, brakke@susqu.edu                 *
 *************************************************************/
- 
+  
 /***************************************************************
 *
 *  File:    variable.c
@@ -17,22 +17,26 @@
 extern "C" {
 #endif
 
-char *evolver_version = "2.30c";
+char *evolver_version = "2.70a";
 char needed_version[30]; 
 
 #ifdef mpi_evolver 
-char *version = "version 2.30c, January 15, 2008; compiled for mpi.";
+char *version = "version 2.70a, August 27, 2013; compiled for MPI";
 #else
 #ifdef SGI_MULTI
-char *VERSION = "Version 2.30c, January 15, 2008; SGI multiprocessing"; 
+char *VERSION = "Version 2.70a, August 27, 2013; SGI multiprocessing"; 
 #else
 #ifdef _WIN64
-char *VERSION = "Version 2.30c, January 15, 2008 Windows 64-bit, OpenGL";
+char *VERSION = "Version 2.70a, August 27, 2013; Windows OpenGL";
 #else
 #ifdef WIN32
-char *VERSION = "Version 2.30c, January 15, 2008; Windows 32-bit, OpenGL";
+ #ifdef HOOPS
+   char *VERSION = "Version 2.70a, August 27, 2013; Windows HOOPS";
+ #else
+   char *VERSION = "Version 2.70a, August 27, 2013; Windows OpenGL";
+#endif
 #else
-char *VERSION = "Version 2.30c, January 15, 2008";
+char *VERSION = "Version 2.70a, August 27, 2013";
 #endif
 #endif
 #endif
@@ -55,6 +59,8 @@ int this_task = 1; /* machine identifier for MPI; really task number */
 int mpi_subtask_command_flag; /* whether command is running on task
      as subcommand from master instead of running isolated */
 int mpi_local_bodies_flag; 
+/* Whether in initialization state or tasks are waiting */
+int mpi_initialization_flag = 1;
 
 #ifdef MPI_EVOLVER
 int match_id_flag = 1; /* so remote references to locals work */
@@ -70,13 +76,22 @@ REAL **optparam_congrads;  /* constraint gradients */
 int star_finagling; /* extra bad configuration detection */
 int force_deletion; /* even if it seems a bad idea */
 
+/* controls whether detorus command merges regardless of vertex parents */
+int detorus_sticky;
+
 /* my own ctypes */
 char kb_upper_array[256];
 char kb_lower_array[256];
 
+int DWIDTH = 18;  // default character width for printing REALs
+int DPREC = 15;   // default precision for printing REALs
+
 REAL machine_eps;  /* smallest machine resolution at 1.0  */
+REAL root8machine_eps;  /* eighth root, for RF and RD in userfunc.c  */
 char loadfilename[PATHSIZE]; /* for LOAD command */
-int addload_flag;  /* if doing ADDLOAD command */
+int addload_flag;  /* if doing ADDLOAD or REPLACE_LOAD command */
+int replace_load_flag; /* if doing REPLACE_LOAD */
+
 jmp_buf loadjumpbuf;  /* for LOAD command */
 int exit_flag;  /* whether to end this command interpreter */
 int hessian_subshell_flag; /* whether in hessian subshell, so can't menu  */
@@ -101,10 +116,11 @@ char *cmdfilename; /* for saving command line read file */
 int uminus_flag; /* whether to interpret " -" as UMINUS */
 int facet_general_flag;
 int everything_quantities_flag;  /* for pure quantity version */
+int show_all_quantities; /* if Q and v show internal quantities */
 int auto_convert_flag = 1; /* whether to automatically convert_to_quantities */
-int show_all_quantities;  /* to display default quantities also */
 int option_q = 0;  /* record command line option  -q, default off */
 int random_seed = 1;  /* seed for random number generators */
+int default_random_seed = 1;  /* seed for random number generators from -s option */
 int keep_macros_flag; /* to preserve macros after datafile. */
 int macro_count;  /* number of macros defined */
 char  *macro_subs;  /* string space for substitution strings */
@@ -148,7 +164,9 @@ int quiet_load_flag; /* whether to display output while loading file */
 int exit_after_error; /* auto exit flag */ 
 int exit_after_warning; /* auto exit flag */ 
 int break_after_warning; /* auto break flag */ 
+int break_on_warning; /* auto break flag */
 int last_error;  /* number of last error */
+int force_edgeswap_flag; /* to override equiangulation warnings */
 int change_flag;  /* set during command that changes surface */
 int assigntype;  /* type of assignment operator */
 char *cmdptr;    /* current command or input for parsing */
@@ -159,6 +177,8 @@ int itdebug;    /* flag for iteration debugging */
 int nprocs = 1;     /* number of parallel processors */
 int procs_requested = 1; /* number of processes desired */
 REAL proc_total_area[MAXPROCS]; /* for individual processes */
+REAL proc_real_ret[MAXPROCS]; /* for individual processes to return a real value */
+int proc_int_ret[MAXPROCS]; /* for individual processes to return a real value */
 int logfile_flag; /* whether logging in progress */
 char logfilename[PATHSIZE];
 FILE *logfilefd;
@@ -193,8 +213,9 @@ int graph_capabilities;  /* bits to describe what current graphics device
                                can do */
 int edge_alpha_flag; /* whether edges have alpha channel */
 int facet_alpha_flag; /* whether facets have alpha channel */
+int opacity_attr; /* attribute number of opacity attribute */
 int facetback_alpha_flag; /* whether facetbacks have alpha channel */
-int background_color = WHITE;  /* graphics background */
+int background_color = -1;  /* graphics background, unset */
 int backcull_flag = 0;  /* 3D graphics backculling */
 int setting_backcull = 0; 
 
@@ -202,11 +223,13 @@ int setting_backcull = 0;
 int slice_view_flag;
 REAL slice_coeff[MAXCOORD+2];
 int slice_coeff_global;
+int slice_coeff_set_flag;
 
 /* clipping view */
 int clip_view_flag;
 int clip_coeff_global;
 REAL clip_coeff[MAXCLIPS][MAXCOORD+2];
+int clip_coeff_set_flag;
 
 
 #ifdef IRIS
@@ -235,6 +258,7 @@ int new_vertex_id,new_edge_id,new_facet_id,new_body_id; /* just created elements
 int gv_vect_start; /* vector vertex start in vpicklist */
 int circular_arc_flag; /* whether to draw edges as arcs */
 int spherical_arc_flag; /* whether to draw edges as spherical arcs */
+int rotate_lights_flag; /* whether lights rotate with object */
 
 element_id junk; /* for MSC bug */
 #ifndef PARALLEL_MACHINE
@@ -255,8 +279,8 @@ struct dll dll_list[MAX_DLL];
 int dy_global_hash_max;      /* allocated entries */
 int dy_global_hash_maxfill;  /* entries before expanding */
 int dy_global_hash_used;     /* entries actually in use */
-struct global *Globals; /* handy for debugging */
-struct global *perm_Globals; /* handy for debugging */
+struct global **Globals; /* handy for debugging */
+struct global **perm_Globals; /* handy for debugging */
 int old_global_count; /* for error recovery */
 int old_perm_global_count; /* for error recovery */
 int proc_timestamp; /* for ordering procedure definitions */
@@ -275,6 +299,9 @@ char area_method_name[100];  /* for replacing default */
 char volume_method_name[100];  /* for replacing default */
 int dirichlet_flag;  /* to do area hessian with Dirichlet hessian */
 int sobolev_flag;  /* to do area hessian with Sobolev hessian */
+
+struct treenode *eval_stack_trace[TRACEMAX+2];
+int eval_stack_trace_spot;  // points to next empty spot
 
 FILE *logfd = NULL;  /* command log file */
 int read_depth;  /* for nested reads */
@@ -306,8 +333,10 @@ extern int reading_elements_flag; /* so parser knows attributes should not
      be accepted in expressions */
 FILE *data_fd;
 FILE *outfd;     /* where normal output is to go */
+FILE *erroutfd;     /* where error output is to go */
 int estimate_flag;    /* for toggling estimate of energy decrease */
 REAL estimated_change; /* stored result */
+int K_altitude_flag; /* for K command mode */
 int autorecalc_flag; /* for toggling autorecalc after variable assign  */
 int verbose_flag;    /* for lots of messages */
 int parens;             /* level of parenthesis nesting */
@@ -323,6 +352,7 @@ int pop_disjoin_flag;  /* whether cones to be disjoined rather than merged */
 int pop_enjoin_flag;  /* whether cones to be enjoined rather than disjoined */
 int pop_to_edge_flag;  /* control which way popping goes */
 int pop_to_face_flag;  /* control which way popping goes */
+int septum_flag; /* control whether septums put across pop tunnels, -1,0,or 1 */
 int autochop_flag;     /* whether to do autochopping */
 REAL autochop_length;  /* max edge length for autochop */
 int autopop_count;  /* number of edges found */
@@ -376,24 +406,24 @@ int quantity_function_sparse_flag;
 #if defined(USEYSMP) || defined(MPI_EVOLVER)
 int ysmp_flag=YSMP_FACTORING;  /* set if doing Yale Sparse Matrix version */
 /* factor matrix */
-void (*sp_factor_func)ARGS((struct linsys *)) = ysmp_factor;
+void (*sp_factor_func)(struct linsys *,int) = ysmp_factor;
 /* solve given rhs */
-void (*sp_solve_func)ARGS((struct linsys *,REAL *,REAL *)) = ysmp_solve;
+void (*sp_solve_func)(struct linsys *,REAL *,REAL *,int) = ysmp_solve;
 /* solve multiple given rhs */
-void (*sp_solve_multi_func)ARGS((struct linsys*,REAL**,REAL**,int)) = ysmp_solve_multi;
+void (*sp_solve_multi_func)(struct linsys*,REAL**,REAL**,int,int) = ysmp_solve_multi;
 /* matrix inner product with hessian inverse as metric */
-void (*sp_CHinvC_func)ARGS((struct linsys *)) = sp_CHinvC;
+void (*sp_CHinvC_func)(struct linsys *) = sp_CHinvC;
 #else
 /* use mindeg since doing sparse_constraints */
 int ysmp_flag=MINDEG_FACTORING;  /* Hessian problem in Borland LONGDOUBLE version */
 /* factor matrix */
-void (*sp_factor_func)ARGS((struct linsys *)) = xmd_factor;
+void (*sp_factor_func)(struct linsys *,int) = xmd_factor;
 /* solve given rhs */
-void (*sp_solve_func)ARGS((struct linsys *,REAL *,REAL *)) = xmd_solve;
+void (*sp_solve_func)(struct linsys *,REAL *,REAL *,int) = xmd_solve;
 /* solve multiple given rhs */
-void (*sp_solve_multi_func)ARGS((struct linsys*,REAL**,REAL**,int)) = xmd_solve_multi;
+void (*sp_solve_multi_func)(struct linsys*,REAL**,REAL**,int,int) = xmd_solve_multi;
 /* matrix inner product with hessian inverse as metric */
-void (*sp_CHinvC_func)ARGS((struct linsys *)) = sp_CHinvC;
+void (*sp_CHinvC_func)(struct linsys *) = sp_CHinvC;
 
 #endif
 
@@ -412,18 +442,18 @@ REAL BKalpha = 0.525; /* single/REAL pivot ratio */
 int BK_flag=0;  /* for enabling Bunch-Kaufman version of sparse factoring */
 /* sparse matrix function pointers, for easy switching among algorithms */
 /* multiply vector by original sparse matrix */
-void (*sp_mul_func)ARGS((struct linsys *, REAL*,REAL*)) = bk_mul;
+void (*sp_mul_func)(struct linsys *, REAL*,REAL*) = bk_mul;
 /* convert raw Hessian data to standard sparse format */
-void (*sp_AIJ_setup_func)ARGS((int,struct linsys*))
+void (*sp_AIJ_setup_func)(int,struct linsys*)
     = bk_AIJ_setup;
 /* set up  matrices needed for handling constraints */
-void (*sp_constraint_setup_func)ARGS((int,struct linsys *)) 
+void (*sp_constraint_setup_func)(int,struct linsys *) 
     = bk_constraint_setup;
 /* set up projection to constraints using hessian metric */
-void (*sp_hess_project_setup_func)ARGS((struct linsys *)) 
+void (*sp_hess_project_setup_func)(struct linsys *) 
     = BK_hess_project_setup;
 /* optional ordering of vertices */
-void (*sp_ordering_func)ARGS((struct linsys *)) = NULL;
+void (*sp_ordering_func)(struct linsys *) = NULL;
 
 
 int eigen_pos,eigen_neg,eigen_zero;  /* inertia of shifted hessian */
@@ -479,6 +509,7 @@ int F_BOUNDARY_ATTR;
 struct expnode torus_period_expr[MAXCOORD][MAXCOORD];
 struct expnode torus_display_period_expr[MAXCOORD][MAXCOORD];
 int torus_display_mode;  /* default, raw, connected, clipped */
+int former_torus_display_mode; /* used when loading torus files after non-torus */
 
 /* squared curvature as part of energy */
 struct v_curve_t *v_curve;
@@ -512,6 +543,7 @@ int mean_curv_int_flag;  /* for unsquared mean curvature */
 int normal_curvature_flag; /* choice of curvature formula */
 int div_normal_curvature_flag; /* choice of curvature formula */
 int marked_edge_attr;
+int sqtor_marked_edge_attr; // for marking sq_torsion edges
 
 REAL *f_sums;  /* facet_knot_energy, for sums to all other vertices */
 
@@ -519,25 +551,37 @@ REAL *f_sums;  /* facet_knot_energy, for sums to all other vertices */
 REAL homothety_target;
 
 int scrollbuffersize=25; /* output console lines */
+char console_title[1000]; /* for command window title */
+int console_title_global; /* id number for console_title in symbol table */
+char graphics_title[1000];  /* for graphics window title */
+char graphics_title2[1000];  /* for graphics window title */
+char graphics_title3[1000];  /* for graphics window title */
+int graphics_title_global; /* id number for graphics_title in symbol table */
+int graphics_title2_global; /* id number for graphics_title2 in symbol table */
+int graphics_title3_global; /* id number for graphics_title3 in symbol table */
 char *msg;      /* for constructing user messages */
 int msgmax;     /* length allocated */
 char errmsg[ERRMSGSIZE];  /*  for kb_error() routine */
+int suppress_erroutstring; /* to temporarily quiet erroutstring() */
 
 jmp_buf jumpbuf[MAXCMDDEPTH];    /* for error recovery  */
 jmp_buf cmdbuf;    /* for command error recovery  */
 jmp_buf m_jumpbuf[MAXPROCS];    /* for multiproc error recovery  */
 jmp_buf graphjumpbuf;  /* for errors during MS graphing */
 #ifdef PTHREADS
+pthread_t main_thread_id;
 pthread_t draw_thread_id; /* for graphics thread */
 #else
+unsigned int main_thread_id; 
 unsigned int draw_thread_id; /* for graphics thread */
 #endif
-int this_thread;  /* debugging THREADBLOCK */
 int parse_error_flag;  /* set when parser hits error */
 int recovery_flag;      /* set while recovering from parsing error */
 int parse_errors;     /* for counting errors */
 int breakflag;      /* set by user interrupt */
 int iterate_flag;  /* so handler knows when iteration in progress */
+int hessian_iterate_flag; /* so handler knows when hessian has
+                                    surface in bad state */
 struct oldcoord saved; /* for old coordinates */
 
 /* conjugate gradient stuff */
@@ -595,6 +639,12 @@ IColor rgb_colors[16] = {  /* rgba */ {0.0,0.0,0.0,1.},{0.0,0.0,1.,1.},
  {1.,0.5,0.,1.},{.6,.6,.6,1.},{.3,.3,.3,1.},{.3,.8,1.,1.}, {.5,1.,.5,1.},
  {.5,1.,1.,1.},{1.,.5,.5,1.},{1.,.5,1.,1.},{1.,1.,.0,1.},{1.,1.,1.,1.} };
 
+IColor cmyk_colors[16] = { {0,0,0,1.0},{1.0,1.0,0.0,0.0},
+{1.0,0.0,1.0},{1.0,0.0,0.0,0.0},{0.0,1.0,1.0,0.0},{0.0,1.0,0.0,0.0},
+{0.0,0.5,1.0,0.0},{0.0,0.0,0.0,0.40},{0.0,0.0,0.0,0.7},{0.7,0.2,0.0,0.0},{0.5,0.0,0.5},
+{0.5,0.0,0.0,0.0},{0.0,0.5,0.5,0.0},{0.0,0.5,0.0,0.0},{0.0,0.0,1.0,0.0},{0.0,0.0,0.0,0.0}};
+
+
 /* query variables */
 int condition_flag;     /* whether query has condition expression */
 struct expnode *show_expr[NUMELEMENTS];  /* for element show expressions */
@@ -612,6 +662,7 @@ char cmapname[100];  /* colormap file name */
 maprow *colormap; /* rgba colormap, values 0 to 1 */
 int fillcolor; /* current polygon fill color */
 int box_flag = 0;  /* whether or not to show outline box */
+int bounding_box_color = BLUE; 
 int ridge_color_flag;  /* whether to differently color */
 int visibility_test; /* whether to do after depth sort */
 REAL  overall_size;  /* for anybody who wants to know how big */
@@ -701,6 +752,7 @@ int phasemax;  /* number of phases */
 int transform_count;  /* number of transforms, including identity */
 REAL ***view_transforms;
 int view_transforms_global; /* global var number */
+int view_transform_generators_global; /* global var number */
 int *view_transform_det; /* to see if normals need flipping */
 int transforms_flag; /* whether to show transforms */
 int transform_gen_count;
@@ -710,9 +762,14 @@ char transform_expr[100];  /* save it */
 int transform_depth;  /* tree depth in transform generation */
 int *transform_colors;
 int view_transform_swap_colors_global; /* global var number */
+int transform_gen_swap_colors_global; /* global var number */
 int *transform_parity;
 int *transform_gen_swap;
 int transform_colors_flag;
+int view_transforms_unique_point_global; /* global id number of vector */
+int view_transforms_unique_point_flag; /* whether to use unique point */
+REAL *view_transforms_unique_point; /* coordinates of unique point */
+int some_no_transforms_flag; /* set when some element made no_transform */
 
 
 int fixed_constraint_flag;  /* set if restoring force valid */
@@ -808,7 +865,9 @@ REAL gauss2Dwt2[3]     = { (REAL)1.0/3, (REAL)1.0/3, (REAL)1.0/3 };
 
 */
 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+#define ROOT15 3.8729833462074168851792653997824q
+#elif defined(LONGDOUBLE)
 #define ROOT15 3.8729833462074168851792653997824L
 #else
 #define ROOT15 3.8729833462074168851792653997824
@@ -850,7 +909,148 @@ Symmetric Quadrature Rules for the Triangle, J. Inst. Math Applics 15 (1975),
 19-32. Table 4, p. 31-32 in particular. Note their weights must be
 divided by multiplicity. */
 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+
+/* Degree 6, 12 point rule */
+
+REAL gauss2Dpt6[12][3] = {
+    {5.014265096581716452598916981622520e-01Q,2.492867451709183298036131820303480e-01Q,2.492867451709100249364951198073999e-01Q},
+    {2.492867451709029078515338975777059e-01Q,2.492867451709029087596082200592039e-01Q,5.014265096581941833888578823630887e-01Q},
+    {2.492867451709183270497538554128221e-01Q,5.014265096581716436014191018962773e-01Q,2.492867451709100293488270426909022e-01Q},
+    {8.738219710169944965483631057423612e-01Q,6.308901449150063227060230390799104e-02Q,6.308901449150487118103459034964771e-02Q},
+    {6.308901449150118289948940474325112e-02Q,6.308901449150118062397376635675358e-02Q,8.738219710169976364765368288999961e-01Q},
+    {6.308901449150063052654827028098232e-02Q,8.738219710169944969331104478455354e-01Q,6.308901449150487254034128187348069e-02Q},
+    {6.365024991213878806775528486102556e-01Q,5.314504984482153366497370826580484e-02Q,3.103524510337905856574734431239388e-01Q},
+    {5.314504984481301853852016593456701e-02Q,3.103524510337810024162297298232822e-01Q,6.365024991214059790452501042421485e-01Q},
+    {6.365024991214020861075296803426151e-01Q,3.103524510337816253444925085740704e-01Q,5.314504984481628854797781108331449e-02Q},
+    {5.314504984482153344934219603940619e-02Q,6.365024991213878755832859576703452e-01Q,3.103524510337905909673718462902471e-01Q},
+    {3.103524510337816190237041333136396e-01Q,6.365024991214020904494434773200222e-01Q,5.314504984481629052685238936633823e-02Q},
+    {3.103524510337810090903747435196749e-01Q,5.314504984481301939183175756123539e-02Q,6.365024991214059715177934989190889e-01Q}
+ };
+
+REAL gauss2Dwt6[12] = {
+  1.167862757263768807179050181734018e-01Q,
+  1.167862757263843389483416568714488e-01Q,
+  1.167862757263768784096221602729326e-01Q,
+  5.084490637020761505324985831039298e-02Q,
+  5.084490637020522089450596003542061e-02Q,
+  5.084490637020761481505460912478438e-02Q,
+  8.285107561837945338854543136636368e-02Q,
+  8.285107561836744468304776994936136e-02Q,
+  8.285107561837382557721317499207620e-02Q,
+  8.285107561837945396508366849107151e-02Q,
+  8.285107561837382739566637451872796e-02Q,
+  8.285107561836744615176431789401854e-02Q
+ };
+/* End degree 6, 12 point rule */
+
+/* Degree 8, 16 point rule */
+
+REAL gauss2Dpt8[16][3] = {
+    {8.141482341455367819699534994722419e-02Q,4.592925882927231954528529484765580e-01Q,4.592925882927231263501517015762163e-01Q},
+    {4.592925882927231475552831519982072e-01Q,4.592925882927231440671578886916433e-01Q,8.141482341455370837755895931014647e-02Q},
+    {4.592925882927231895384329284653822e-01Q,8.141482341455367725255260372755380e-02Q,4.592925882927231332090144678070624e-01Q},
+    {8.989055433659380503601403587955802e-01Q,5.054722831703098198068783486597387e-02Q,5.054722831703096765917180633844595e-02Q},
+    {5.054722831703097612348075243852114e-02Q,5.054722831703097747109655923190572e-02Q,8.989055433659380464054226883295770e-01Q},
+    {5.054722831703098257424395170177590e-02Q,8.989055433659380504838956492830988e-01Q,5.054722831703096694186039901512568e-02Q},
+    {8.394777409957582885939168507211434e-03Q,7.284923929554043342528491158985918e-01Q,2.631128296346380828612117155941962e-01Q},
+    {7.284923929554042417294993455100135e-01Q,2.631128296346381446917400333744423e-01Q,8.394777409957613578760621115544193e-03Q},
+    {8.394777409957621342164678161115858e-03Q,2.631128296346381119629070781745168e-01Q,7.284923929554042666949282436643645e-01Q},
+    {7.284923929554043315683241846756702e-01Q,8.394777409957581437665567662234137e-03Q,2.631128296346380869940102476620962e-01Q},
+    {2.631128296346381047270423024925753e-01Q,8.394777409957622165712741454623092e-03Q,7.284923929554042731072449560528032e-01Q},
+    {2.631128296346381492938033402499032e-01Q,7.284923929554042400931564293706084e-01Q,8.394777409957610613040230379491482e-03Q},
+    {3.333333333333333298756845531938201e-01Q,3.333333333333333295405972146583049e-01Q,3.333333333333333405837182321478719e-01Q},
+    {6.588613844964795996881977667912005e-01Q,1.705693077517601833650453623478371e-01Q,1.705693077517602169467568708609624e-01Q},
+    {1.705693077517602184835385126924616e-01Q,1.705693077517602218799588702268691e-01Q,6.588613844964795596365026170806708e-01Q},
+    {1.705693077517601874682269645273959e-01Q,6.588613844964796009415386071000160e-01Q,1.705693077517602115902344283725850e-01Q}
+ };
+
+REAL gauss2Dwt8[16] = {
+  9.509163426728462211812551727237322e-02Q,
+  9.509163426728463040475131002633975e-02Q,
+  9.509163426728462185881148584352696e-02Q,
+  3.245849762319807950285367629838385e-02Q,
+  3.245849762319808200538225570309642e-02Q,
+  3.245849762319807942454185302686576e-02Q,
+  2.723031417443497909034662162999206e-02Q,
+  2.723031417443500130682974809145410e-02Q,
+  2.723031417443500345941207712305268e-02Q,
+  2.723031417443497840073343436442744e-02Q,
+  2.723031417443500356949877575284559e-02Q,
+  2.723031417443499976224748349027387e-02Q,
+  1.443156076777871682510911104929244e-01Q,
+  1.032173705347182493943310821168220e-01Q,
+  1.032173705347182521427179733806271e-01Q,
+  1.032173705347182493083255953869918e-01Q
+ };
+/* End degree 8, 16 point rule */
+
+/* Degree 11, 28 point rule */
+
+REAL gauss2Dpt11[28][3] = {
+    {3.333333333333331934268876397513019e-01Q,3.333333333333331885493480074000521e-01Q,3.333333333333336180237643528486460e-01Q},
+    {9.480217181434248520796703701066877e-01Q,2.598914092828746905227163743279928e-02Q,2.598914092828767886805799246051302e-02Q},
+    {2.598914092828750250330683735768600e-02Q,2.598914092828750379810174479386825e-02Q,9.480217181434249936985914178484461e-01Q},
+    {2.598914092828747233043276628489387e-02Q,9.480217181434248503391185984344709e-01Q,2.598914092828767733044863528063680e-02Q},
+    {8.114249947041541057105114602872123e-01Q,9.428750264792309152262594776976324e-02Q,9.428750264792280276686259194302444e-02Q},
+    {9.428750264792294205688057283929199e-02Q,9.428750264792293976562531942692914e-02Q,8.114249947041541181774941077337804e-01Q},
+    {9.428750264792308535346571246913308e-02Q,8.114249947041541039428774073510201e-01Q,9.428750264792281070365688017984295e-02Q},
+    {1.072644996557223364032624816075547e-02Q,4.946367750172142541655246489091777e-01Q,4.946367750172135121941491029300675e-01Q},
+    {4.946367750172138356569288298990328e-01Q,4.946367750172138492217506010880465e-01Q,1.072644996557231512132056901292381e-02Q},
+    {4.946367750172142603206405430763140e-01Q,1.072644996557223283969745611789061e-02Q,4.946367750172135068396620008057998e-01Q},
+    {5.853132347709768611618492370226948e-01Q,2.073433826145115476405318676892802e-01Q,2.073433826145115911976188952880251e-01Q},
+    {2.073433826145112929736995849484435e-01Q,2.073433826145112917691542485510629e-01Q,5.853132347709774152571461665004905e-01Q},
+    {2.073433826145115514898445652372987e-01Q,5.853132347709768556041881135437627e-01Q,2.073433826145115929059673212189386e-01Q},
+    {1.221843885990157953731678025662522e-01Q,4.389078057004918473935962589894976e-01Q,4.389078057004923572332359384442463e-01Q},
+    {4.389078057004920432774888717532916e-01Q,4.389078057004920362033436105583186e-01Q,1.221843885990159205191675176883897e-01Q},
+    {4.389078057004918488377262692852548e-01Q,1.221843885990157929582029620989605e-01Q,4.389078057004923582040707686157848e-01Q},
+    {5.408103218906657362601826963019979e-16Q,8.588702812826352260744592701671935e-01Q,1.411297187173642331152188391670671e-01Q},
+    {8.588702812826362357651429254730832e-01Q,1.411297187173635550314485531809786e-01Q,2.092034085213459382564508841867072e-16Q},
+    {5.894249514555971772314561308509348e-16Q,1.411297187173634389158630737803813e-01Q,8.588702812826359716591854706224420e-01Q},
+    {8.588702812826352167254126247917169e-01Q,5.485432261907201156555876498731513e-16Q,1.411297187173642347313611844881671e-01Q},
+    {1.411297187173634349207716824714842e-01Q,5.874425033169882478828708473648979e-16Q,8.588702812826359776367250005402653e-01Q},
+    {1.411297187173635660995910351738468e-01Q,8.588702812826362190772882187544370e-01Q,2.148231207460717161826532062140323e-16Q},
+    {4.484167758913065515852111947696719e-02Q,6.779376548825896179727440496157620e-01Q,2.772206675282797268687348309072728e-01Q},
+    {6.779376548825898385104404272923703e-01Q,2.772206675282796771900376174655809e-01Q,4.484167758913048429952195524204881e-02Q},
+    {4.484167758913036917234558642451321e-02Q,2.772206675282798439120486928988149e-01Q,6.779376548825897869156057206766723e-01Q},
+    {6.779376548825896200572030778593289e-01Q,4.484167758913065590118296194845361e-02Q,2.772206675282797240416139601922167e-01Q},
+    {2.772206675282798453349125084658788e-01Q,4.484167758913036763892763447779735e-02Q,6.779376548825897870261598570563270e-01Q},
+    {2.772206675282796746112973376755915e-01Q,6.779376548825898366894562613921071e-01Q,4.484167758913048869924640093230133e-02Q}
+ };
+
+REAL gauss2Dwt11[28] = {
+  8.797730116223213625904988896318388e-02Q,
+  8.744311553736135385838049393708602e-03Q,
+  8.744311553736090794487689890661033e-03Q,
+  8.744311553736135935154623749934445e-03Q,
+  3.808157199393497346581425946179796e-02Q,
+  3.808157199393491720019759919271446e-02Q,
+  3.808157199393497407163683580908803e-02Q,
+  1.885544805613116782560199663095834e-02Q,
+  1.885544805613122017842534912285657e-02Q,
+  1.885544805613116733245378375032056e-02Q,
+  7.215969754473946942516404696914968e-02Q,
+  7.215969754473939736240422078066309e-02Q,
+  7.215969754473947002805481957656930e-02Q,
+  6.932913870553579423103200089818814e-02Q,
+  6.932913870553584007834656866484519e-02Q,
+  6.932913870553579379933829198672931e-02Q,
+  7.362383783300737021130213746707554e-03Q,
+  7.362383783300639352618619656117652e-03Q,
+  7.362383783300721760772621976445149e-03Q,
+  7.362383783300738927505111793492639e-03Q,
+  7.362383783300721157944991554547067e-03Q,
+  7.362383783300641212494778410640677e-03Q,
+  4.105631542928855018130200663369261e-02Q,
+  4.105631542928853705855728958269623e-02Q,
+  4.105631542928847132751023104548306e-02Q,
+  4.105631542928854963469030740534873e-02Q,
+  4.105631542928847121120155516746667e-02Q,
+  4.105631542928853778127224818600921e-02Q
+ };
+/* End degree 11, 28 point rule */
+
+#elif defined(LONGDOUBLE)
 
 /* Degree 6, 12 point rule */
 
@@ -866,7 +1066,7 @@ REAL gauss2Dpt6[12][3] = {
     {6.365024991214020861075296803426151e-01L,3.103524510337816253444925085740704e-01L,5.314504984481628854797781108331449e-02L},
     {5.314504984482153344934219603940619e-02L,6.365024991213878755832859576703452e-01L,3.103524510337905909673718462902471e-01L},
     {3.103524510337816190237041333136396e-01L,6.365024991214020904494434773200222e-01L,5.314504984481629052685238936633823e-02L},
-    {3.103524510337810090903747435196749e-01L,5.314504984481301939183175756123539e-02L,6.365024991214059715177934989190889e-01L},
+    {3.103524510337810090903747435196749e-01L,5.314504984481301939183175756123539e-02L,6.365024991214059715177934989190889e-01L}
  };
 
 REAL gauss2Dwt6[12] = {
@@ -881,7 +1081,7 @@ REAL gauss2Dwt6[12] = {
   8.285107561837382557721317499207620e-02L,
   8.285107561837945396508366849107151e-02L,
   8.285107561837382739566637451872796e-02L,
-  8.285107561836744615176431789401854e-02L,
+  8.285107561836744615176431789401854e-02L
  };
 /* End degree 6, 12 point rule */
 
@@ -903,7 +1103,7 @@ REAL gauss2Dpt8[16][3] = {
     {3.333333333333333298756845531938201e-01L,3.333333333333333295405972146583049e-01L,3.333333333333333405837182321478719e-01L},
     {6.588613844964795996881977667912005e-01L,1.705693077517601833650453623478371e-01L,1.705693077517602169467568708609624e-01L},
     {1.705693077517602184835385126924616e-01L,1.705693077517602218799588702268691e-01L,6.588613844964795596365026170806708e-01L},
-    {1.705693077517601874682269645273959e-01L,6.588613844964796009415386071000160e-01L,1.705693077517602115902344283725850e-01L},
+    {1.705693077517601874682269645273959e-01L,6.588613844964796009415386071000160e-01L,1.705693077517602115902344283725850e-01L}
  };
 
 REAL gauss2Dwt8[16] = {
@@ -922,7 +1122,7 @@ REAL gauss2Dwt8[16] = {
   1.443156076777871682510911104929244e-01L,
   1.032173705347182493943310821168220e-01L,
   1.032173705347182521427179733806271e-01L,
-  1.032173705347182493083255953869918e-01L,
+  1.032173705347182493083255953869918e-01L
  };
 /* End degree 8, 16 point rule */
 
@@ -956,7 +1156,7 @@ REAL gauss2Dpt11[28][3] = {
     {4.484167758913036917234558642451321e-02L,2.772206675282798439120486928988149e-01L,6.779376548825897869156057206766723e-01L},
     {6.779376548825896200572030778593289e-01L,4.484167758913065590118296194845361e-02L,2.772206675282797240416139601922167e-01L},
     {2.772206675282798453349125084658788e-01L,4.484167758913036763892763447779735e-02L,6.779376548825897870261598570563270e-01L},
-    {2.772206675282796746112973376755915e-01L,6.779376548825898366894562613921071e-01L,4.484167758913048869924640093230133e-02L},
+    {2.772206675282796746112973376755915e-01L,6.779376548825898366894562613921071e-01L,4.484167758913048869924640093230133e-02L}
  };
 
 REAL gauss2Dwt11[28] = {
@@ -987,7 +1187,7 @@ REAL gauss2Dwt11[28] = {
   4.105631542928847132751023104548306e-02L,
   4.105631542928854963469030740534873e-02L,
   4.105631542928847121120155516746667e-02L,
-  4.105631542928853778127224818600921e-02L,
+  4.105631542928853778127224818600921e-02L
  };
 /* End degree 11, 28 point rule */
 #else
@@ -1137,7 +1337,48 @@ REAL *gauss2Dwt = gauss2Dwt5;  /* default */
 /* J. Berntsen and T. Espelid, ACM TOMS 18 (1992) 329-342 */
 
 /*  The abscissas are given in homogeneous coordinates. */
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+#define X0 0.333333333333333333333333333333Q
+#define X1 0.950275662924105565450352089520Q
+#define X2 0.171614914923835347556304795551Q
+#define X3 0.539412243677190440263092985511Q
+#define X4 0.772160036676532561750285570113Q
+#define X5 0.009085399949835353883572964740Q
+#define X6 0.062277290305886993497083640527Q
+#define X7 0.022076289653624405142446876931Q
+#define X8 0.018620522802520968955913511549Q
+#define X9 0.096506481292159228736516560903Q
+#define X10 0.851306504174348550389457672223Q
+#define X11 0.689441970728591295496647976487Q
+#define X12 0.635867859433872768286976979827Q
+#define Y0 0.333333333333333333333333333333Q
+#define Y1 0.024862168537947217274823955239Q
+#define Y2 0.414192542538082326221847602214Q
+#define Y3 0.230293878161404779868453507244Q
+#define Y4 0.113919981661733719124857214943Q
+#define Y5 0.495457300025082323058213517632Q
+#define Y6 0.468861354847056503251458179727Q
+#define Y7 0.851306504174348550389457672223Q
+#define Y8 0.689441970728591295496647976487Q
+#define Y9 0.635867859433872768286976979827Q
+#define Y10 0.022076289653624405142446876931Q
+#define Y11 0.018620522802520968955913511549Q
+#define Y12 0.096506481292159228736516560903Q
+/*  Weights of the degree 13 cubature rule. */
+#define W0 0.051739766065744133555179145422Q
+#define W1 0.008007799555564801597804123460Q
+#define W2 0.046868898981821644823226732071Q
+#define W3 0.046590940183976487960361770070Q
+#define W4 0.031016943313796381407646220131Q
+#define W5 0.010791612736631273623178240136Q
+#define W6 0.032195534242431618819414482205Q
+#define W7 0.015445834210701583817692900053Q
+#define W8 0.017822989923178661888748319485Q
+#define W9 0.037038683681384627918546472190Q
+#define W10 0.015445834210701583817692900053Q
+#define W11 0.017822989923178661888748319485Q
+#define W12 0.0370386836813846279185464721Q
+#elif defined(LONGDOUBLE)
 #define X0 0.333333333333333333333333333333L
 #define X1 0.950275662924105565450352089520L
 #define X2 0.171614914923835347556304795551L
@@ -1286,9 +1527,12 @@ int pmax[MAXPROCS];    /* available per calculator */
 #ifdef WIN32
 void * graphmutex;
 void * mem_mutex;
+void * transforms_mutex;
 unsigned int locking_thread; /* so we can tell who has it */
+DWORD_PTR graphics_affinity_mask;
 #elif defined(PTHREADS)
 pthread_mutex_t graphmutex;
+pthread_mutex_t transforms_mutex;
 pthread_mutex_t mem_mutex;
 pthread_t locking_thread;
 #else
@@ -1307,6 +1551,7 @@ element_id global_id;   /* global iteration variable */
 struct thread_data **thread_data_ptrs;  /* one per thread to be allocated */
 struct thread_data default_thread_data; /* if threads not activated */
 struct thread_data *default_thread_data_ptr;
+struct thread_data glutgraph_thread_data; /* for show eval() */
 
 
 /* global communication to threads */
@@ -1340,22 +1585,22 @@ long partition_timestamp;  /* last time partitioning done */
 char elnames[10][30];
 
 /* profiling */
-int q_facet_setup_elapsed_time[2];
-int calc_quants_elapsed_time[2];
-int calc_quant_grads_elapsed_time[2];
-int calc_quant_hess_elapsed_time[2];
-int element_setup_elapsed_time[2];
-int exparse_elapsed_time[2];
-int yyparse_elapsed_time[2];
-int yylex_elapsed_time[2];
-int kblex_elapsed_time[2];
-int hessian_solve_elapsed_time[2];
-int hessian_mul_elapsed_time[2];
-int hessian_AIJ_setup_elapsed_time[2];
-int hessian_constraint_setup_elapsed_time[2];
-int hessian_project_setup_elapsed_time[2];
-int hessian_factor_elapsed_time[2];
-int hessian_CHinvC_elapsed_time[2];
+long long int element_setup_elapsed_time;
+long long int calc_quants_elapsed_time;
+long long int calc_quant_grads_elapsed_time;
+long long int calc_quant_hess_elapsed_time;
+long long int exparse_elapsed_time;
+long long int yyparse_elapsed_time;
+long long int yylex_elapsed_time;
+long long int kblex_elapsed_time;
+long long int hessian_solve_elapsed_time;
+long long int hessian_mul_elapsed_time;
+long long int hessian_AIJ_setup_elapsed_time;
+long long int hessian_constraint_elapsed_time;
+long long int hessian_project_setup_elapsed_time;
+long long int hessian_factor_elapsed_time;
+long long int hessian_CHinvC_elapsed_time;
+
 double cpu_speed;
 
 int mpi_debug;  /* to enable verbose MPI messages */

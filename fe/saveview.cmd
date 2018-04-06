@@ -28,3 +28,6 @@ saveview := {
   printf "view_matrix[4][4] := %f\n",view_matrix[4][4];
   printf "if oldautodisplay then autodisplay on\n";
 }
+
+
+

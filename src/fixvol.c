@@ -20,7 +20,6 @@ REAL *vpressures = NULL; /* so global pressures not messed */
 static  int fixcount = 0;  /* number of constrained quantities */
 /* for numbering various types of constraints */
 static  int gen_quant_start;
-static  int one_sided_start_fixcount;
 static  struct linsys LS;  /* for sparse constraints */
 
 struct fixcount_list { vertex_id v_id; int connum; };
@@ -36,8 +35,7 @@ REAL **vgef = NULL;  /* form vol grads, for approx curvature */
 * purpose: wrapper for local_calc_volgrads()
 *
 */
-void calc_volgrads(mode)
-int mode; 
+void calc_volgrads(int mode)
 {
    if ( itdebug)
     outstring("Calculating volgrads.\n");
@@ -64,7 +62,8 @@ int mode;
     }
   }
 #endif
-}
+
+} // end calc_volgrads()
 
 /*************************************************************************
 *
@@ -76,8 +75,9 @@ int mode;
 *          Also does variable_parameter constraint gradients.
 */
 
-void local_calc_volgrads(mode)
-int mode; /* DO_OPTS or NO_OPTS */
+void local_calc_volgrads(
+   int mode /* DO_OPTS or NO_OPTS */
+)
 {
   body_id bi_id;  /* identifier for body i */
   vertex_id v_id;
@@ -86,33 +86,35 @@ int mode; /* DO_OPTS or NO_OPTS */
   int qfixed = 0;
   struct gen_quant *gq;
   MAT2D(a,MAXCOORD,MAXCOORD);
- 
+
   /* for numbering various types of constraints */
   gen_quant_start = web.skel[BODY].max_ord + 1;
  
   /* see if anything needs to be done */
   fixed_constraint_flag = 0;
   if ( !web.pressure_flag && !everything_quantities_flag )
-    FOR_ALL_BODIES(bi_id)
+  { FOR_ALL_BODIES(bi_id)
      if ( get_battr(bi_id) & (FIXEDVOL|PRESSURE) ) fixed_constraint_flag = 1;
+  }
   for ( k = n = 0 ; n < gen_quant_count ; n++ )
   { gq = GEN_QUANT(n);
-     if ( gq->flags & (Q_FIXED|Q_CONSERVED) )
-     { if ( !valid_id(gq->b_id) || !web.pressure_flag ) 
-       { fixed_constraint_flag = 1; qfixed++;
-         gq->vol_number = gen_quant_start + k++;
-       }
-       else 
-         if ( web.pressure_flag )
-           gq->vol_number = gen_quant_start + k++;
-     }
+    if ( gq->flags & Q_DELETED ) continue;
+    if ( gq->flags & (Q_FIXED|Q_CONSERVED) )
+    { if ( !valid_id(gq->b_id) || !web.pressure_flag ) 
+      { fixed_constraint_flag = 1; qfixed++;
+        gq->vol_number = gen_quant_start + k++;
+      }
+      else 
+        if ( web.pressure_flag )
+          gq->vol_number = gen_quant_start + k++;
+    }
   }
   maxquants = gen_quant_start + k;
   if ( !web.pressure_flag && !fixed_constraint_flag && !one_sided_present )
     return;
 
   /* allocate space to hold vertex body volume gradients */
-  vgrad_init(qfixed);
+  vgrad_init();
 
   /* calculate body volume gradients at all control points 
       due to free surfaces */
@@ -130,7 +132,7 @@ int mode; /* DO_OPTS or NO_OPTS */
 
   /* calculate optimizing_parameter gradients by finite differences */
   if ( (mode == DO_OPTS) && (optparamcount > 0) )
-  { REAL **convalues; 
+  {  REAL **convalues; 
      struct oldcoord osaved;
 
      if ( optparam_congrads ) free_matrix(optparam_congrads);
@@ -140,49 +142,64 @@ int mode; /* DO_OPTS or NO_OPTS */
      save_coords(&osaved,SAVE_SEPARATE);
      /* save values */
      if ( !web.pressure_flag && !everything_quantities_flag )
-      FOR_ALL_BODIES(bi_id)
+     { FOR_ALL_BODIES(bi_id)
         if ( get_battr(bi_id) & FIXEDVOL ) 
           convalues[loc_ordinal(bi_id)][0] = get_body_volume(bi_id);
+     }
      for ( k = n = 0 ; n < gen_quant_count ; n++ )
      { gq = GEN_QUANT(n);
+       if ( gq->flags & Q_DELETED ) continue;
        if ( gq->flags & Q_FIXED )
          if ( !valid_id(gq->b_id) || !web.pressure_flag ) 
            convalues[gq->vol_number][0] = gq->value;
      }
      for ( i = 0 ; i < optparamcount ; i++ )
      { REAL dp;
+       struct global *g = globals(optparam[i].pnum);
 
-       dp = globals(optparam[i].pnum)->attr.varstuff.delta;
+       dp = g->attr.varstuff.delta;
 
        /* right difference */
-       globals(optparam[i].pnum)->value.real += dp;
+       g->value.real += dp;
+       if ( g->attr.varstuff.on_assign_call )
+       { struct  global *gg = globals(g->attr.varstuff.on_assign_call);
+         eval(&gg->value.proc,NULL,NULLID,NULL);
+       }
        project_all(0, TEST_MOVE);
        calc_content(Q_FIXED);
        /* save values */
        if (!web.pressure_flag &&  !everything_quantities_flag )
-         FOR_ALL_BODIES(bi_id)
+       { FOR_ALL_BODIES(bi_id)
            if ( get_battr(bi_id) & FIXEDVOL ) 
              convalues[loc_ordinal(bi_id)][1] = get_body_volume(bi_id);
+       }
        for ( k = n = 0 ; n < gen_quant_count ; n++ )
        { gq = GEN_QUANT(n);
+         if ( gq->flags & Q_DELETED ) continue;
          if ( gq->flags & Q_FIXED )
            if ( !valid_id(gq->b_id) || !web.pressure_flag )
              convalues[gq->vol_number][1] = gq->value;
        }
        restore_coords(&osaved,SAVE_SEPARATE);  /* also fixes opt params */
 
-       /* left difference */
-       globals(optparam[i].pnum)->value.real -= dp;
+      /* left difference */
+       g->value.real -= dp;
+       if ( g->attr.varstuff.on_assign_call )
+       { struct  global *gg = globals(g->attr.varstuff.on_assign_call);
+         eval(&gg->value.proc,NULL,NULLID,NULL);
+       }
        project_all(0, TEST_MOVE);
        if ( fixed_constraint_flag || web.pressure_flag || web.pressflag )
-       calc_content(Q_FIXED);
+         calc_content(Q_FIXED);
        /* save values */
        if (!web.pressure_flag &&  !everything_quantities_flag )
-         FOR_ALL_BODIES(bi_id)
+       { FOR_ALL_BODIES(bi_id)
            if ( get_battr(bi_id) & FIXEDVOL ) 
              convalues[loc_ordinal(bi_id)][2] = get_body_volume(bi_id);
+       }
        for ( k = n = 0 ; n < gen_quant_count ; n++ )
        { gq = GEN_QUANT(n);
+         if ( gq->flags & Q_DELETED ) continue;
          if ( gq->flags & Q_FIXED )
           if ( !valid_id(gq->b_id) || !web.pressure_flag )
             convalues[gq->vol_number][2] = gq->value;
@@ -191,26 +208,31 @@ int mode; /* DO_OPTS or NO_OPTS */
    
        /* calculate gradients */
        if (!web.pressure_flag &&  !everything_quantities_flag )
-         FOR_ALL_BODIES(bi_id)
+       { FOR_ALL_BODIES(bi_id)
            if ( get_battr(bi_id) & FIXEDVOL ) 
              optparam_congrads[i][loc_ordinal(bi_id)] =
                (convalues[loc_ordinal(bi_id)][1] -
                   convalues[loc_ordinal(bi_id)][2])/2/dp;
+       }
        for ( k = n = 0 ; n < gen_quant_count ; n++ )
        { gq = GEN_QUANT(n);
+         if ( gq->flags & Q_DELETED ) continue;
          if ( gq->flags & Q_FIXED )
           if ( !valid_id(gq->b_id) || !web.pressure_flag )
-           optparam_congrads[i][gq->vol_number] =
+          { optparam_congrads[i][gq->vol_number] =
              (convalues[gq->vol_number][1]-convalues[gq->vol_number][2])/2/dp;
+          }
        }
       }
       /* restore values */
       if (!web.pressure_flag &&  !everything_quantities_flag )
-      FOR_ALL_BODIES(bi_id)
-        if ( get_battr(bi_id) & FIXEDVOL ) 
+      { FOR_ALL_BODIES(bi_id)
+          if ( get_battr(bi_id) & FIXEDVOL ) 
            set_body_volume(bi_id, convalues[loc_ordinal(bi_id)][0],SETSTAMP);
+      }
       for ( k = n = 0 ; n < gen_quant_count ; n++ )
       { gq = GEN_QUANT(n);
+        if ( gq->flags & Q_DELETED ) continue;
         if ( gq->flags & Q_FIXED )
           if ( !valid_id(gq->b_id) || !web.pressure_flag )
             gq->value = convalues[gq->vol_number][2];
@@ -233,31 +255,25 @@ int mode; /* DO_OPTS or NO_OPTS */
   } 
   /* project to parameter space for boundary points */
   FOR_ALL_VERTICES(v_id)
-  { REAL  dummy;
-    REAL temp[MAXCOORD];
-    int pcount,j;
+  { int pcount;
     volgrad *vgptri;
 
     if ( get_vattr(v_id) & FIXED ) continue;
     if ( !(get_vattr(v_id) & BOUNDARY) ) continue;
     bdry = get_boundary(v_id);
     pcount = bdry->pcount;
-    for ( j = 0 ; j < SDIM ; j++ )
-    { eval_all(bdry->coordf[j],get_param(v_id),pcount,&dummy,temp,v_id);
-      for ( i = 0 ; i < pcount ; i++ )
-        a[i][j] = temp[i];
-    }
-
+    b_proj(bdry,get_param(v_id),a,PARAMPROJ,v_id);
+   
     vgptri = get_vertex_vgrad(v_id);
     while ( vgptri )
-      { REAL tmp[MAXCOORD];
-         int m;
-         matvec_mul(a,vgptri->grad,tmp,pcount,SDIM);
-         for ( m = 0 ; m < pcount ; m++ ) vgptri->grad[m] = tmp[m];
-         for ( m = pcount ; m < SDIM ; m++ )
+    { REAL tmp[MAXCOORD];
+      int m;
+      matvec_mul(a,vgptri->grad,tmp,pcount,SDIM);
+      for ( m = 0 ; m < pcount ; m++ ) vgptri->grad[m] = tmp[m];
+      for ( m = pcount ; m < SDIM ; m++ )
            vgptri->grad[m] = 0.0;
-         vgptri = vgptri->chain;
-      }
+      vgptri = vgptri->chain;
+    }
   }
 
 } /* end local_calc_volgrads() */
@@ -278,8 +294,6 @@ void calc_one_sided_grads()
 
   if ( itdebug ) 
     outstring("calc_one_sided_grads() - adding onesided constraints to constraint matrix\n");
-
-  one_sided_start_fixcount = fixcount;
 
   one_sided_fixcount_list = (struct fixcount_list *)
      temp_calloc(list_alloc,sizeof(struct fixcount_list));
@@ -406,8 +420,9 @@ void pressure_forces()
 *         to violated constraints and regular constraints.
 */
 
-void one_sided_adjust(mode)
-int mode; /* CALC_FORCE and/or CALC_VOLGRADS */
+void one_sided_adjust(
+  int mode /* CALC_FORCE and/or CALC_VOLGRADS */
+)
 { vertex_id v_id;
   int i,j,k;
   REAL vel[MAXCOORD];
@@ -434,7 +449,7 @@ int mode; /* CALC_FORCE and/or CALC_VOLGRADS */
     REAL *f;
     conmap_t * conmap = get_v_constraint_map(v_id);
     int oncount = 0;
-    struct constraint *con[MAXCONPER];
+    struct constraint *con[MAXCONHIT];
     REAL *x;
     REAL perp[MAXCOORD];
     REAL fval;
@@ -463,20 +478,25 @@ int mode; /* CALC_FORCE and/or CALC_VOLGRADS */
     }
 
     for ( j = 1,oncount = 0 ; j <= (int)conmap[0] ; j++ )
-      {
-         if ( conmap[j] & CON_HIT_BIT )
-         { struct constraint *cc = get_constraint(conmap[j]);
-           if ( cc->attr & (NONNEGATIVE | NONPOSITIVE) )
-           { /* check for violation */
-             eval_all(cc->formula,x,SDIM,&fval,grad,v_id);
-             fp = SDIM_dot(vel,grad);
-             if ( (cc->attr & NONNEGATIVE) && (fp < 0.0) )
-                con[oncount++] = cc;
-             else if ( (cc->attr & NONPOSITIVE) && (fp > 0.0) )
-                con[oncount++] = cc;
-           }
-         }
+    {
+      if ( conmap[j] & CON_HIT_BIT )
+      { struct constraint *cc = get_constraint(conmap[j]);
+        if ( cc->attr & (NONNEGATIVE | NONPOSITIVE) )
+        { /* check for violation */
+          eval_all(cc->formula,x,SDIM,&fval,grad,v_id);
+          fp = SDIM_dot(vel,grad);
+          if ( (cc->attr & NONNEGATIVE) && (fp < 0.0) )
+            con[oncount++] = cc;
+          else if ( (cc->attr & NONPOSITIVE) && (fp > 0.0) )
+            con[oncount++] = cc;
+          if ( oncount > web.sdim )
+          { sprintf(errmsg,"Vertex %s hits more constraints than dimension of space.\n",
+              ELNAME(v_id));
+            kb_error(5888,errmsg,RECOVERABLE);
+          }
+        }
       }
+    }
     if ( mode & CALC_VOLGRADS )
     for ( vgptr = get_vertex_vgrad(v_id) ; vgptr ; vgptr = vgptr->chain )
     { constr_proj(TANGPROJ,oncount,con,x,vgptr->velocity,perp,NULL,NO_DETECT,v_id);
@@ -512,7 +532,7 @@ int find_fixed()
   /* figure out which quantities are fixed */
   fixcount = 0;
   if ( !everything_quantities_flag )
-    MFOR_ALL_BODIES(b_id)
+  { MFOR_ALL_BODIES(b_id)
       { if ( get_battr(b_id) & (FIXEDVOL/*|PRESSURE*/) ) 
         { if ( web.full_flag && (redundant_bi < 0) )
           { set_body_fixnum(b_id,-1);
@@ -525,9 +545,12 @@ int find_fixed()
         } 
         else set_body_fixnum(b_id,-1);
       }
+  }
+
    for ( i = 0,k=0 ; i < gen_quant_count ; i++ )
    { q = GEN_QUANT(i);
-      if ( q->flags & (Q_FIXED|Q_CONSERVED) )
+     if ( q->flags & Q_DELETED ) continue;
+     if ( q->flags & (Q_FIXED|Q_CONSERVED) )
       { if ( web.full_flag && valid_id(q->b_id) && redundant_bi < 0 )
         { q->fixnum = -1; 
           redundant_bi = 1;
@@ -543,7 +566,8 @@ int find_fixed()
   maxquants = gen_quant_start + k;
   fixed_constraint_flag = fixcount;
   return fixcount;
-}
+
+} // find_fixed()
 
 /**************************************************************************
 *
@@ -615,12 +639,16 @@ void calc_leftside()
   /* variable_parameter contributions */
   if ( optparamcount )
   for ( i = 0 ; i < gen_quant_count ; i++ )
-  { int fixi = GEN_QUANT(i)->fixnum;
-    int voli = GEN_QUANT(i)->vol_number;
+  { struct gen_quant *q = GEN_QUANT(i);
+    int fixi = q->fixnum;
+    int voli = q->vol_number;
+    if ( q->flags & Q_DELETED ) continue;
     if ( fixi < 0 ) continue;
     for ( j = 0 ; j < gen_quant_count ; j++ )
-    { int fixj = GEN_QUANT(j)->fixnum;
-      int volj = GEN_QUANT(j)->vol_number;
+    { struct gen_quant *qj = GEN_QUANT(j);
+      int fixj = qj->fixnum;
+      int volj = qj->vol_number;
+      if ( qj->flags & Q_DELETED ) continue;
       if ( fixj < 0 ) continue;
       for ( k = 0 ; k < optparamcount ; k++ )
       { REAL tmp = optparam_congrads[k][voli]
@@ -654,7 +682,10 @@ void calc_leftside()
     calc_leftside_hash_count = sp_hash_end(&LS,fixcount,fixcount,A_OFF);
     LS.N = fixcount; 
     hessian_epsilon = 0.0;
-    ysmp_factor(&LS);  /* since mindeg uses vertex info at the moment */
+    if ( ysmp_flag == MKL_FACTORING )
+      mkl_factor(&LS,MKL_POS_DEF);
+    else
+      ysmp_factor(&LS,MKL_POS_DEF);  /* since mindeg uses vertex info at the moment */
     hessian_epsilon = old_hessian_epsilon;
   }
   else
@@ -679,7 +710,7 @@ void local_calc_leftside()
   
   /* generate  DV^T DV */
   if ( !approx_curve_flag )
-    FOR_ALL_VERTICES(v_id)
+  { FOR_ALL_VERTICES(v_id)
     {
       volgrad *vgptri,*vgptrj;
       ATTR attr = get_vattr(v_id);
@@ -717,7 +748,8 @@ void local_calc_leftside()
         }
       }
     }
-}
+  }
+} // end local_calc_leftside()
 
 /************************************************************************
 *
@@ -751,8 +783,10 @@ void calc_lagrange()
   /* optimizing_parameter contributions */
   if ( optparamcount )
   for ( i = 0 ; i < gen_quant_count ; i++ )
-  { int fixi = GEN_QUANT(i)->fixnum;
-    int voli = GEN_QUANT(i)->vol_number;
+  { struct gen_quant *q = GEN_QUANT(i);
+    int fixi = q->fixnum;
+    int voli = q->vol_number;
+    if ( q->flags & Q_DELETED ) continue;
     if ( fixi < 0 ) continue;
     for ( k = 0 ; k < optparamcount ; k++ )
       rightside[fixi] -= optparam_congrads[k][voli]*optparam[k].velocity;
@@ -761,7 +795,10 @@ void calc_lagrange()
 
   /* solve for coefficients */
   if ( sparse_constraints_flag )
-  {ysmp_solve(&LS,rightside,vpressures);
+  { if ( ysmp_flag == MKL_FACTORING )
+      mkl_solve(&LS,rightside,vpressures,MKL_POS_DEF);
+    else
+      ysmp_solve(&LS,rightside,vpressures,MKL_POS_DEF);
     free_system(&LS);
   }
   else  
@@ -771,18 +808,7 @@ void calc_lagrange()
   for ( i = 0 ; i < fixcount ; i++ )
   { if ( !is_finite(vpressures[i]) )
     {
-#ifdef used_calc_one_sided_grads      
-      if ( i >= one_sided_start_fixcount )
-      { int j = i-one_sided_start_fixcount;
-        element_id v_id = one_sided_fixcount_list[j].v_id;
-        int connum = one_sided_fixcount_list[j].connum;
-        struct constraint *con = get_constraint(connum);  
-        sprintf(errmsg,"Singular one-sided constraint matrix, vertex %s, constraint %s.\n",
-           ELNAME(v_id),con->name);
-      }
-      else
-#endif
-        sprintf(errmsg,"Constraint adjustment matrix singular. \nMore constraints than degrees of freedom?\nConstraints with no elements?");
+      sprintf(errmsg,"Constraint adjustment matrix singular. \nMore constraints than degrees of freedom?\nConstraints with no elements?");
       kb_error(3005,errmsg,RECOVERABLE);
     }
   } 
@@ -791,7 +817,7 @@ void calc_lagrange()
 
   /* install pressures into body structures */
   if ( !web.pressure_flag )
-    MFOR_ALL_BODIES(b_id)
+  { MFOR_ALL_BODIES(b_id)
     { if ( get_battr(b_id) & FIXEDVOL )
       { 
         if ( everything_quantities_flag )
@@ -806,44 +832,15 @@ void calc_lagrange()
         }
       }
     }
+  }
     for ( k = 0 ; k < gen_quant_count ; k++ )
     { gq = GEN_QUANT(k);
+      if ( gq->flags & Q_DELETED ) continue;
       if ( gq->flags & (Q_FIXED|Q_CONSERVED) )
         if ( !valid_id(gq->b_id) || !web.pressure_flag )
           gq->pressure = -vpressures[gq->fixnum];
     }
 
-#ifdef ZZZZZZZZ
-    /* Check for loosening, and record */
-    /* one-sided constraint lagrange multipliers, if user wants */
-    { int one_sided_lagrange_attr = 
-            find_attribute(VERTEX,ONE_SIDED_LAGRANGE_ATTR_NAME);
-      volgrad *vgptri;
-
-      for ( k = one_sided_start_fixcount, j = 0 ; k < fixcount ; k++,j++ )
-      { element_id v_id = one_sided_fixcount_list[j].v_id;
-        int connum = one_sided_fixcount_list[j].connum;
-        struct constraint *con = get_constraint(connum);
-        if ( ((con->attr & NONNEGATIVE) && (vpressures[k] > 0))
-             || ((con->attr & NONPOSITIVE) && (vpressures[k] < 0)) )
-        { unset_v_constraint_status(v_id,connum);
-          /* also have to kill vgrad so velocity not chopped */
-          for ( vgptri = get_vertex_vgrad(v_id); vgptri ; vgptri = vgptri->chain )
-            if ( vgptri->fixnum == k )
-                vgptri->fixnum = -1;
-        }
-
-        if ( one_sided_lagrange_attr >= 0 )
-        { REAL *v = (REAL*)get_extra(v_id,one_sided_lagrange_attr);
-          for ( i = 0 ; i < osl_size ; i++ )
-            if ( v[i] == 0.0 )  
-            { v[i] = vpressures[k];       
-              break;
-            }
-        }
-      }
-    }
-#endif
 
 } /* end calc_lagrange() */
 
@@ -861,7 +858,7 @@ void local_calc_rightside()
     outstring("calc_rightside(): for finding Lagrange multipliers\n");
   /* generate right side of matrix equation */
   if ( !approx_curve_flag )
-    FOR_ALL_VERTICES(v_id)
+  { FOR_ALL_VERTICES(v_id)
     {
       volgrad *vgptri;
       ATTR attr = get_vattr(v_id);
@@ -881,6 +878,7 @@ void local_calc_rightside()
         rightside[bi] += SDIM_dot(f,vgptri->grad);
       }
     }
+  }
 
   if ( approx_curve_flag )
   { REAL *f;
@@ -905,7 +903,7 @@ void local_calc_rightside()
         }
       }
   }  /* end approx_curve_flag */
-}
+} // local_calc_rightside()
 
 /*************************************************************************
 *
@@ -931,8 +929,10 @@ void lagrange_adjust()
   if ( optparamcount )
     for ( i = 0 ; i < optparamcount ; i++ )
       for ( k = 0 ; k < gen_quant_count ; k++ )
-      { int fixi = GEN_QUANT(k)->fixnum;
-        int volk = GEN_QUANT(k)->vol_number;
+      { struct gen_quant *q = GEN_QUANT(k);
+        int fixi = q->fixnum;
+        int volk = q->vol_number;
+        if ( q->flags & Q_DELETED ) continue;
         if ( fixi >= 0 )
           optparam[i].velocity += vpressures[fixi]*
               globals(optparam[i].pnum)->attr.varstuff.pscale*
@@ -1011,8 +1011,7 @@ int local_lagrange_adjust()
 *
 * return value; 1 if vertex loosened from a one-sided constraint.
 */
-int one_sided_lagrange_adjust(v_id)
-vertex_id v_id;
+int one_sided_lagrange_adjust(vertex_id v_id)
 {
     REAL *raw_velocity = VREAL(v_id,raw_velocity_attr);
     volgrad *vgptr;
@@ -1021,8 +1020,8 @@ vertex_id v_id;
      conmap_t * conmap = get_v_constraint_map(v_id);
      int oncount = 0;
      int one_sided_count = 0;
-     struct constraint *con[MAXCONPER];
-     int conlist[MAXCONPER];
+     struct constraint *con[MAXCONHIT];
+     int conlist[MAXCONHIT];
      MAT2D(grads,MAXCOORD,MAXCOORD);
      MAT2D(ss,MAXCOORD,MAXCOORD);
      REAL lagmul[MAXCOORD];
@@ -1034,7 +1033,13 @@ vertex_id v_id;
      for ( j = 1 ; j <= (int)conmap[0] ; j++ )
      {
        if ( conmap[j] & CON_HIT_BIT )
-       { conlist[oncount] = conmap[j] & CONMASK;
+       { 
+         if ( oncount >= web.sdim )
+         { sprintf(errmsg,"Vertex %s hits more constraints than dimension of space.\n",
+             ELNAME(v_id));
+           kb_error(5889,errmsg,RECOVERABLE);
+         }
+         conlist[oncount] = conmap[j] & CONMASK;
          con[oncount] = get_constraint(conmap[j]);
          if ( con[oncount]->attr & (NONNEGATIVE|NONPOSITIVE) )
            one_sided_count++;
@@ -1092,7 +1097,6 @@ vertex_id v_id;
          n++;
      }
 
-
      if ( loosened )
      { /* recalculate projected velocity */
        REAL perp[MAXCOORD];
@@ -1103,8 +1107,9 @@ vertex_id v_id;
      }
 
   return loosened;
-}
 
+} // end one_sided_lagrange_adjust()
+ 
 /*******************************************************************
 *
 * function: volume_restore()
@@ -1114,9 +1119,10 @@ vertex_id v_id;
 *
 */
 
-void volume_restore ARGS2((stepsize,mode),
-REAL stepsize, /* multiplier for motion; usually 1 */
-int mode)/* TEST_MOVE or ACTUAL_MOVE */
+void volume_restore (
+  REAL stepsize, /* multiplier for motion; usually 1 */
+  int mode       /* TEST_MOVE or ACTUAL_MOVE */
+)
 { body_id bi_id;
   struct gen_quant *gq;
   int i,k;
@@ -1132,15 +1138,17 @@ int mode)/* TEST_MOVE or ACTUAL_MOVE */
 
   /* gather differences from targets */
   if ( !web.pressure_flag && !everything_quantities_flag )
-    FOR_ALL_BODIES(bi_id)
+  { FOR_ALL_BODIES(bi_id)
      {
        if ( !(get_battr(bi_id) & FIXEDVOL) ) continue;
        fixi = get_body_fixnum(bi_id);
        if ( fixi < 0 ) continue;
        vol_deficit[fixi] = get_body_fixvol(bi_id) - get_body_volume(bi_id);
      }
+  }
   for ( k = 0 ; k < gen_quant_count ; k++ )
   { gq = GEN_QUANT(k);
+    if ( gq->flags & Q_DELETED ) continue;
     if ( !(gq->flags & Q_FIXED) ) continue;
     if ( valid_id(gq->b_id) && web.pressure_flag ) continue;
     fixi = gq->fixnum;
@@ -1151,7 +1159,10 @@ int mode)/* TEST_MOVE or ACTUAL_MOVE */
   /* solve for volume restoration coefficients */
   if ( sparse_constraints_flag )
   { if ( LS.A == NULL ) calc_leftside(); 
-    ysmp_solve(&LS,vol_deficit,vol_restore);
+    if ( ysmp_flag == MKL_FACTORING )
+      mkl_solve(&LS,vol_deficit,vol_restore,MKL_POS_DEF);
+    else
+      ysmp_solve(&LS,vol_deficit,vol_restore,MKL_POS_DEF);
     free_system(&LS);
   }
   else
@@ -1168,11 +1179,19 @@ int mode)/* TEST_MOVE or ACTUAL_MOVE */
   if ( optparamcount )
     for ( i = 0 ; i < optparamcount ; i++ )
      for ( k = 0 ; k < gen_quant_count ; k++ )
-     { int fixk = GEN_QUANT(k)->fixnum;
-       int volk = GEN_QUANT(k)->vol_number;
+     { struct gen_quant *q = GEN_QUANT(k);
+       int fixk = q->fixnum;
+       int volk = q->vol_number;
+       if ( q->flags & Q_DELETED ) continue;
        if ( fixk >= 0 )
-          globals(optparam[i].pnum)->value.real += vol_restore[fixk]
-            *globals(optparam[i].pnum)->attr.varstuff.pscale*optparam_congrads[i][volk];
+       { struct global *g = globals(optparam[i].pnum);
+         g->value.real += vol_restore[fixk]
+            *g->attr.varstuff.pscale*optparam_congrads[i][volk];
+         if ( g->attr.varstuff.on_assign_call )
+         { struct  global *gg = globals(g->attr.varstuff.on_assign_call);
+           eval(&gg->value.proc,NULL,NULLID,NULL);
+         }
+       }
      }
 
   #ifdef MPI_EVOLVER
@@ -1195,9 +1214,10 @@ int mode)/* TEST_MOVE or ACTUAL_MOVE */
 *
 * purpose: apply volume restoration to local part of surface
 */
-void local_volume_restore(stepsize,mode)
-REAL stepsize;
-int mode;
+void local_volume_restore(
+  REAL stepsize,
+  int mode
+)
 { vertex_id v_id;
   int bi,i,k;
   
@@ -1206,7 +1226,7 @@ int mode;
   { REAL *x;
     volgrad *vgptr;
     int ord = loc_ordinal(v_id);
-    int attr = get_vattr(v_id);
+    ATTR attr = get_vattr(v_id);
 
 	  if ( (attr & CONSTRAINT) && one_sided_present )
       one_sided_volume_adjust(v_id);
@@ -1248,7 +1268,7 @@ int mode;
       if ( attr & CONSTRAINT ) project_v_constr(v_id,mode,KEEP_ONESIDEDNESS);
     }
   }
-}
+} // end local_volume_restore()
 
 /*******************************************************************
 * function: one_sided_volume_adjust()
@@ -1258,8 +1278,7 @@ int mode;
 *          raw volume adjust velocities are re-projected.
 */
 
-void one_sided_volume_adjust ARGS1((v_id),
-vertex_id v_id)
+void one_sided_volume_adjust(vertex_id v_id)
 {
     REAL raw_velocity[MAXCOORD];
     volgrad *vgptr;
@@ -1268,8 +1287,8 @@ vertex_id v_id)
      conmap_t * conmap = get_v_constraint_map(v_id);
      int oncount = 0;
      int one_sided_count = 0;
-     struct constraint *con[MAXCONPER];
-     int conlist[MAXCONPER];
+     struct constraint *con[MAXCONHIT];
+     int conlist[MAXCONHIT];
      MAT2D(grads,MAXCOORD,MAXCOORD);
      MAT2D(ss,MAXCOORD,MAXCOORD);
      REAL lagmul[MAXCOORD];
@@ -1281,7 +1300,13 @@ vertex_id v_id)
      for ( j = 1 ; j <= (int)conmap[0] ; j++ )
      {
        if ( conmap[j] & CON_HIT_BIT )
-       { conlist[oncount] = conmap[j] & CONMASK;
+       { 
+         if ( oncount >= web.sdim )
+         { sprintf(errmsg,"Vertex %s hits more constraints than dimension of space.\n",
+             ELNAME(v_id));
+           kb_error(5890,errmsg,RECOVERABLE);
+         }
+         conlist[oncount] = conmap[j] & CONMASK;
          con[oncount] = get_constraint(conmap[j]);
          if ( con[oncount]->attr & (NONNEGATIVE|NONPOSITIVE) )
            one_sided_count++;
@@ -1341,7 +1366,7 @@ vertex_id v_id)
        }
      }
 
-}
+} // end one_sided_volume_adjust()
 
 /*******************************************************************
 *
@@ -1354,19 +1379,20 @@ vertex_id v_id)
 char *vgrad_attr_name = "__vgrad_head";
 int vgrad_attr;
 
-void vgrad_init(qfixed)
-int qfixed; /* how many fixed quantities (aside from body volumes)*/
+void vgrad_init(void)
 { int one = 1;
   vertex_id v_id;
   int i;
   int stride;
-  
+
   vgrad_end();  /* take care of any leftovers */
-  
+
   /* allocate chain start for each vertex */
   vgrad_attr = find_attribute(VERTEX,vgrad_attr_name);
+
   if ( vgrad_attr < 0 )
-    vgrad_attr = add_attribute(VERTEX,vgrad_attr_name,PTR_TYPE,0,&one,0,NULL);
+    vgrad_attr = add_attribute(VERTEX,vgrad_attr_name,PTR_TYPE,0,&one,0,NULL,MPI_PROPAGATE);
+
   MFOR_ALL_VERTICES(v_id)
     VPTR(v_id,vgrad_attr)[0] = NULL;
 
@@ -1441,7 +1467,7 @@ volgrad *get_vertex_vgrad(v_id)
 vertex_id v_id;
 { if ( !vgradbase ) return NULL;
   return (volgrad*)VPTR(v_id,vgrad_attr)[0];
-}
+} // end get_vertex_vgrad()
 
 /********************************************************************
 *
@@ -1450,12 +1476,13 @@ vertex_id v_id;
 * purpose: set pointer to first vgrad structure in vertex's chain
 */
 
-void set_vertex_vgrad(v_id,vgptr)
-vertex_id v_id;
-volgrad *vgptr;
+void set_vertex_vgrad(
+  vertex_id v_id,
+  volgrad *vgptr
+)
 {
   VPTR(v_id,vgrad_attr)[0] = (char*)vgptr;
-}
+} // end set_vertex_vgrad()
 
 /**********************************************************************
 *
@@ -1496,7 +1523,8 @@ LOCK_WEB;
 UNLOCK_WEB;
 
   return vg;
-}
+
+}  // end new_vgrad()
 
 /******************************************************************
 *
@@ -1506,9 +1534,10 @@ UNLOCK_WEB;
 *         given vertex. NULL if none.
 */
     
-volgrad *get_bv_vgrad(fixnum,v_id)
-int fixnum; /* which constrained quantity */
-vertex_id v_id;
+volgrad *get_bv_vgrad(
+  int fixnum,  /* which constrained quantity */
+  vertex_id v_id
+)
 {
   volgrad  *vgptr;
 
@@ -1518,7 +1547,8 @@ vertex_id v_id;
     else vgptr = vgptr->chain;
 
   return vgptr;    /* null if not found */
-}
+
+} // end get_bv_vgrad()
     
 /******************************************************************
 *
@@ -1528,9 +1558,10 @@ vertex_id v_id;
 *         given vertex. Allocates if none.
 */
 
-volgrad *get_bv_new_vgrad(fixnum,v_id)
-int fixnum;
-vertex_id v_id;
+volgrad *get_bv_new_vgrad(
+  int fixnum,
+  vertex_id v_id
+)
 {
   volgrad  **ptrptr;  /* pointer to pointer so can update if need be */
 
@@ -1545,7 +1576,8 @@ vertex_id v_id;
   (*ptrptr)->fixnum = fixnum;
 
   return *ptrptr;
-}
+
+} // end get_bv_new_vgrad()
 
 
 /**********************************************************************
@@ -1556,8 +1588,9 @@ vertex_id v_id;
 *
 */
 
-void approx_curv_calc(mode)
-int mode; /* bits for CALC_FORCE and CALC_VOLGRADS */
+void approx_curv_calc(
+  int mode /* bits for CALC_FORCE and CALC_VOLGRADS */
+)
 {
   int j;
   REAL *B;

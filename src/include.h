@@ -54,11 +54,20 @@
 #endif
 
 /* Precision */
-#ifdef LONGDOUBLE
+extern int DWIDTH;
+extern int DPREC;
+#ifdef FLOAT128
+// For gcc __float128 with libquadmath
+#include <quadmath.h>
+#define REAL  __float128
+#define DOT    dot 
+//#define DWIDTH 37
+//#define DPREC  34
+#elif defined(LONGDOUBLE)
 #define REAL  long double 
 #define DOT    dot 
-#define DWIDTH ((sizeof(REAL)==16) ? 35 : 22)
-#define DPREC ((sizeof(REAL)==16) ? 32 : 19)
+//#define DWIDTH ((sizeof(REAL)==16) ? 35 : 22)
+//#define DPREC ((sizeof(REAL)==16) ? 32 : 19)
 #else
 #ifdef FLOAT
 #define REAL float
@@ -74,6 +83,10 @@
 #ifdef USE_READLINE //CSL
 #define MOREPROMPT (char *)1
 #define CONTPROMPT (char *)2
+#endif
+
+#ifdef MKL
+#include "mkl_types.h"
 #endif
 
 /* following also works for Cray */
@@ -113,8 +126,6 @@ char *bsearch();
 #define PATHCHAR '/'
 /* ENVPATHCHAR is the path separating character in environment strings */
 #define ENVPATHCHAR ":"
-/* NOPROTO should be defined for systems that don't do ANSI prototypes */
-#define NOPROTO
 #endif
 #endif
 
@@ -157,6 +168,9 @@ char *getenv();
 #include <sys/times.h>
 #include <sys/time.h>
 #include <sys/param.h>
+#if !defined(MAC_OS_X)
+#include <sys/sysinfo.h>
+#endif
 #include <glob.h>
 #define is_finite(x) (((x)>(-1e300))&&((x)<1e300)) 
 /* MAXALLOC is maximum size allocable by calloc() */
@@ -399,7 +413,6 @@ char *getenv();
 #define PATHCHAR '/'
 #define ENVPATHCHAR ":"
 /* #define  memmove(dest,src,n) kb_memmove(dest,src,n) */
-#define NOPROTO
 #define FCAST (int(*)(const void*,const void *))
 /* following is to undo something mysterious done by prof.h */
 #undef MARK
@@ -479,7 +492,7 @@ char *getenv();
 #endif
 
 #ifdef MAC_OS_X
-/* rogue constant from some header */
+#define __int64 __int64_t
 #endif
 
 #ifdef MPI_EVOLVER
@@ -525,7 +538,15 @@ typedef int DY_OFFSET ;
 #define M_LN2              0.693147180559945309417
 #endif
 
-#ifdef LONGDOUBLE
+#ifdef FLOAT128
+#undef  M_E
+#define M_E    M_Eq
+#undef  M_PI
+#define M_PI   M_PIq 
+#undef  M_LN2
+#define M_LN2  M_LN2q
+
+#elif defined(LONGDOUBLE)
 #undef  M_E
 #define M_E                 2.7182818284590452353602874713527L
 #undef  M_PI
@@ -566,34 +587,6 @@ typedef int DY_OFFSET ;
 #define MAXDOUBLE 1.0e38
 #endif
 
-#ifdef NOPROTO
-/* some compilers still don't like prototypes with arguments */
-#define ARGS(x) ()
-#else
-#define ARGS(x) x
-#endif
-
-/* for converting old-style function defs to new */
-#ifdef __cplusplus
-#define ARGS1(old,a)  (a)
-#define ARGS2(old,a,b)  (a,b)
-#define ARGS3(old,a,b,c)  (a,b,c)
-#define ARGS4(old,a,b,c,d)  (a,b,c,d)
-#define ARGS5(old,a,b,c,d,e)  (a,b,c,d,e)
-#define ARGS6(old,a,b,c,d,e,f)  (a,b,c,d,e,f)
-#define CONST const
-#else
-#define ARGS1(old,a)  old  a;
-#define ARGS2(old,a,b)  old a; b;
-#define ARGS3(old,a,b,c)  old a; b; c;
-#define ARGS4(old,a,b,c,d)  old a; b; c; d;
-#define ARGS5(old,a,b,c,d,e)  old a; b; c; d; e;
-#define ARGS6(old,a,b,c,d,e,f)  old a; b; c; d; e; f;
-#ifndef CONST
-#define CONST
-#endif
-#endif
-
 #ifdef ENABLE_DLL
 #ifndef WIN32
 #include <dlfcn.h>
@@ -617,9 +610,10 @@ extern "C" {
 #include "model.h"
 #include "storage.h"
 #include "skeleton.h"
+#include "quantity.h"
 #include "extern.h"
 #include "express.h"
-#include "quantity.h"
+#include "node_names.h"
 #include "web.h"
 #include "lex.h"
 #ifdef __cplusplus
@@ -641,7 +635,32 @@ extern "C" {
 #define FPRESET
 #endif
 
-#if defined(LONGDOUBLE) && !defined(NOLONGMATHFUNC)
+#ifdef FLOAT128
+/* have to do these after math.h */
+#define sin sinq
+#define cos cosq
+#define tan tanq
+#define asin asinq
+#define acos acosq
+#define atan atanq
+#define sinh sinhq
+#define cosh coshq
+#define tanh tanhq
+#define asinh asinhq
+#define acosh acoshq
+#define atanh atanhq
+#define exp expq
+#define log logq
+#define pow powq
+#define sqrt sqrtq
+#define ceil ceilq
+#define fabs fabsq
+#define floor floorq
+#define fmod fmodq
+#define modf modfq
+#define atof(a) strtoflt128(a,NULL)
+
+#elif defined(LONGDOUBLE) && !defined(NOLONGMATHFUNC)
 /* have to do these after math.h */
 #define sin sinl
 #define cos cosl
@@ -661,7 +680,6 @@ extern "C" {
 #define sqrt sqrtl
 #define ceil ceill
 #define fabs fabsl
-extern REAL fabsl(REAL); /* wasn't in IRIX6.1 math.h */
 #define floor floorl
 #define fmod fmodl
 #define modf modfl
@@ -689,3 +707,6 @@ long double strtold(const char *, char **);
 #ifdef MPI_EVOLVER
 #include "mpi_evolver.h"
 #endif
+
+
+

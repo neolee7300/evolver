@@ -23,9 +23,10 @@
 *  Purpose:  Triangulate a n-sided face by putting in central vertex.
 */
 
-void face_triangulate(f_id,edgecount)
-facet_id f_id;
-int edgecount;
+void face_triangulate(
+  facet_id f_id,
+  int edgecount
+)
 {
   int i,k;
   vertex_id center; 
@@ -211,13 +212,12 @@ int edgecount;
 * purpose: Remove center vertex from known starred triangle;
 *    necessary for edge removal of one side. Checks that all
 *    interior edges are valence 2.  Does inner edge deletion
-*    by hand rather than call eliminate_edge().
+*    by hand rather than call delete_edge().
 *
 * return: -1 failure, 0 unremovable star, 1 success
 */
 
-int unstar(fe_a)
-facetedge_id fe_a;  /* removable vertex is at tail */
+int unstar(facetedge_id fe_a  /* removable vertex is at tail */)
 { vertex_id v_id = get_fe_tailv(fe_a);
   facet_id fkeep = get_fe_facet(fe_a);
   facetedge_id fe_b = get_next_edge(fe_a);
@@ -230,6 +230,7 @@ facetedge_id fe_a;  /* removable vertex is at tail */
   facetedge_id fe_i = get_next_edge(fe_h);
   facet_id f_id;
   body_id b_id;
+  int acomp,ccomp,ecomp;
 
   if ( verbose_flag )
   { sprintf(msg,"Unstarring vertex %s\n",ELNAME(v_id));
@@ -240,7 +241,7 @@ facetedge_id fe_a;  /* removable vertex is at tail */
   if ( get_vattr(v_id) & FIXED )  /* fixed vertex */
   { if ( verbose_flag )
     { sprintf(msg,"Unstarring failed, vertex %s is fixed.\n",
-                ELNAME(v_id),get_vertex_evalence(v_id));
+                ELNAME(v_id));
       outstring(msg);
     }
     return -1;
@@ -285,6 +286,20 @@ facetedge_id fe_a;  /* removable vertex is at tail */
     }
     return -1;
   }
+
+  // Check compatibility of constraints
+  acomp = compare_edge_facet_attr(get_fe_edge(fe_a),fkeep);
+  ccomp = compare_edge_facet_attr(get_fe_edge(fe_c),fkeep);
+  ecomp = compare_edge_facet_attr(get_fe_edge(fe_e),fkeep);
+  if ( !(acomp==A_SUB_B || acomp==A_EQ_B) || !(ccomp==A_SUB_B || ccomp==A_EQ_B) 
+       || !(ecomp==A_SUB_B || ecomp==A_EQ_B) )
+          { if ( verbose_flag )
+            { sprintf(msg,
+             "Can't unstar at vertex %s due to constraints.\n",ELNAME(v_id));
+               outstring(msg);
+            }
+            return -1; 
+          }
 
   /* fix up body links */
   f_id = get_fe_facet(fe_e);
@@ -395,7 +410,9 @@ int simple_unstar(facetedge_id base_fe)
 *
 * return:  1 if 
 */
+
 struct finagle { edge_id e_id; vertex_id v_id; };
+
 int finagle_comp(a,b)
 struct finagle *a,*b;
 { if ( a->v_id < b->v_id ) return -1;
@@ -405,8 +422,7 @@ struct finagle *a,*b;
   return 0;
 }
 
-int star_finagle(e_id)
-edge_id e_id;
+int star_finagle(edge_id e_id)
 { struct finagle tail_edges[100];  /* tails into e_id tail */
   int tail_valence = 0;
   struct finagle head_edges[100];  /* heads into e_id head */
@@ -564,8 +580,7 @@ edge_id e_id;
 *  Return: ID of new edge.
 */
  
-edge_id edge_divide(e_id)
-edge_id e_id;
+edge_id edge_divide(edge_id e_id)
 {
   REAL s[MAXCOORD],*t,*mu=NULL,*mv,*h,m[MAXCOORD],q1[MAXCOORD],q3[MAXCOORD];
   edge_id  new_e;
@@ -1064,6 +1079,8 @@ edge_id e_id;
  }
  #endif
 
+ if ( (web.representation==STRING) && everything_quantities_flag )
+    check_edge_vol_methods(new_e);
 
  top_timestamp = ++global_timestamp;
 
@@ -1085,10 +1102,13 @@ edge_id e_id;
 *                also both facets marked with NEWFACET attribute, so they
 *                can be left alone during a refinement.
 *
+*    Return: Id of new edge;
 */
 
-void cross_cut(first_fe,last_fe)
-facetedge_id first_fe,last_fe;
+void cross_cut(
+  facetedge_id first_fe,
+  facetedge_id last_fe
+)
 {
   facet_id old_f,new_f;
   edge_id  new_e;
@@ -1196,7 +1216,7 @@ facetedge_id first_fe,last_fe;
       { sprintf(errmsg,
            "Vertices %s and %s are on different boundaries from edge %s.\n",
               ELNAME(headv),ELNAME1(tailv),ELNAME2(new_e));
-        kb_error(1242,errmsg,RECOVERABLE);
+        kb_error(1939,errmsg,RECOVERABLE);
       }
       else
 #ifdef PARAMAVG
@@ -1243,7 +1263,298 @@ facetedge_id first_fe,last_fe;
     }
   }
  top_timestamp = ++global_timestamp;
+
 } /* end cross_cut() */
+
+/**************************************************************************
+*
+* function: facet_crosscut()
+*
+* purpose: subdivide string model facet; implements facet_crosscut command.
+*
+* return: ID of new edge.
+*/
+
+edge_id facet_crosscut(
+  facet_id old_f,
+  vertex_id tailv,
+  vertex_id headv
+)
+{ facetedge_id tail_fe,tail_fe_neg,head_fe,head_fe_neg;
+  edge_id start_e,e_id,new_e;
+  facetedge_id fe,start_fe;
+  facet_id new_f;
+  facet_id new_fe_old,new_fe_new;
+  ATTR attr;
+  int wrap;
+
+  // find appropriate fe so cross_cut can be used.
+  // tail
+  start_e = get_vertex_edge(tailv);
+  e_id = start_e;
+  tail_fe = NULLID;
+  do
+  { fe = start_fe = get_edge_fe(e_id);
+    do
+    { if ( equal_element(get_fe_facet(fe),old_f) )
+      { tail_fe = fe;
+        break;
+      }
+      fe = get_next_facet(fe);
+    } while ( !equal_id(fe,start_fe));
+    e_id = get_next_tail_edge(e_id);
+  } while ( (tail_fe == NULLID ) && !equal_id(e_id,start_e));
+
+  // head
+  start_e = get_vertex_edge(headv);
+  e_id = start_e;
+  head_fe = NULLID;
+  do
+  { fe = start_fe = get_edge_fe(e_id);
+    do
+    { if ( equal_element(get_fe_facet(fe),old_f) )
+      { head_fe = fe;
+        break;
+      }
+      fe = get_next_facet(fe);
+    } while ( !equal_id(fe,start_fe));
+    e_id = get_next_tail_edge(e_id);
+  } while ( (head_fe == NULLID ) && !equal_id(e_id,start_e));
+
+  // see what we found
+  if ( (tail_fe == NULLID) && (head_fe == NULLID) )
+  { sprintf(errmsg,"facet_crosscut: vertices %s,%s not on facet %s\n",
+       ELNAME(tailv),ELNAME2(headv),ELNAME3(old_f));
+    kb_error(5678,errmsg,RECOVERABLE);
+  }
+  if ( valid_id(tail_fe) )
+  { facet_id tailfpos = get_fe_facet(tail_fe);
+    tail_fe_neg = get_prev_edge(tail_fe);
+    if ( inverted(tailfpos) )
+    { tail_fe_neg = inverse_id(tail_fe);
+      tail_fe = get_next_edge(tail_fe_neg);
+    }
+    else
+      tail_fe_neg = get_prev_edge(tail_fe);
+  }
+  else
+  { tail_fe_neg = NULLID;
+  }
+  if ( valid_id(head_fe) )
+  { facet_id headfpos = get_fe_facet(head_fe);
+    head_fe_neg = get_prev_edge(head_fe);
+    if ( inverted(headfpos) )
+    { head_fe_neg = inverse_id(head_fe);
+      head_fe = get_next_edge(head_fe_neg);
+    }
+    else
+      head_fe_neg = get_prev_edge(head_fe);
+  }
+  else
+  { head_fe_neg = NULLID;
+  }
+
+  // stuff modified from cross_cut()
+  attr = get_fattr(old_f);
+  new_e = new_edge(tailv,headv,old_f);
+  if ( attr & FIXED )
+  { set_attr(new_e,FIXED);
+    if ( web.modeltype == QUADRATIC )
+        set_attr(get_edge_midv(new_e),FIXED);
+    else if ( web.modeltype == LAGRANGE )
+    { int i;
+      vertex_id *v = get_edge_vertices(new_e);
+      for ( i = 1 ; i < web.lagrange_order ; i++ )
+          set_attr(v[i],FIXED);
+    }
+  }
+  if ( attr & NO_REFINE ) set_attr(new_e,NO_REFINE);
+
+  // see if we need a new facet
+  if ( (valid_id(tail_fe) || valid_id(head_fe_neg))
+    && (valid_id(head_fe) || valid_id(tail_fe_neg)) )
+  { new_fe_old = new_facetedge(old_f,new_e); 
+    new_f = dup_facet(old_f); /* copy facet data */
+    new_fe_new = new_facetedge(new_f,inverse_id(new_e));
+//    set_facet_body(new_f,get_facet_body(old_f));
+//    set_facet_body(facet_inverse(new_f),get_facet_body(facet_inverse(old_f)));
+    if ( phase_flag ) set_f_phase_density(new_f);
+    set_edge_fe(new_e,new_fe_old);
+
+  }
+  else
+  { new_f = NULLID;
+    new_fe_new = NULLID;
+    if ( !valid_id(head_fe) && !valid_id(tail_fe_neg) )
+    { // reverse order of head and tail
+      new_fe_old = new_facetedge(inverse_id(old_f),new_e);
+      set_edge_fe(new_e,new_fe_old);
+    }
+    else
+    { new_fe_old = new_facetedge(old_f,new_e);
+      set_edge_fe(new_e,new_fe_old);
+    }
+  }
+
+  /* install new facet into its facet-edges */
+  /* link up facet-edges */
+  if ( valid_id(new_f) )
+  {
+    if ( valid_id(tail_fe_neg) )
+      set_next_edge(tail_fe_neg,new_fe_old);
+    set_prev_edge(new_fe_old,tail_fe_neg);
+    if ( valid_id(head_fe) )
+      set_prev_edge(head_fe,new_fe_old);
+    set_next_edge(new_fe_old,head_fe);
+    if ( valid_id(tail_fe) )
+      set_prev_edge(tail_fe,new_fe_new);
+    set_next_edge(new_fe_new,tail_fe);
+    if ( valid_id(head_fe_neg) )
+      set_next_edge(head_fe_neg,new_fe_new);
+    set_prev_edge(new_fe_new,head_fe_neg);
+    set_next_facet(new_fe_new,fe_inverse(new_fe_old));
+    set_prev_facet(new_fe_new,fe_inverse(new_fe_old));
+    set_next_facet(new_fe_old,fe_inverse(new_fe_new));
+    set_prev_facet(new_fe_old,fe_inverse(new_fe_new));
+    // fix up loop of facet edges on new facet
+    fe = new_fe_new;
+    do
+    { set_fe_facet(fe,new_f);
+      fe = get_next_edge(fe);
+    } while ( valid_id(fe) && !equal_id(fe,new_fe_new));
+    if ( !valid_id(fe) )
+    { fe = new_fe_new;
+      do // go the other way
+      { set_fe_facet(fe,new_f);
+        set_facet_fe(new_f,fe);
+        fe = get_prev_edge(fe);
+      } while ( valid_id(fe) && !equal_id(fe,new_fe_new));
+    }
+    else
+      set_facet_fe(new_f,new_fe_new);
+    set_facet_fe(old_f,new_fe_old);
+    set_facet_body(new_f,get_facet_body(old_f));
+    set_facet_body(facet_inverse(new_f),get_facet_body(facet_inverse(old_f)));
+  }
+  else // no new facet, just adding edge to old
+  { if ( valid_id(tail_fe) || valid_id(head_fe_neg) )
+    { if ( valid_id(head_fe_neg) )
+        set_next_edge(head_fe_neg,inverse_id(new_fe_old));
+      set_next_edge(new_fe_old,inverse_id(head_fe_neg));
+      set_prev_edge(new_fe_old,inverse_id(tail_fe));
+      if ( valid_id(tail_fe) )
+        set_prev_edge(tail_fe,inverse_id(new_fe_old));
+    }
+    else if ( valid_id(head_fe) || valid_id(tail_fe_neg) )
+    { if ( valid_id(head_fe) )
+         set_prev_edge(head_fe,new_fe_old);
+      set_next_edge(new_fe_old,head_fe);
+      set_prev_edge(new_fe_old,tail_fe_neg);
+      if ( valid_id(tail_fe_neg) )
+        set_next_edge(tail_fe_neg,new_fe_old);
+    }
+    set_next_facet(new_fe_old,new_fe_old);
+    set_prev_facet(new_fe_old,new_fe_old);
+  }
+
+  if ( everything_quantities_flag )
+     check_edge_vol_methods(new_e);
+
+  /* and set torus wrap flags if needed */
+  if ( web.symmetry_flag )
+  { fe = new_fe_old;
+    wrap = 0;
+    do
+    {
+       wrap = (*sym_compose)(wrap,get_fe_wrap(fe));
+       fe = get_next_edge(fe);
+    } while ( valid_id(fe) && !equal_id(fe,new_fe_old) );
+  }
+  if ( wrap )
+  { set_edge_wrap(new_e,(*sym_inverse)(wrap));
+    if ( web.modeltype == QUADRATIC )
+    { /* have to adjust coordinates of midpoint */
+      REAL temp[MAXCOORD];
+      REAL *mv,*tv,*hv;
+      int k;
+      tv = get_coord(tailv);
+      mv = get_coord(get_edge_midv(new_e));
+      hv = get_coord(headv);
+      (*sym_wrap)(hv,temp,(*sym_inverse)(wrap));
+      for ( k = 0 ; k < SDIM ; k++ )
+        mv[k] = (tv[k] + temp[k])/2;
+    }
+  }
+
+  if ( attr & BOUNDARY )
+  { struct boundary *bdry = get_facet_boundary(old_f);
+    REAL *paramb,*parammid;
+    REAL *mu,*mv;
+
+    set_attr(new_e,BOUNDARY);
+    set_edge_boundary_num(new_e,bdry->num);
+    if ( web.modeltype == QUADRATIC )
+    { vertex_id divider = get_edge_midv(new_e); 
+      set_attr(divider,BOUNDARY);
+      set_boundary_num(divider,bdry->num);
+
+      /* find parameters of new midpoint */
+      mv = get_coord(divider);
+      parammid = get_param(divider);
+      if ( (get_boundary(headv) != bdry) && (get_boundary(tailv) != bdry) )
+      { sprintf(errmsg,
+           "Vertices %s and %s are on different boundaries from edge %s.\n",
+              ELNAME(headv),ELNAME1(tailv),ELNAME2(new_e));
+        kb_error(1242,errmsg,RECOVERABLE);
+      }
+      else
+#ifdef PARAMAVG
+      if ( (get_boundary(headv) == bdry) && (get_boundary(tailv) == bdry) )
+      { mu = get_coord(tailv);
+        parama = get_param(tailv);
+        paramb = get_param(headv);
+        /* projecting on tangent */
+        b_extrapolate(bdry,mu,mv,mv,parama,parammid,tailv);
+        /* if not wrapped, take average parameter */
+        for (  i = 0 ; i < bdry->pcount ; i++ )
+        { if ( ((parama[i] < parammid[i]) && (parammid[i] < paramb[i]))
+             || ((parama[i] > parammid[i]) && (parammid[i] > paramb[i])))
+             parammid[i] = (parama[i] + paramb[i])/2;
+        }
+      }
+      else
+#endif
+      if ( get_boundary(headv) == bdry )
+      { mu = get_coord(headv);
+        paramb = get_param(headv);
+        /* projecting on tangent */
+        b_extrapolate(bdry,mu,mv,mv,paramb,parammid,headv);
+      }
+      else
+      { mu = get_coord(tailv);
+        paramb = get_param(tailv);
+        /* projecting on tangent */
+        b_extrapolate(bdry,mu,mv,mv,paramb,parammid,tailv);
+      }
+    }
+  }
+  if ( attr & CONSTRAINT )    
+  { ATTR cattr = attr & (BDRY_ENERGY | BDRY_CONTENT | CONSTRAINT );
+    conmap_t * conmap = get_f_constraint_map(old_f);
+
+    set_attr(new_e,cattr);
+    set_e_conmap(new_e,conmap);
+    if ( web.modeltype == QUADRATIC )
+    { vertex_id mid = get_edge_midv(new_e);
+      set_attr(mid,cattr);
+      set_v_conmap(mid,conmap);
+      project_v_constr(mid,ACTUAL_MOVE,RESET_ONESIDEDNESS);
+    }
+  }
+  top_timestamp = ++global_timestamp;
+
+  return new_e;
+} // end facet_crosscut()
 
 /**************************************************************************
  * 
@@ -1275,10 +1586,13 @@ int merge_bodies()
       if ( equal_element(get_fe_edge(fe_id),get_fe_edge(next_fe)) )
         continue;
       f_id = get_fe_facet(fe_id);
-      if ( !valid_id(f_id) ) continue;
+      if ( !valid_id(f_id) ) 
+        continue;
       ff_id = get_fe_facet(next_fe);
-      if ( !valid_id(ff_id) ) continue;
-      if ( equal_id(f_id,ff_id)) continue;
+      if ( !valid_id(ff_id) ) 
+        continue;
+      if ( equal_id(f_id,ff_id)) 
+        continue;
       /* now ready to merge */
       while ( equal_id(ff_id,get_fe_facet(next_fe)) )
         set_fe_facet(next_fe,f_id);
@@ -1288,12 +1602,13 @@ int merge_bodies()
   else if ( web.representation == SOAPFILM )
   { FOR_ALL_FACETEDGES(fe_id)
     { next_fe = get_next_facet(fe_id);
-      if ( equal_id(fe_id,next_fe) ) continue; /* ok to disagree on valence 1 */
+      if ( equal_id(fe_id,next_fe) ) 
+         continue; /* ok to disagree on valence 1 */
       f_id = get_fe_facet(fe_id);
       ff_id = get_fe_facet(next_fe);
       b_id = get_facet_body(inverse_id(f_id));
       bb_id = get_facet_body(ff_id);
-      if ( !equal_id(b_id,bb_id) )
+      if ( valid_id(b_id) && valid_id(bb_id) && !equal_id(b_id,bb_id) )
       { /* merge higher number body to lower */
         if ( loc_ordinal(b_id) > loc_ordinal(bb_id) )
           merge_body[loc_ordinal(b_id)] = bb_id;
@@ -1318,11 +1633,11 @@ int merge_bodies()
   FOR_ALL_FACETS(f_id)
   { b_id = get_facet_body(f_id);
     bb_id = merge_body[loc_ordinal(b_id)];
-    if ( !equal_id(b_id,bb_id) )
+    if ( valid_id(bb_id) && !equal_id(b_id,bb_id) )
       set_facet_body(f_id,bb_id);
     b_id = get_facet_body(inverse_id(f_id));
     bb_id = merge_body[loc_ordinal(b_id)];
-    if ( !equal_id(b_id,bb_id) )
+    if ( valid_id(bb_id) && !equal_id(b_id,bb_id) )
       set_facet_body(inverse_id(f_id),bb_id);
   }
 
@@ -1335,7 +1650,8 @@ int merge_bodies()
   temp_free((char*)merge_body);
 
   return merge_count;
-}
+
+} // end merge_bodies()
 
 /********************************************************************
 *
@@ -1345,8 +1661,7 @@ int merge_bodies()
 *
 */
  
-int ffcomp(a,b)
-facet_id *a,*b;
+int ffcomp(facet_id *a,facet_id *b)
 {
   if ( loc_ordinal(*a) < loc_ordinal(*b) ) return -1;
   if ( loc_ordinal(*a) > loc_ordinal(*b) ) return 1;
@@ -1354,7 +1669,7 @@ facet_id *a,*b;
   if ( inverted(*a) > inverted(*b) ) return 1;
 
   return 0;
-}
+} // end ffcomp()
 
 /************************************************************************
 *
@@ -1394,12 +1709,12 @@ int rebody()
   stack = (facet_id *)temp_calloc(2*web.skel[FACET].count,sizeof(facet_id*));
   faces_left = 0; 
   FOR_ALL_FACETS(f_id)
-     { if ( valid_id(get_facet_body(f_id)))
-             flist[faces_left++].f_id = f_id;
-        ff_id = facet_inverse(f_id);
-        if ( valid_id(get_facet_body(ff_id)) )
-             flist[faces_left++].f_id = ff_id;
-      }
+  { if ( valid_id(get_facet_body(f_id)))
+       flist[faces_left++].f_id = f_id;
+    ff_id = facet_inverse(f_id);
+    if ( valid_id(get_facet_body(ff_id)) )
+       flist[faces_left++].f_id = ff_id;
+  }
   if ( faces_left == 0 ) return 0;
   facetop = faces_left;
 
@@ -1409,83 +1724,98 @@ int rebody()
   /* initialize stack with body facets */
   stacktop = 0;
   FOR_ALL_BODIES(b_id)
-    { 
-      f_id = get_body_facet(b_id);
-      if ( !valid_id(f_id) )
-        continue;
-      stack[stacktop++] = f_id;
-      bf = (struct fface *)bsearch((char *)&f_id,(char *)flist,
-                        facetop, sizeof(struct fface),FCAST ffcomp);
-      if ( bf == NULL ) 
-      { kb_error(1243,
-             "Internal error: rebody() cannot find facet on stack.\n",WARNING);
-        continue; 
-      }
-
-      bf->wrapflag = 1;
-      faces_left--;
+  { 
+    f_id = get_body_facet(b_id);
+    if ( !valid_id(f_id) )
+      continue;
+    stack[stacktop++] = f_id;
+    bf = (struct fface *)bsearch((char *)&f_id,(char *)flist,
+                      facetop, sizeof(struct fface),FCAST ffcomp);
+    if ( bf == NULL ) 
+    { kb_error(1243,
+           "Internal error: rebody() cannot find facet on stack.\n",WARNING);
+      continue; 
     }
 
-  /* pull stuff off stack till empty */
-  while (stacktop > 0 )
-    { f_id = stack[--stacktop];
-      b_id = get_facet_body(f_id);
-      for ( i = 0, fe = get_facet_fe(f_id); i < 3 ; i++,fe = get_next_edge(fe))
-         { 
-            ff_id = get_fe_facet(get_prev_facet(fe));
-            if ( !valid_id(ff_id) ) continue;
-            ff_id = facet_inverse(ff_id);
-            if ( !equal_id(get_facet_body(ff_id),b_id) ) continue;
-            bf = (struct fface *)bsearch((char *)&ff_id,(char *)flist,
-                        facetop, sizeof(struct fface),FCAST ffcomp);
-            if ( bf == NULL ) 
-              { kb_error(1244,"Internal error: rebody() cannot find facet on stack (old body).\n",WARNING);
+    bf->wrapflag = 1;
+    faces_left--;
+  }
 
-                 continue;
-              }
-            if ( bf->wrapflag ) continue;
-            bf->wrapflag = 1; /* mark as part of original body */
-            stack[stacktop++] = ff_id;
-            faces_left--;
-         }
+  /* Mark existing body contiguous facets; pull stuff off stack till empty */
+  while (stacktop > 0 )
+  { f_id = stack[--stacktop];
+    b_id = get_facet_body(f_id);
+    for ( i = 0, fe = get_facet_fe(f_id); i < 3 ; i++,fe = get_next_edge(fe))
+     {  facetedge_id prev_fe = get_prev_facet(fe);
+
+        // Single valence edge marks body boundary
+        if ( equal_id(prev_fe,fe) )
+           continue;
+
+        ff_id = get_fe_facet(prev_fe);
+        if ( !valid_id(ff_id) ) continue;
+        
+        ff_id = facet_inverse(ff_id);
+//        if ( !equal_id(get_facet_body(ff_id),b_id) ) continue;
+        if ( !valid_id(get_facet_body(ff_id)) )
+           continue; /* only do previously bodied facets */
+    
+        bf = (struct fface *)bsearch((char *)&ff_id,(char *)flist,
+                        facetop, sizeof(struct fface),FCAST ffcomp);
+        if ( bf == NULL ) 
+        { kb_error(1244,
+           "Internal error: rebody() cannot find facet on stack (old body).\n",
+               WARNING);
+          continue;
+        }
+        if ( bf->wrapflag ) continue;
+        bf->wrapflag = 1; /* mark as part of original body */
+        stack[stacktop++] = ff_id;
+        faces_left--;
+      }
     }
 
   /* now have to create new bodies */
   while ( faces_left > 0 )
-    { /* find undone face */
-      for ( i  =  0 ; i < facetop ; i++ )
-         if ( flist[i].wrapflag == 0 ) break;
-      if ( i == facetop ) break;
-      flist[i].wrapflag = 1;
-      f_id = flist[i].f_id;
-      old_b = get_facet_body(f_id);
-      b_id = dup_body(b_id);
-      new_bodies++;
-      set_body_facet(b_id,NULLID);  /* clear dup'ed value */
-      set_facet_body(f_id,b_id);  /* takes care of set_body_facet() for first one */
-      stack[stacktop++] = f_id;
-      faces_left--;
-      /* pull stuff off stack till empty */
-      while (stacktop > 0 )
-        { f_id = stack[--stacktop];
-          for ( i=0, fe = get_facet_fe(f_id); i < 3 ; i++,fe = get_next_edge(fe))
-             { ff_id = facet_inverse(get_fe_facet(get_prev_facet(fe)));
-                if (!valid_id(ff_id) || !valid_id(get_facet_body(ff_id))) continue;
-                if ( !equal_id(get_facet_body(ff_id),old_b) ) continue;
-                bf = (struct fface *)bsearch((char *)&ff_id,(char *)flist,
-                        facetop, sizeof(struct fface),FCAST ffcomp);
-                if ( bf == NULL )
-                  { kb_error(1245,"Internal error: rebody() cannot find facet on stack (new body).\n",WARNING);
-                     continue;
-                  }
-                if ( bf->wrapflag ) continue;
-                bf->wrapflag = 1; /* mark as part of original body */
-                set_facet_body(ff_id,b_id);
-                stack[stacktop++] = ff_id;
-                faces_left--;
-             }
-          }
-     }
+  { /* find undone face */
+    for ( i  =  0 ; i < facetop ; i++ )
+       if ( flist[i].wrapflag == 0 ) break;
+    if ( i == facetop ) break;
+    flist[i].wrapflag = 1; 
+    f_id = flist[i].f_id;
+    old_b = get_facet_body(f_id);
+    b_id = dup_body(old_b);
+    new_bodies++; 
+    set_body_facet(b_id,NULLID);  /* clear dup'ed value */
+    set_facet_body(f_id,b_id);  /* takes care of set_body_facet() for first one */
+    stack[stacktop++] = f_id;
+    faces_left--;
+    /* pull stuff off stack till empty */
+    while (stacktop > 0 )
+    { f_id = stack[--stacktop];
+      for ( i=0, fe = get_facet_fe(f_id); i < 3 ; i++,fe = get_next_edge(fe))
+      { facetedge_id prev_fe = get_prev_facet(fe);
+        if ( equal_id(prev_fe,fe) )
+          continue;  /* valence 1 edge is barrier */
+        ff_id = facet_inverse(get_fe_facet(prev_fe));
+        if (!valid_id(ff_id) || !valid_id(get_facet_body(ff_id))) continue;
+//          if ( !equal_id(get_facet_body(ff_id),old_b) ) continue;
+        bf = (struct fface *)bsearch((char *)&ff_id,(char *)flist,
+                  facetop, sizeof(struct fface),FCAST ffcomp);
+        if ( bf == NULL )
+        { kb_error(1245,
+            "Internal error: rebody() cannot find facet on stack (new body).\n",
+               WARNING);
+           continue;
+        }
+        if ( bf->wrapflag ) continue;
+        bf->wrapflag = 1; /* mark as part of original body */
+        set_facet_body(ff_id,b_id);
+        stack[stacktop++] = ff_id;
+        faces_left--;
+      }
+    }
+  }
 
   temp_free((char*)flist);
   temp_free((char*)stack);
@@ -1500,7 +1830,8 @@ int rebody()
     }
   }
   return new_bodies;
-}
+
+}  // end rebody()
 
 /************************************************************************
 *
@@ -1571,15 +1902,16 @@ int string_rebody()
       be = (struct bodyface *)bsearch((char *)&fe,(char *)felist,
                         edgetop, sizeof(struct bodyface),FCAST ffcomp);
       if ( be == NULL ) 
-      { kb_error(1246,
-              "Internal error: string_rebody() cannot find edge on stack.\n",
-                 WARNING); 
+      { sprintf(errmsg,
+             "Internal error: string_rebody() cannot find the facetedge for body %s on stack.\n",
+              ELNAME(b_id));
+        kb_error(1246,errmsg, WARNING); 
         continue; 
       }
 
       be->wrapflag = 1;
       edges_left--;
-    }
+    } 
 
   /* pull stuff off stack till empty */
   while (stacktop > 0 )
@@ -1679,11 +2011,28 @@ anotherend:
      }
   }
 
+  // Make sure facet facetedge is first in open facet
+  FOR_ALL_FACETS(f_id)
+  { facetedge_id start_fe;
+    start_fe = get_facet_fe(f_id);
+    if ( !valid_id(start_fe) ) continue;
+    fe = start_fe;
+    do
+    { 
+      ffe = get_prev_edge(fe);
+      if ( !valid_id(ffe) )
+      { set_facet_fe(f_id,fe);
+        break;
+      }
+      fe = ffe;
+    } while ( !equal_id(fe,start_fe) );
+  }
+
   temp_free((char*)felist);
   temp_free((char*)stack);
   top_timestamp = ++global_timestamp;
   return new_bodies;
-}
+} // end string_rebody()
 
 /****************************************************************************
 *
@@ -1694,8 +2043,7 @@ anotherend:
 * return: 1 if vertex removed, 0 if not because attached.
 */
 
-int dissolve_vertex(v_id)
-vertex_id v_id;
+int dissolve_vertex(vertex_id v_id)
 { edge_id e_id;
 
   if ( !valid_element(v_id) ) return 0;
@@ -1713,7 +2061,7 @@ vertex_id v_id;
   }
 
   return 1;
-}
+} // end dissolve_vertex()
 
 /****************************************************************************
 *
@@ -1724,8 +2072,7 @@ vertex_id v_id;
 * return: 1 if edge removed, 0 if not because attached.
 */
 
-int dissolve_edge(e_id)
-edge_id e_id;
+int dissolve_edge(edge_id e_id)
 { facetedge_id fe,fe_id,start_fe;
   vertex_id head,tail;
   int evalence;
@@ -1751,31 +2098,64 @@ edge_id e_id;
   
     /* check for being at beginning or end of edge arc for all facets */
     if ( evalence > 0 )
-    { start_fe = fe_id = get_edge_fe(e_id);
+    { int baddies = 0;  // number of facets split into two arcs
+      int loopers = 0;  // number of full loop facets
+      start_fe = fe_id = get_edge_fe(e_id);
       do
-      {   
+      { facetedge_id nextfe,prevfe,flipfe;
+
         fe = fe_id;
-        if ( valid_id(get_next_edge(fe)) && valid_id(get_prev_edge(fe)) )
-        { /* check for full loop */
+        nextfe = get_next_edge(fe);
+        prevfe = get_prev_edge(fe);
+        flipfe = inverse_id(get_next_facet(fe));
+        if ( valid_id(nextfe) && valid_id(prevfe) &&
+           !( equal_id(nextfe,flipfe) || equal_id(prevfe,flipfe) ) )
+        {
+          /* check for full loop */
           do { fe = get_next_edge(fe); }
           while ( valid_id(fe) && !equal_id(fe,fe_id) );
           if ( !valid_id(fe) )
-          { if ( verbose_flag )
-            { sprintf(msg,
-               "Not dissolving edge %s since would make facet into two arcs.\n",
-                   ELNAME(e_id));
-              outstring(msg);
-            }
-            return 0;
-          }
+            baddies++;
+          else 
+            loopers++;
         }
         fe_id = get_next_facet(fe_id);
       } while ( fe_id != start_fe );
+
+      if ( baddies > loopers ) // second full loop can rescue split arc
+      { if ( verbose_flag )
+            { sprintf(msg,
+               "Not dissolving edge %s since that would make facet into two arcs.\n",
+                   ELNAME(e_id));
+              outstring(msg);
+            }
+        return 0;
+      }
+
       if ( evalence > 1 )
       { sprintf(msg,"Dissolving edge %s between two facets.\n",ELNAME(e_id));
         kb_error(2172,msg,WARNING);
       }
     }
+
+    // check it won't divide one facet loop into two by doubling back
+    if ( evalence==2 )
+    { fe_id = get_edge_fe(e_id);
+      fe = get_next_facet(fe_id);
+      if ( equal_element(get_fe_facet(fe_id),get_fe_facet(fe)) ) 
+      { // ok if at tip with immediate double-back
+        if ( !equal_element(fe,get_next_edge(fe_id)) && 
+             !equal_element(fe,get_prev_edge(fe_id)) )
+        { // have a problem
+          if ( verbose_flag )
+          { sprintf(msg,"Not dissolving edge %s since that would separate facet into two loops.\n",
+               ELNAME(e_id));
+            outstring(msg);
+          }
+          return 0;
+        }
+      }
+    } // end split check
   }
   else if ( evalence > 0 ) 
   { if ( verbose_flag )
@@ -1802,43 +2182,172 @@ edge_id e_id;
   remove_vertex_edge(tail,e_id);
   remove_vertex_edge(head,inverse_id(e_id));
 
-  /* connect facetedges of stumps */
+  /* reset facet facetedges */
   if ( web.representation == STRING )
-  { facetedge_id ffe = fe;
-    do
+  { facetedge_id ffe = fe, next_fe;
+    do // loop over all facets on edge
     {
-      f_id = get_fe_facet(ffe);  /* in case of STRING */
-      if ( valid_id(f_id) )
-      {
-        if ( inverted(f_id) )
-        { if ( valid_id(get_prev_edge(ffe)) )
-           set_facet_fe(f_id,get_prev_edge(ffe));
-          else if ( !valid_id(get_next_edge(ffe)) )
-           set_facet_fe(f_id,NULLID); 
-        } 
-        else
-        { if ( valid_id(get_next_edge(ffe)) )
-           set_facet_fe(f_id,get_next_edge(ffe));
-          else if ( !valid_id(get_prev_edge(ffe)) )
-           set_facet_fe(f_id,NULLID); 
-        }
+        f_id = get_fe_facet(ffe);  
+        if ( valid_id(f_id) ) 
+        { // need to reset first edge in facetedge chain
+          if ( inverted(f_id) ) 
+          { next_fe = get_prev_edge(ffe);
+            if ( valid_id(next_fe) )
+            { // test for double-back
+              if ( equal_element(get_fe_edge(ffe),get_fe_edge(next_fe)) )
+                next_fe = get_prev_edge(next_fe);
+              if ( equal_id(next_fe,ffe) )
+                next_fe = NULLID;
+               set_facet_fe(f_id,next_fe);
+            }
+            else 
+              if ( equal_id(ffe,get_facet_fe(f_id)) )
+              { // was only edge in facet
+                set_facet_fe(f_id,NULLID); 
+              }
+          } 
+          else // not inverted facet
+          { next_fe = get_next_edge(ffe);
+            if ( valid_id(next_fe) )
+            { // test for double-back
+              if ( equal_element(get_fe_edge(ffe),get_fe_edge(next_fe)) )
+                next_fe = get_next_edge(next_fe);
+              if ( equal_id(next_fe,ffe) )
+                next_fe = NULLID;
+              set_facet_fe(f_id,next_fe);
+            }
+            else 
+              if ( equal_id(ffe,get_facet_fe(f_id)) )
+              { // was only edge in facet
+                set_facet_fe(f_id,NULLID); 
+              }
+          }       
       }
       ffe = get_next_facet(ffe);
     } while ( valid_id(ffe) && !equal_id(ffe,fe) );
   }
 
+  if ( (web.representation == STRING) && (evalence == 2) )
+  { // merge the two facets/bodies
+    facetedge_id ffe = get_next_facet(fe),fffe;
+    facet_id ff_id = inverse_id(get_fe_facet(ffe));
+    body_id b_id; 
+    facetedge_id next,prev,nnext,pprev;
+
+    f_id = get_fe_facet(fe); 
+
+    if ( equal_id(f_id,ff_id) )
+    { // eliminating a tip
+      if ( equal_id(inverse_id(ffe),get_next_edge(fe)) )
+      { prev = get_prev_edge(fe);
+        next = get_next_edge(inverse_id(ffe));
+        set_prev_edge(next,prev);
+        set_next_edge(prev,next);
+      }
+      else  if ( equal_id(inverse_id(ffe),get_prev_edge(fe)) )
+      { prev = get_prev_edge(inverse_id(ffe));
+        next = get_next_edge(fe);
+        set_prev_edge(next,prev);
+        set_next_edge(prev,next);
+      }
+      else
+        kb_error(1948,"Assumed edge tip is not a tip.\n",RECOVERABLE);
+    } // end tip
+    else
+    { // different facets
+      b_id = get_facet_body(f_id); 
+      set_facet_body(ff_id,b_id);          
+      b_id = get_facet_body(inverse_id(f_id));
+      set_facet_body(inverse_id(ff_id),b_id);
+
+      start_fe = get_facet_fe(ff_id);
+      fffe = start_fe;
+      do
+      { set_fe_facet(fffe,f_id);
+        fffe = get_next_edge(fffe);
+      } while ( valid_id(fffe) && !equal_id(fffe,start_fe) );
+      if ( !valid_id(fffe) )
+      { // go backwards to be sure we get all 
+        fffe = start_fe;
+        do
+        { set_fe_facet(fffe,f_id);
+          fffe = get_prev_edge(fffe);
+        } while ( valid_id(fffe) && !equal_id(fffe,start_fe) );
+      }
+      // In case of content constraints
+      if ( everything_quantities_flag )
+      { fffe = start_fe;
+        while ( valid_id(get_prev_edge(fffe)) && !equal_id(start_fe,get_prev_edge(fffe)) )
+          fffe = get_prev_edge(fffe);
+        start_fe = fffe;
+        assure_v_constraints(get_fe_tailv(start_fe));
+        while ( valid_id(fffe) && !equal_id(fffe,start_fe) )
+        {  assure_v_constraints(get_fe_headv(fffe));
+           fffe = get_next_edge(fffe);
+        }
+      }
+
+      prev = get_prev_edge(fe);
+      pprev = inverse_id(get_prev_edge(ffe));
+      if ( valid_id(prev) )
+        set_next_edge(prev,pprev);
+      if ( valid_id(pprev) )
+        set_prev_edge(pprev,prev);
+      next = get_next_edge(fe);
+      nnext = inverse_id(get_next_edge(ffe));
+      if ( valid_id(next) )
+        set_prev_edge(next,nnext);
+      if ( valid_id(nnext) )
+        set_next_edge(nnext,next);
+
+      if ( !equal_id(f_id,ff_id) )
+      { set_facet_fe(ff_id,NULLID); // so freeing doesn't do other things
+        free_element(ff_id);
+      }
+    
+      start_fe = get_facet_fe(f_id);
+      if ( !valid_id(start_fe) || equal_id(fe,start_fe) )
+      { if ( valid_id(next) )
+          set_facet_fe(f_id,next);  // make sure facet has valid fe
+        else if ( valid_id(prev) )
+          set_facet_fe(f_id,prev);
+        else if (valid_id(nnext) )
+          set_facet_fe(f_id,nnext);
+        else if ( valid_id(pprev) )
+          set_facet_fe(f_id,pprev);
+        else 
+          set_facet_fe(f_id,NULLID);
+      }
+
+      // make sure facet fe is first in loop
+      f_id = positive_id(f_id);
+      fffe = start_fe = get_facet_fe(f_id);
+      do
+      { facetedge_id prev_fe = get_prev_edge(fffe);
+        if ( !valid_id(prev_fe) )
+        { set_facet_fe(f_id,fffe);
+          break;
+        }
+        fffe = prev_fe;
+      } while ( !equal_id(fffe,start_fe));
+
+    } // end different facets
+    free_element(fe);
+    free_element(ffe);
+  }
+  else
   for ( fe_id = fe ; ; )
   { facetedge_id  prev,next;
     prev = get_prev_edge(fe_id);
     if ( valid_id(prev) )
-     { if ( valid_id(f_id) ) set_next_edge(prev,NULLID);
-       else set_next_edge(prev,inverse_id(prev));
-     }
+    { if ( valid_id(f_id) ) set_next_edge(prev,NULLID);
+      else set_next_edge(prev,inverse_id(prev));
+    }
     next = get_next_edge(fe_id);
     if ( valid_id(next) )
-     { if ( valid_id(f_id) ) set_prev_edge(next,NULLID);
-       else set_prev_edge(next,inverse_id(next));
-     }
+    { if ( valid_id(f_id) ) set_prev_edge(next,NULLID);
+      else set_prev_edge(next,inverse_id(next));
+    }
 
     free_element(fe_id);
     fe_id = get_next_facet(fe_id);
@@ -1848,7 +2357,7 @@ edge_id e_id;
   free_element(e_id);
   top_timestamp = ++global_timestamp;
   return 1;
-}
+} // end dissolve_edge()
 
 /****************************************************************************
 *
@@ -1859,8 +2368,7 @@ edge_id e_id;
 * return: 1 if facet removed, 0 if not because attached.
 */
 
-int dissolve_facet(f_id)
-facet_id f_id;
+int dissolve_facet(facet_id f_id)
 { facetedge_id fe,fe_id;
   edge_id e_id;
   body_id b1,b2;
@@ -1925,7 +2433,7 @@ facet_id f_id;
   free_element(f_id);
   top_timestamp = ++global_timestamp;
   return 1;
-}
+} // end dissolve_facet()
 
 /****************************************************************************
 *
@@ -1936,10 +2444,9 @@ facet_id f_id;
 * return: 1 if body removed.
 */
 
-int dissolve_body(b_id)
-body_id b_id;
+int dissolve_body(body_id b_id)
 { facet_id f_id,ff_id;
-  int k;
+  int i,j,k;
    
   if ( !valid_element(b_id) ) return 0;
 
@@ -1955,21 +2462,30 @@ body_id b_id;
     if ( equal_id(b_id,get_facet_body(ff_id)) ) 
        set_facet_body(ff_id,NULLBODY);
   }
+
   if ( everything_quantities_flag )
   { struct method_instance *mi = METH_INSTANCE(get_body_volmeth(b_id));
-    struct gen_quant *q = GEN_QUANT(mi->quant);
-    mi->flags = Q_DELETED;
-    q->flags = Q_DELETED;
-    for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
-    { struct method_instance *mm = METH_INSTANCE(k);
-      if ( mm->quant == mi->quant )
-        mi->flags = Q_DELETED;
+    struct gen_quant *q;
+
+    for ( j = 0 ; j < MMAXQUANTS ; j++ )
+    { if ( mi->quants[j] < 0 )
+         continue;
+      q = GEN_QUANT(mi->quants[j]);
+      free_quantity(q);
+    
+      for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
+      { struct method_instance *mm = METH_INSTANCE(k);
+        for ( i = 0 ; i < MMAXQUANTS ; i++ )
+          if ( mm->quants[i] == mi->quants[j] )
+            free_method_instance(mm);
+      }
     }
+    free_method_instance(mi);
   }
   free_element(b_id);
   top_timestamp = ++global_timestamp;
   return 1;
-}
+} // end dissolve_body()
 
 /*****************************************************************************
 *
@@ -1979,8 +2495,7 @@ body_id b_id;
 *
 */
 
-void divide_quad(fe)
-facetedge_id fe;
+void divide_quad(facetedge_id fe)
 { facetedge_id fea,feb,fec,new_fe,new_fe2;
   facet_id old_f,new_f;
   edge_id new_e;
@@ -2024,7 +2539,7 @@ facetedge_id fe;
   set_prev_facet(new_fe2,inverse_id(new_fe));
   set_fe_facet(fea,new_f);
   set_fe_facet(feb,new_f);
-}
+} // end divide_quad()
 
 /*************************************************************************
 *
@@ -2038,10 +2553,9 @@ facetedge_id fe;
 * return value: Number of edges swapped.
 */
 
-int t1_edgeswap(e_id)
-edge_id e_id;
+int t1_edgeswap(edge_id e_id)
 {
-  facetedge_id fe_a,fe_b,fe_c,fe_d,fe_e,fe_f,fe_g,fe_h,fe_i,fe_j;
+  facetedge_id fe_a,fe_b,fe_c,fe_d,fe_e,fe_f,fe_g,fe_gg,fe_h,fe_i,fe_j;
   vertex_id headv,tailv;
   facet_id f_a,f_b,f_c,f_d;
   REAL *hx,*tx,newhx[MAXCOORD],newtx[MAXCOORD];
@@ -2115,7 +2629,8 @@ edge_id e_id;
   fe_e = get_next_facet(fe_c);
   fe_f = inverse_id(get_next_edge(fe_e));
   fe_g = get_prev_edge(fe_b);
-  if ( !equal_id(fe_g,get_next_facet(fe_f)) )
+  fe_gg = get_next_facet(fe_f);
+  if ( !equal_id(fe_g,fe_gg) )
   { if ( verbose_flag )
     { sprintf(msg,
        "Edge %s not t1_swapped since tail vertex doesn't have valence 3.\n",
@@ -2213,7 +2728,7 @@ printf("fe_f edge %08X  fe_g edge %08X\n",get_fe_edge(fe_g),get_fe_edge(fe_f));
   }
 
   return 1;
-}
+} // end t1_edgeswap()
 
 /**************************************************************************
 *
@@ -2225,8 +2740,10 @@ printf("fe_f edge %08X  fe_g edge %08X\n",get_fe_edge(fe_g),get_fe_edge(fe_f));
 *
 */
 
-void merge_vertex(keepv,throwv)
-edge_id keepv,throwv;
+void merge_vertex(
+  edge_id keepv,
+  edge_id throwv
+)
 {
   edge_id e_id;
   int nn = 0;
@@ -2242,7 +2759,7 @@ edge_id keepv,throwv;
   if ( get_vattr(throwv) & (Q_MIDPOINT|Q_MIDEDGE|Q_MIDFACET) )
   { sprintf(errmsg,"vertex_merge: Cannot merge %s since not at end of edge.\n",
        ELNAME(throwv));
-    kb_error(4322,errmsg,RECOVERABLE);
+    kb_error(4324,errmsg,RECOVERABLE);
   }
 
   if ( (web.modeltype != LINEAR) && (web.modeltype != QUADRATIC) )
@@ -2386,75 +2903,78 @@ edge_id keepv,throwv;
      int fe_counter; /* to prevent infinite loop in case of error */
      int fe_counter_max = 2*web.skel[FACETEDGE].count;
 
-     set_next_edge(prev_k,inverse_id(prev_t));
-     set_next_edge(prev_t,inverse_id(prev_k));
      set_prev_edge(match_kfe,inverse_id(match_tfe));
      set_prev_edge(match_tfe,inverse_id(match_kfe));
-     /* see if we need to make a new facet */
-     next_fe = match_kfe;
-     found = 0;
-     fe_counter = 0;
-     do
-     { if ( equal_element(next_fe,prev_k) )
-       { found = 1;  break; }
-       next_ffe = get_next_edge(next_fe);
-       if ( equal_element(next_fe,next_ffe) ) 
-         break;
-       next_fe = next_ffe;
-       if ( fe_counter++ > fe_counter_max )
+     if ( valid_id(prev_k) && valid_id(prev_t) )
+     {
+       set_next_edge(prev_k,inverse_id(prev_t));
+       set_next_edge(prev_t,inverse_id(prev_k));
+    
+       /* see if we need to make a new facet */
+       next_fe = match_kfe;
+       found = 0;
+       fe_counter = 0;
+       do
+       { if ( equal_element(next_fe,prev_k) )
+         { found = 1;  break; }
+         next_ffe = get_next_edge(next_fe);
+         if ( equal_element(next_fe,next_ffe) ) 
+           break;
+         next_fe = next_ffe;
+         if ( fe_counter++ > fe_counter_max )
                kb_error(3616,"Internal error - unclosed facetedge loop\n",
                                RECOVERABLE);
-     } while ( !equal_element(next_fe,match_kfe) );
-     next_fe = match_tfe; /* try the other way */
-     fe_counter = 0;
-     if ( !found )
-     do
-     { if ( equal_element(next_fe,prev_k) )
-       { found = 1;  break; }
-       next_ffe = get_next_edge(next_fe);
-       if ( equal_element(next_fe,next_ffe) ) 
-         break;
-       next_fe = next_ffe;
-       if ( fe_counter++ > fe_counter_max )
+       } while ( !equal_element(next_fe,match_kfe) );
+       next_fe = match_tfe; /* try the other way */
+       fe_counter = 0;
+       if ( !found )
+       do
+       { if ( equal_element(next_fe,prev_k) )
+         { found = 1;  break; }
+         next_ffe = get_next_edge(next_fe);
+         if ( equal_element(next_fe,next_ffe) ) 
+           break;
+         next_fe = next_ffe;
+         if ( fe_counter++ > fe_counter_max )
                kb_error(3613,"Internal error - unclosed facetedge loop\n",
                                RECOVERABLE);
-     } while ( !equal_element(next_fe,match_kfe) );
-     if ( !found )
-     { /* have to create new facet */
-       facet_id newf = dup_facet(match_f);
-       set_facet_fe(newf,prev_k);
-       set_facet_fe(get_fe_facet(match_tfe),match_tfe); /*make sure match_f has valid fe */
-       next_fe = prev_k;
-       fe_counter = 0;
-       do
-       { set_fe_facet(next_fe,newf);
-         next_ffe = get_prev_edge(next_fe);
-         if ( equal_element(next_ffe,next_fe) ) 
-           break;
-         next_fe = next_ffe;
-         if ( fe_counter++ > fe_counter_max )
+       } while ( !equal_element(next_fe,match_kfe) );
+       if ( !found )
+       { /* have to create new facet */
+         facet_id newf = dup_facet(match_f);
+         set_facet_fe(newf,prev_k);
+         set_facet_fe(get_fe_facet(match_tfe),match_tfe); /*make sure match_f has valid fe */
+         next_fe = prev_k;
+         fe_counter = 0;
+         do
+         { set_fe_facet(next_fe,newf);
+           next_ffe = get_prev_edge(next_fe);
+           if ( equal_element(next_ffe,next_fe) ) 
+             break;
+           next_fe = next_ffe;
+           if ( fe_counter++ > fe_counter_max )
                kb_error(2873,"Internal error - unclosed facetedge loop\n",
                                RECOVERABLE);
-       } while ( !equal_element(next_fe,prev_k));
-       if ( !equal_element(next_fe,prev_k) )
-       next_fe = inverse_id(prev_t);
-       fe_counter = 0;
-       do
-       { set_fe_facet(next_fe,newf);
-         next_ffe = get_next_edge(next_fe);
-         if ( equal_element(next_ffe,next_fe) ) 
-           break;
-         next_fe = next_ffe;
-         if ( fe_counter++ > fe_counter_max )
+         } while ( !equal_element(next_fe,prev_k));
+         if ( !equal_element(next_fe,prev_k) )
+         next_fe = inverse_id(prev_t);
+         fe_counter = 0;
+         do
+         { set_fe_facet(next_fe,newf);
+           next_ffe = get_next_edge(next_fe);
+           if ( equal_element(next_ffe,next_fe) ) 
+             break;
+           next_fe = next_ffe;
+           if ( fe_counter++ > fe_counter_max )
                kb_error(3621,"Internal error - unclosed facetedge loop\n",
                                RECOVERABLE);
-       } while ( !equal_element(next_fe,prev_k));
+         } while ( !equal_element(next_fe,prev_k));
+       }
      }
    }
-
- free_element(throwv);
+   free_element(throwv);
   
-}
+} // end merge_vertex()
 
 
 
@@ -2474,8 +2994,10 @@ edge_id keepv,throwv;
 *
 */
 
-void merge_edge(e_id1,e_id2)
-edge_id e_id1,e_id2;
+void merge_edge(
+  edge_id e_id1,
+  edge_id e_id2
+  )
 { facetedge_id fe_start,fe,ffe,fep,ffep;
   vertex_id t1,t2,h1,h2;
   REAL side1[MAXCOORD],side2[MAXCOORD];
@@ -2523,21 +3045,28 @@ edge_id e_id1,e_id2;
 
   /* now transfer facetedges */
   fe = fe_start = get_edge_fe(e_id2);
-  do 
-  { set_fe_edge(fe,e_id1);
-    fe = get_next_facet(fe);
-  } while ( !equal_id(fe,fe_start) );
+  if ( valid_id(fe_start) )
+    do 
+    { set_fe_edge(fe,e_id1);
+      fe = get_next_facet(fe);
+    } while ( !equal_id(fe,fe_start) );
+
   ffe = get_edge_fe(e_id1);
-  fep = get_next_facet(fe);
-  ffep = get_prev_facet(ffe);
-  set_next_facet(fe,ffe);
-  set_prev_facet(ffe,fe);
-  set_next_facet(ffep,fep);
-  set_prev_facet(fep,ffep);
-  fe_reorder(e_id1);  /* for proper geometrical order */
+  if ( valid_id(ffe) )
+  { fep = get_next_facet(fe);
+    ffep = get_prev_facet(ffe);
+    set_next_facet(fe,ffe);
+    set_prev_facet(ffe,fe);
+    set_next_facet(ffep,fep);
+    set_prev_facet(fep,ffep);
+  }
+  else
+    set_edge_fe(e_id1,fe_start);
+
+  raw_fe_reorder(e_id1);  /* for proper geometrical order */
 
   free_element(e_id2);  /* also removes from vertex lists */
-}
+} // end merge_edge()
 
 
 
@@ -2551,8 +3080,10 @@ edge_id e_id1,e_id2;
 *
 */
 
-void merge_facet(f_id1,f_id2)
-edge_id f_id1,f_id2;
+void merge_facet(
+  facet_id f_id1,
+  facet_id f_id2
+)
 { MAT2D(f1x,FACET_VERTS,MAXCOORD);
   MAT2D(f2x,FACET_VERTS,MAXCOORD);
   MAT2D(tempx,FACET_VERTS,MAXCOORD);
@@ -2629,7 +3160,7 @@ edge_id f_id1,f_id2;
        body_restricted = 1;
     }
     else
-    { sprintf(errmsg,"Cannot get body agreement for merging facets %s and %s\n",
+    { sprintf(errmsg,"Cannot get body agreement for merging facets %s and %s; not merging.\n",
            ELNAME(f_id1),ELNAME1(f_id2));
       kb_error(3896,errmsg,WARNING);
       return; 
@@ -2637,27 +3168,34 @@ edge_id f_id1,f_id2;
   }
   else if ( !equal_id(b1_back,b2_front) )
     body_restricted = 1;
+  else if ( !valid_id(b1_back) && valid_id(b1_front) )
+  { invert(f_id1); 
+    invert(f_id2); 
+    if ( besti >= 0 )
+       besti = (3 - besti) % 3;
+    body_restricted = 1;
+  }
     
   /* need vertex coordinates for orientation matching and vertex matching */
   get_facet_verts(f_id1,f1x,NULL);  /* follows facet orientation */
   get_facet_verts(f_id2,f2x,NULL);
   if ( web.torus_flag )
-    { REAL z[MAXCOORD];
-      REAL u[MAXCOORD];
+  { REAL z[MAXCOORD];
+    REAL u[MAXCOORD];
   
-      for ( i = 0 ; i < SDIM ; i++ )
-        z[i] = f2x[0][i] - f1x[0][i];
-      matvec_mul(web.inverse_periods,z,u,SDIM,SDIM);
-      for ( i = SDIM-1, wrap = 0 ; i >= 0 ; i-- )
-      { wrap |= (int)(floor(u[i]+0.5)) & WRAPMASK; 
-        wrap <<= TWRAPBITS;
-      } 
-      if ( wrap )
-      { for ( i = 0 ; i < FACET_VERTS ; i++ )
-          torus_wrap(f1x[i],tempx[i],wrap); 
-        f1x = tempx;
-      }
+    for ( i = 0 ; i < SDIM ; i++ )
+      z[i] = f2x[0][i] - f1x[0][i];
+    matvec_mul(web.inverse_periods,z,u,SDIM,SDIM);
+    for ( i = SDIM-1, wrap = 0 ; i >= 0 ; i-- )
+    { wrap <<= TWRAPBITS;
+      wrap |= (int)(floor(u[i]+0.5)) & WRAPMASK;        
+    } 
+    if ( wrap )
+    { for ( i = 0 ; i < FACET_VERTS ; i++ )
+        torus_wrap(f1x[i],tempx[i],wrap); 
+      f1x = tempx;
     }
+  }
 
   if ( besti < 0 )
   { /* no identical vertices, so try minimizing distance */
@@ -2676,6 +3214,32 @@ edge_id f_id1,f_id2;
       if ( dist < bestdist ) 
       { bestdist = dist;
         besti = i;
+      }
+    }
+
+    if ( !body_restricted )
+    { REAL bestdistt;
+      for ( i = 0, bestdistt = 1e30, besti = -1 ; i < FACET_VERTS ; i++ )
+      { REAL dist = 0.0;
+        for ( j = 0 ; j < FACET_VERTS ; j++ )
+        { REAL s;
+          int cor = (i-j+3)%3;
+          for ( k = 0, s = 0.0 ; k < SDIM ; k++ )
+          { REAL d = (f1x[j][k] - f2x[cor][k]);
+            s += d*d;
+          }
+          dist += sqrt(s);
+        }
+        if ( dist < bestdistt ) 
+        { bestdistt = dist;
+          besti = i;
+        }
+      }
+      if ( bestdistt < bestdist )
+      { invert(f_id1); 
+        invert(f_id2); 
+        if ( besti >= 0 )
+          besti = (3 - besti) % 3;
       }
     }
   }     
@@ -2720,7 +3284,7 @@ edge_id f_id1,f_id2;
   set_facet_body(inverse_id(f_id2),b_id); /* so dissolve_facet() works */
   dissolve_facet(f_id2);
 
-}  /* end merge_facet90 */
+}  /* end merge_facet() */
 
 
 /****************************************************************************
@@ -2730,8 +3294,7 @@ edge_id f_id1,f_id2;
 * purpose: reverse the orientation of an edge
 */
 
-void reverse_orientation_edge(e_id)
-edge_id e_id;
+void reverse_orientation_edge(edge_id e_id)
 { vertex_id v_id[2],*v;
   facetedge_id start_fe;
   int i;
@@ -2801,7 +3364,7 @@ edge_id e_id;
   e_ptr = eptr(e_id);
   e_ptr->attr ^= NEGBOUNDARY;
   
-} /* end edge_reverse_orientation() */
+} /* end reverse_orientation_edge(() */
 
 /***************************************************************************
 *
@@ -2810,8 +3373,7 @@ edge_id e_id;
 * Purpose: reverse the orientation of one facet.
 */
 
-void reverse_orientation_facet(f_id)
-facet_id f_id;
+void reverse_orientation_facet(facet_id f_id)
 { facetedge_id start_fe,fe,last_fe;
   body_id b_id,bb_id;
   struct facet *e_ptr;
@@ -2853,5 +3415,5 @@ facet_id f_id;
   /* reverse method orientations */
   e_ptr = fptr(f_id);
   e_ptr->attr ^= NEGBOUNDARY;
-}
+} // end reverse_orientation_facet()
 

@@ -48,10 +48,11 @@
 *            in from the data file. 
 */
 
-void torus_wrap(x,y,wrap)
-REAL *x;    /* original coordinates */
-REAL *y;    /* wrapped coordinates  */
-WRAPTYPE wrap;  /* encoded symmetry group element, TWRAPBITS bits per dimension */
+void torus_wrap(
+  REAL *x,    /* original coordinates */
+  REAL *y,    /* wrapped coordinates  */
+  WRAPTYPE wrap  /* encoded symmetry group element, TWRAPBITS bits per dimension */
+)
 {
   int i,j;
   int wrapnum;
@@ -64,7 +65,7 @@ WRAPTYPE wrap;  /* encoded symmetry group element, TWRAPBITS bits per dimension 
        for ( j = 0 ; j < SDIM ; j++ )
           y[j] += wrapnum*web.torus_period[i][j];
   }
-}
+} // end torus_wrap()
 
 
 /*******************************************************************
@@ -78,14 +79,15 @@ WRAPTYPE wrap;  /* encoded symmetry group element, TWRAPBITS bits per dimension 
 *                Torus is flat, so implementation is trivial copy.
 */
 
-void torus_form_pullback(x,xform,yform,wrap)
-REAL *x;    /* original coordinates */
-REAL *xform; /* pulled back form */
-REAL *yform;    /* wrapped form, input  */
-WRAPTYPE wrap;  /* encoded symmetry group element, 3 bits per dimension */
+void torus_form_pullback(
+  REAL *x,    /* original coordinates */
+  REAL *xform, /* pulled back form */
+  REAL *yform,    /* wrapped form, input  */
+  WRAPTYPE wrap  /* encoded symmetry group element, 3 bits per dimension */
+)
 {
   memcpy((char*)xform,(char*)yform,SDIM*sizeof(REAL));
-}
+} // end torus_form_pullback()
 
 /********************************************************************
 *
@@ -95,8 +97,10 @@ WRAPTYPE wrap;  /* encoded symmetry group element, 3 bits per dimension */
 *
 */
 
-WRAPTYPE torus_compose(wrap1,wrap2)
-WRAPTYPE wrap1,wrap2;  /* the elements to compose */
+WRAPTYPE torus_compose(
+  WRAPTYPE wrap1, 
+  WRAPTYPE wrap2  /* the elements to compose */
+)
 { int w = (wrap1 + wrap2) & ALLWRAPMASK;
 #ifdef _DEBUG
   int i;
@@ -116,7 +120,7 @@ WRAPTYPE wrap1,wrap2;  /* the elements to compose */
     kb_error(4553,"Wrap out of bounds as result of torus_compose.\n",
          WARNING);
   return w;
-}
+} // end torus_compose()
 
 
 /********************************************************************
@@ -127,8 +131,7 @@ WRAPTYPE wrap1,wrap2;  /* the elements to compose */
 *
 */
 
-WRAPTYPE torus_inverse(wrap)
-WRAPTYPE wrap;  /* the element invert */
+WRAPTYPE torus_inverse(WRAPTYPE wrap  /* the element invert */)
 {
   return ((~ALLWRAPMASK)-wrap) & ALLWRAPMASK;
 }
@@ -142,8 +145,7 @@ WRAPTYPE wrap;  /* the element invert */
 *          topology change) so endpoints near as possible in 
 *          a fundamental region.
 */
-void torus_unwrap_edge(e_id)
-edge_id e_id;
+void torus_unwrap_edge(edge_id e_id)
 { edge_id pos_e = positive_id(e_id);
   vertex_id tailv,headv;
   REAL *x;
@@ -166,45 +168,44 @@ edge_id e_id;
   headwrap = torus_compose(tailwrap,wrap);
   wrap_vertex(tailv,tailwrap);
   wrap_vertex(headv,headwrap);
-}  
+} // end torus_unwrap_edge()
 
 /*************************************************************
 *
 * Functions: Identity symmetry functions.
 */
 
-void identity_wrap(x,y,wrap)
-REAL *x;    /* original coordinates */
-REAL *y;    /* wrapped coordinates  */
-WRAPTYPE wrap;  /* encoded symmetry group element, TWRAPBITS bits per dimension */
+void identity_wrap(
+  REAL *x,    /* original coordinates */
+  REAL *y,    /* wrapped coordinates  */
+  WRAPTYPE wrap)  /* encoded symmetry group element, TWRAPBITS bits per dimension */
 {
   int i;
 
   if ( x != y )
      for ( i = 0 ; i < SDIM ; i++ ) 
        y[i] = x[i];
-}
+} // end identity_wrap()
      
-void identity_form_pullback(x,xform,yform,wrap)
-REAL *x;    /* original coordinates */
-REAL *xform; /* pulled back form */
-REAL *yform;    /* wrapped form, input  */
-WRAPTYPE wrap;  /* encoded symmetry group element, 3 bits per dimension */
+void identity_form_pullback(
+  REAL *x,    /* original coordinates */
+  REAL *xform, /* pulled back form */
+  REAL *yform,   /* wrapped form, input  */
+  WRAPTYPE wrap)  /* encoded symmetry group element, 3 bits per dimension */
 {
   memcpy((char*)xform,(char*)yform,SDIM*sizeof(REAL));
 }
 
-WRAPTYPE identity_compose(wrap1,wrap2)
-WRAPTYPE wrap1,wrap2;  /* the elements to compose */
+WRAPTYPE identity_compose(
+    WRAPTYPE wrap1, WRAPTYPE wrap2)  /* the elements to compose */
 { return 0;
 }
 
-WRAPTYPE identity_inverse(wrap)
-WRAPTYPE wrap;  /* the element invert */
-{
-  return 0;
+WRAPTYPE identity_inverse(WRAPTYPE wrap)  /* the element to invert */
+{  return 0;
 }
  
 void identity_unwrap_edge(e_id)
 edge_id e_id;
 {}
+

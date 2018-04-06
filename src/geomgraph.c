@@ -60,8 +60,9 @@ int edgemax;   /* allocated    */
 *
 */
 
-void Begin_geomview(outname)
-char *outname; /* if want particular name for pipe, NULL else */
+void Begin_geomview(
+  char *outname /* if want particular name for pipe, NULL else */
+)
 { 
   if ( geomview_flag ) 
      kb_error(1657,"Cannot have multiple geomview displays.\n",RECOVERABLE);
@@ -164,9 +165,10 @@ char *outname; /* if want particular name for pipe, NULL else */
     }
 
   geomview_flag = 1;     /* tell everybody we're initialized */
-  OOGL_flag = 1;     /* tell everybody we're initialized */
-  UpdateOOGL();      /* make initial display                 */
-}
+  OOGL_flag = 1;     /* tell everybody we're initialized    */
+  UpdateOOGL();      /* make initial display                */
+
+} // end Begin_geomview()
  
 /*********************************************************************
 *
@@ -206,7 +208,7 @@ void End_geomview()
   OOGL_flag = 0;
   pfd = NULL;
 
-}
+} // end End_geomview()
 
 /************************************************************************
 *
@@ -259,7 +261,8 @@ void geomview_start()
   else edgemax = 100;
   edgecount = 0;
   eelist = (struct elist_t *)temp_calloc(edgemax,sizeof(struct elist_t));
-}
+
+} // end geomview_start()
 
 /***********************************************************************
 *
@@ -269,9 +272,10 @@ void geomview_start()
 *
 */
 
-void geomview_edge(gdata,e_id)
-struct graphdata *gdata;
-edge_id e_id;
+void geomview_edge(
+  struct graphdata *gdata,
+  edge_id e_id
+)
 { struct elist_t *ee;
   int color;
   int j,k;
@@ -315,7 +319,8 @@ edge_id e_id;
   }
 
   edgecount++;
-}
+
+} // end geomview_edge()
 
 /************************************************************************
 *
@@ -324,9 +329,10 @@ edge_id e_id;
 *  Purpose:  Accepts facets from graphgen() and plots them.
 */
 
-void geomview_facet(gdata,f_id)
-struct graphdata *gdata;
-facet_id f_id;
+void geomview_facet(
+  struct graphdata *gdata,
+  facet_id f_id
+)
 { struct flist_t *ff;
   int color;
   int i,j,k;
@@ -437,7 +443,8 @@ do_edges:
   for ( k = 0 ; k < FACET_VERTS ; k++ )
      if ( (gdata[k].etype & EBITS) != INVISIBLE_EDGE )
         geomview_edge(gdata+k,gdata[k].id);
-}
+
+} // end geomview_facet()
 
 /*******************************************************************
 *
@@ -629,7 +636,8 @@ g_exit:
   temp_free((char*)eelist);
   temp_free((char*)fflist);
   temp_free((char*)vindex);
-}
+
+} // end geomview_end()
 
 #else
 
@@ -663,11 +671,10 @@ facet_id f_id;
 * purpose: forward a command to geoview, if active.
 */
 
-void geomview_command(cmd)
-char *cmd;
+void geomview_command(char *cmd)
 { if ( geomview_flag )
-  { fprintf(pfd,cmd); fflush(pfd); }
+  { fprintf(pfd,"%s",cmd); fflush(pfd); }
   else kb_error(1663,"Geomview not active.\n",WARNING);
 
-}
+} // end geomview_command()
 

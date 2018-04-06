@@ -1,12 +1,12 @@
 // order.cmd
 // Evolver command to number string-model vertices consecutively.
-// Result is order number in vertex extra attribute 'number'.
+// Result is order number in vertex extra attribute 'order_number'.
 
 // Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
 
 // Usage: order
 
-define vertex attribute number integer
+define vertex attribute order_number integer
 
 order := {
    local ecount,e_id,first_e,v_id,newv_id,newe_id;
@@ -19,7 +19,7 @@ order := {
 
    // follow connected edges
    do 
-   { set vertex[v_id] number ecount+1;
+   { set vertex[v_id] order_number ecount+1;
      foreach edge[e_id].vertex vv do 
      { if ( vv.id != v_id ) then
        { newv_id := vv.id;
@@ -31,3 +31,8 @@ order := {
      ecount := ecount + 1;
    } while ( (e_id != first_e) and (ecount <= edge_count) )
  }
+
+// End order.cmd
+
+// Usage: order
+

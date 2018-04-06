@@ -1,17 +1,23 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML>
 <html>
 <head>
 <title>Surface Evolver cube example</title>
+<link rel="stylesheet" type="text/css" href="evdoc-style.css" />
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
 </head>
 <BODY>
-<center>
-<h1><a href="http://www.susqu.edu/facstaff/b/brakke/evolver/evolver.htm">
-Surface Evolver</a> Documentation</h1>
-</center>
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
-<a href="index.htm">Index.</a>
 
-<a name="cube example"></a>
+<h1 class="center">
+<a href="http://www.susqu.edu/brakke/evolver/evolver.htm" class="comic">
+Surface Evolver</a> Documentation</h1>
+
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<a href="index.htm">Index.</a> <br>
+<a href="tutorial.htm#tutorial">Back to top of tutorial.</a> <br>
+<a href="mound.htm">Next: Mound example.</a>
+
+<a   id="cube-example"></a>
 <h1> Example: Cube evolving into a sphere. </h1>
 
         A sample datafile cube.fe comes with Evolver.
@@ -23,7 +29,7 @@ Surface Evolver</a> Documentation</h1>
         This example illustrates the basic datafile format
         and some basic commands. <P>
 
-<img src="cubebare.gif" align="middle" alt="cube skeleton">  
+<img src="cubebare.gif" alt="cube skeleton">  
 The initial cube skeleton, with
 vertices and edges numbered. <p>
 
@@ -70,43 +76,45 @@ bodies  /* one body, defined by its oriented faces */
 
 // end of cube.fe
 </pre>
-            The datafile is organized in lines, with one 
-            geometric element defined per line.  Vertices
-            must be defined first, then edges, then faces,
-            then bodies.  Each element is numbered for later
-            reference in the datafile.  <P>
+   The datafile is organized in lines, with one 
+   geometric element defined per line.  Vertices
+   must be defined first, then edges, then faces,
+   then bodies.  Each element is numbered for later
+   reference in the datafile.  <P>
  
-            Comments are delimited by /* to begin and */ to close 
-				         as in C, or from // until the end of the line as in C++.
-            Case is not significant, and all input is made
-            lower-case immediately.  Hence error messages
-            about your datafiles will refer to items in lower
-            case, even when you typed them in upper case. <P>
+   Comments are delimited by <code>/*</code> to begin 
+   and <code>*/</code> to close 
+   as in C, or from <code>//</code> until the end of the line as in C++.
+   Case is not significant, and all input is made
+   lower-case immediately.  Hence error messages
+   about your datafiles will refer to items in lower
+   case, even when you typed them in upper case. <P>
 
-            The datafile syntax is based on keywords.  The  
-            keywords VERTICES, EDGES,  FACES, and
-            BODIES signal the start of the respective sections.
-            Note that the faces are not necessarily triangles
-            (which is why they are called FACES and not FACETS).
-            Any non-triangular face will be automatically
-            triangulated by putting a vertex at its center and
-            putting in edges to each of the original vertices.
-            Faces don't have to be planar.  Note that a minus 
-            sign on an edge means that the edge is traversed
-            in the opposite direction from that defined for it in the
-            EDGES section.  A face's oriented normal is defined
-            by the usual right hand rule.  The cube faces all have
-            outward normals, so they all are positive in the body list.
-            In defining a body, the boundary
-            faces must have outward normals.  If a face as 
-            defined has an inward normal, it must be listed
-            with a minus sign. <P>
+   The datafile syntax is based on keywords.  The  
+   keywords <code>VERTICES</code>, <code>EDGES</code>,  <code>FACES</code>, and
+   <code>BODIES</code> signal the start of the respective sections.
+   Note that the faces are not necessarily triangles
+   (which is why they are called <code>FACES</code> 
+   and not <code>FACETS</code>).
+   Any non-triangular face will be automatically
+   triangulated by putting a vertex at its center and
+   putting in edges to each of the original vertices.
+   Faces don't have to be planar.  Note that a minus 
+   sign on an edge means that the edge is traversed
+   in the opposite direction from that defined for it in the
+   <code>EDGES</code> section.  A face's oriented normal is defined
+   by the usual right hand rule.  The cube faces all have
+   outward normals, so they all are positive in the body list.
+   In defining a body, the boundary
+   faces must have outward normals.  If a face as 
+   defined has an inward normal, it must be listed
+   with a minus sign. <P>
 
-            That the body is constrained to have a volume of 1  
-            is indicated by the keyword VOLUME after the body
-            definition, with the value of the volume following.
-            Any attributes or properties an element 
-            has are given on the same line after its definition.<P>
+   That the body is constrained to have a volume of 1  
+   is indicated by the keyword <code>VOLUME</code> after the body
+   definition, with the value of the volume following.
+   Any attributes or properties an element 
+   has are given on the same line after its definition.<P>
 
 
 
@@ -119,7 +127,7 @@ bodies  /* one body, defined by its oriented faces */
 <pre>
      Enter command:
 </pre>
-        Give the command s to
+        Give the command <a href="single.htm#s" class="keyword">s</a> to
         show the surface.  You should see a square divided into 
         four triangles by diagonals.  This is the front side
         of the cube; you are looking in along the positive x-axis,
@@ -139,27 +147,28 @@ bodies  /* one body, defined by its oriented faces */
         viewing transformation on the surface:
          The most used ones are
 <pre>
-           r   rotate right by 6 degrees 
-           l   rotate left by 6 degrees
-           u   rotate up by 6 degrees  
-           d   rotate down by 6 degrees 
-           R   reset to original position
-           q   quit back to main command prompt  
+  r   rotate right by 6 degrees 
+  l   rotate left by 6 degrees
+  u   rotate up by 6 degrees  
+  d   rotate down by 6 degrees 
+  R   reset to original position
+  q   quit back to main command prompt  
 </pre>
-        Try typing <tt>rrdd</tt> to get an oblique view of the cube.  Any
+        Try typing <code>rrdd</code> to get an oblique view of the cube.  Any
         transformations you make will remain in effect the next
-        time you show the surface.  Now do <tt>q</tt> to get back to
+        time you show the surface.  Now do <code>q</code> to get back to
         the main prompt. <P>
 
-        If you are using  geomview for graphics, do command P option 8 to get
-        a display, or just "P 8" for short.
+        If you are using  geomview for graphics, do command <code>P</code> 
+        option 8 to get
+        a display, or just "<code>P 8</code>" for short.
 	Geomview takes a couple of seconds to initialize.
 	 You can manipulate the geomview display as usual
         independently of the Evolver.  Evolver will automatically update
         the image whenever the surface changes.  <P>
 
 
-        Now do some iterations. Give the command "<tt>g 5</tt>" to do
+        Now do some iterations. Give the command "<code>g 5</code>" to do
         5 iterations.  You should get this:   
 <pre>
   5. area:  5.11442065156005 energy:  5.11442065156005  scale: 0.186828
@@ -184,14 +193,16 @@ Enter command:
         Volume constraints are not exactly enforced, but each
         iteration tries to bring the volume closer to the target.
         Here that results in increases in area.  You can find
-        the current volumes with the v command:
+        the current volumes with the 
+        <a href="single.htm#v" class="keyword">v</a> command:
 <pre>
 Body       target volume         actual volume        pressure
   1     1.000000000000000     0.999999779366360   3.408026016427987
 </pre>
         The pressure in the last column is actually the Lagrange 
 	multiplier for the volume constraint.
-        Now let's refine the triangulation with the r command.
+        Now let's refine the triangulation with the 
+        <a href="single.htm#r" class="keyword">r</a> command.
         This subdivides each facet into four smaller similar
         facets.  The printout here gives  the counts of the
         geometric elements and the memory they take:        
@@ -214,7 +225,8 @@ Vertices: 50 Edges: 144 Facets: 96  Facetedges: 288 Memory: 27554
          You can continue iterating and refining as long as you 
          have time and memory.  <P>
          
-         Eventually, you will want to quit.  So give the q command.
+         Eventually, you will want to quit.  So give the 
+         <a href="single.htm#q" class="keyword">q</a> command.
          You get 
 <pre>
      Enter new datafile name (none to continue, q to quit): 
@@ -222,15 +234,16 @@ Vertices: 50 Edges: 144 Facets: 96  Facetedges: 288 Memory: 27554
          You can start a new surface by entering a datafile name
          (it can be the same one you just did, to start over), or
          continue with the present surface by hitting ENTER with
-         no name (in case you pressed q by accident, or suddenly
+         no name (in case you pressed <code>q</code> by accident, or suddenly
          you remember something you didn't do), or you can really
-         quit with another q. <P>
+         quit with another <code>q</code>. <P>
 
 <hr>
-<a href="mound.htm">Mound example.</a>
+<a href="mound.htm">Next: Mound example.</a><br>
 <a href="tutorial.htm#tutorial">Back to top of tutorial.</a>
 <br>
-<a href="evolver.htm#doc top">Back to top of Evolver documentation.</a>
+<a href="evolver.htm#doc-top">Back to top of Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 
 </body>

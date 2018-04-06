@@ -1,17 +1,23 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML>
 <html>
 <head>
+<link rel="stylesheet" type="text/css" href="evdoc-style.css" />
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
 <title>Surface Evolver mound example</title>
 </head>
 <BODY>
-<center>
-<h1><a href="http://www.susqu.edu/brakke/evolver/evolver.htm">
-Surface Evolver</a> Documentation</h1>
-</center>
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
-<a href="index.htm">Index.</a>
 
-<a name="mound example"></a>
+<h1 class="center">
+<a href="http://www.susqu.edu/brakke/evolver/evolver.htm" class="comic">
+Surface Evolver</a> Documentation</h1>
+
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<a href="index.htm">Index.</a><br>
+<a href="catenoid.htm">Next Catenoid example.</a><br>
+<a href="tutorial.htm#tutorial">Back to top of tutorial.</a>
+
+<a   id="mound-example"></a>
 <h1> Example: Mound with gravity. </h1>
 
          This example is a mound of liquid sitting on a tabletop
@@ -52,19 +58,19 @@ unit basis vectors.
          in degrees between the table and the surface on the interior
          of the drop.  This angle can be adjusted by assigning a new
          value to the variable "angle" at runtime. 
-          I could have made WALLT the parameter
+          I could have made <code>WALLT</code> the parameter
          directly, but then I wouldn't have had an excuse to show
          a macro. <P>
 
 <table>
 <tr><td>
-<img src="moundbare.gif" align="middle" alt="mound skeleton"></td>
+<img src="moundbare.gif"  alt="mound skeleton"></td>
 <td>  The initial mound skeleton, with
 vertices and edges numbered. </td></tr>
 </table>
 
 
-         Here is the datafile  mound.fe:
+         Here is the datafile  <code>mound.fe</code>:
 <pre>
 // mound.fe
 // Evolver data for drop of prescribed volume sitting on plane with gravity.
@@ -130,7 +136,7 @@ read
 re := refine edges where on_constraint 1
 </pre>
 
-         The mound itself was basically copied from cube.fe, but
+         The mound itself was basically copied from <code>cube.fe</code>, but
          with face 6 deleted.  The reason for this is that face 6 is
          not needed, and would actually get in the way.  It is not
          needed for the volume calculation since it would always be
@@ -155,26 +161,31 @@ re := refine edges where on_constraint 1
 	 happens with the bottom face present, load
 	 <a href="http://www.susqu.edu/brakke/evolver/downloads/moundB.fe">moundB.fe</a> and do "run".<P>
 
-         Now run Evolver on mound.fe.  The command "re" defined at the
+         Now run Evolver on <code>mound.fe</code>. 
+        The command "<code>re</code>" defined at the
          end of the datafile is good to use first in order to refine
          some edges that need it. Refine and iterate a while.
          You should get a nice mound.  It's not a hemisphere, since
-         gravity is on by default with G = 1.  If you use the G
-         command to set "G 0" and iterate a while, you get a
+         gravity is on by default with <code>G</code> = 1.  If you use the 
+         <a href="single.htm#G" class="keyword">G</a>
+         command to set "<code>G 0</code>" and iterate a while, you get a
          hemisphere.  Try changing the
-         contact angle, to 45 degrees (with the command "angle := 45"}
+         contact angle, to 45 degrees (with the 
+         command "<code>angle := 45</code>"}
          or 135 degrees for example.
-         You can also play with gravity.  Set "G 10" to get a
-         flattened drop, or "G -5" to get a drop hanging from the
-         ceiling. "G -10" will cause the drop to try to break loose,
+         You can also play with gravity.  Set "<code>G 10</code>" to get a
+         flattened drop, or "<code>G -5</code>" to get a drop hanging from the
+         ceiling. "<code>G -10</code>" will 
+          cause the drop to try to break loose,
 	 but it can't, since its vertices are still constrained. <P>
 
 
 <hr>
-<a href="catenoid.htm">Catenoid example.</a>
+<a href="catenoid.htm">Next Catenoid example.</a><br>
 <a href="tutorial.htm#tutorial">Back to top of tutorial.</a>
 <br>
-<a href="evolver.htm#doc top">Back to top of Evolver documentation.</a>
+<a href="evolver.htm#doc-top">Back to top of Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 
 </body>

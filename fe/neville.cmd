@@ -96,7 +96,7 @@ procedure neville2 (
    real neville2_dim     // dimension of values
   )
 {
-  local neville2_array; local neville2_darray; local unpoint;
+  local neville2_array; local neville2_darray; local uupoint;
 
   define neville2_array 
      real[neville2_order+1][neville2_order+1][neville2_dim];
@@ -174,3 +174,7 @@ procedure neville2 (
   };
 }
  
+
+
+// End neville.cmd
+

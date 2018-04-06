@@ -45,9 +45,10 @@
 *
 */
 
-void mean_int_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void mean_int_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   if ( web.dimension != 2 )
      kb_error(1594,"mean_curvature_integral method only for 2D facets.\n",RECOVERABLE);
@@ -59,7 +60,7 @@ struct method_instance *mi;
   if ( everything_quantities_flag && mean_curv_int_flag )
      GEN_QUANT(mean_curv_int_quantity_num)->modulus = 
         globals(mean_curvature_param)->value.real;
-}
+} // end mean_int_init()
 
 /**************************************************************
 *  
@@ -68,8 +69,7 @@ struct method_instance *mi;
 *  Purpose:  Computes contribution of one edge. 
 */
 
-REAL mean_int_value(e_info)
-struct qinfo *e_info;
+REAL mean_int_value(struct qinfo *e_info)
 { REAL sinq,cosq; /* proprotional to sin and cos of angle */
   REAL theta; /* the angle */
   REAL len; /* length of side */
@@ -84,7 +84,7 @@ struct qinfo *e_info;
   cosq = e_info->ss[0][1]*e_info->ss[0][2] - e_info->ss[0][0]*e_info->ss[1][2];
   theta = atan2(sinq,cosq);
   return sign*theta*len/2;
-}
+} // end mean_int_value()
 
 /**************************************************************
 *  
@@ -93,8 +93,7 @@ struct qinfo *e_info;
 *  Purpose:  Computes contribution of one edge to gradient. 
 */
 
-REAL mean_int_gradient(e_info)
-struct qinfo *e_info;
+REAL mean_int_gradient(struct qinfo *e_info)
 { REAL sinq,cosq; /* proprotional to sin and cos of angle */
   REAL dsinq,dcosq; /* derivatives */
   REAL theta;
@@ -156,7 +155,7 @@ struct qinfo *e_info;
       e_info->grad[0][i] -= g;
     }
   return sign*theta*len/2;
-}
+} // end mean_int_gradient()
 
 /**************************************************************
 *  
@@ -165,8 +164,7 @@ struct qinfo *e_info;
 *  Purpose:  Computes contribution of one edge to hessian. 
 */
 
-REAL mean_int_hessian(e_info)
-struct qinfo *e_info;
+REAL mean_int_hessian(struct qinfo *e_info)
 { REAL sinq,cosq; /* proprotional to sin and cos of angle */
   REAL dsinq,dcosq; /* derivatives */
   REAL theta;
@@ -177,8 +175,7 @@ struct qinfo *e_info;
   REAL g;
   int sign = inverted(get_fe_facet(get_edge_fe(e_info->id))) ? 1 : -1;
   REAL ax,ay,az,bx,by,bz,cx,cy,cz;
-  REAL aa,ab,ac,bb,bc,cc,a,aaa,det;
-  REAL value;
+  REAL aa,ab,ac,bc,a,aaa,det;
  
   /* same value and gradient calculation as mean_int_gradient() */
   mat_tsquare(e_info->sides[0],e_info->ss,3,SDIM); /* side products */
@@ -240,15 +237,12 @@ struct qinfo *e_info;
   cy = e_info->sides[0][2][1];
   cz = e_info->sides[0][2][2];
   aa = e_info->ss[0][0];
-  bb = e_info->ss[1][1];
-  cc = e_info->ss[2][2];
   ab = e_info->ss[0][1];
   ac = e_info->ss[0][2];
   bc = e_info->ss[1][2];
   a = sqrt(aa);
   aaa = a*aa;
   det = vol;
-  value = a*atan2(det*a,ab*ac-aa*bc);
 
   /* Copied from Mathematica */
 #define Power(q,p)  ((q)*(q))
@@ -914,7 +908,7 @@ struct qinfo *e_info;
   
   return sign*theta*len/2;
 
-}
+} // end mean_int_hessian()
 
 /**************************************************************************
 
@@ -937,9 +931,10 @@ struct qinfo *e_info;
 *
 */
 
-void mean_int_a_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void mean_int_a_init(
+  int mode,
+  struct method_instance *mi
+)
 {
   if ( web.dimension != 2 )
      kb_error(4594,"mean_curvature_integral_a method only for 2D facets.\n",RECOVERABLE);
@@ -947,7 +942,7 @@ struct method_instance *mi;
   if ( web.modeltype != LINEAR )
      kb_error(4595,"mean_curvature_integral_a method only for LINEAR model.\n",RECOVERABLE);
 
-}
+} // end mean_int_a_init()
 
 /***************************************************************************
 *  
@@ -955,14 +950,15 @@ struct method_instance *mi;
 *
 *  Purpose:  Computes contribution of one edge for value, grad, and hessian. 
 */
-REAL mean_int_a_all(e_info,mode)
-struct qinfo *e_info;
-int mode; /* METHOD_VALUE, METHOD_GRADIEN, METHOD_HESSIAN */
+REAL mean_int_a_all(
+  struct qinfo *e_info,
+  int mode /* METHOD_VALUE, METHOD_GRADIEN, METHOD_HESSIAN */
+)
 { REAL vol;
   int i,j,ii,jj;
   int sign = inverted(get_fe_facet(get_edge_fe(e_info->id))) ? 1 : -1;
   REAL ax,ay,az,bx,by,bz,cx,cy,cz;
-  REAL aa,ab,ac,bb,bc,cc,a,aaa,det;
+  REAL aa,ab,ac,bc,det;
   REAL value;
 
   /* same value and gradient calculation as mean_int_gradient() */
@@ -982,13 +978,9 @@ int mode; /* METHOD_VALUE, METHOD_GRADIEN, METHOD_HESSIAN */
   cy = e_info->sides[0][2][1];
   cz = e_info->sides[0][2][2];
   aa = e_info->ss[0][0];
-  bb = e_info->ss[1][1];
-  cc = e_info->ss[2][2];
   ab = e_info->ss[0][1];
   ac = e_info->ss[0][2];
   bc = e_info->ss[1][2];
-  a = sqrt(aa);
-  aaa = a*aa;
   det = vol;
 
   /* Copied from Mathematica */
@@ -1389,20 +1381,21 @@ int mode; /* METHOD_VALUE, METHOD_GRADIEN, METHOD_HESSIAN */
   
   return value;
 
-}
+} // end mean_int_a_all()
 
-REAL mean_int_a_value(e_info)
-struct qinfo *e_info;
+/**********************************************************
+   Wrappers for mean_int_a_all()
+*/
+
+REAL mean_int_a_value(struct qinfo *e_info)
 {
   return mean_int_a_all(e_info,METHOD_VALUE);
 }
-REAL mean_int_a_gradient(e_info)
-struct qinfo *e_info;
+REAL mean_int_a_gradient(struct qinfo *e_info)
 {
   return mean_int_a_all(e_info,METHOD_GRADIENT);
 }
-REAL mean_int_a_hessian(e_info)
-struct qinfo *e_info;
+REAL mean_int_a_hessian(struct qinfo *e_info)
 {
   return mean_int_a_all(e_info,METHOD_HESSIAN);
 }

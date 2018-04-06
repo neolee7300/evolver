@@ -10,12 +10,20 @@
 
 // Usage: set plane coefficients, then do slice2(body number).
 // Results: Intersection length printed out, left in variable lensum.
+//          Intersection area printed out, left in variable areasum.
 
 // Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
 
-procedure slice2(integer body_num) := { 
+slice_aa := 1;
+slice_bb := 0;
+slice_cc := 0;
+slice_dd := 0;
+
+procedure slice2(integer body_num) { 
        local any,xx1,yy1,zz1,xx2,yy2,zz2;
        local denom,lambda,zaa,zbb,darea;
+       local xb,yb,zb,xa,ya,za,dx,dy,dz,fx,fy,fz;
+
        lensum := 0; areasum := 0;
 
        xb := 0; yb := 0; zb := 0;  // just for declaration before use.
@@ -29,10 +37,10 @@ procedure slice2(integer body_num) := {
            xx2 := ee.vertex[2].x; 
            yy2 := ee.vertex[2].y; 
            zz2 := ee.vertex[2].z;
-           denom := aa*(xx1-xx2)+bb*(yy1-yy2)+cc*(zz1-zz2);
+           denom := slice_aa*(xx1-xx2)+slice_bb*(yy1-yy2)+slice_cc*(zz1-zz2);
            if ( denom != 0.0 ) then 
            { 
-             lambda := (dd-aa*xx2-bb*yy2-cc*zz2)/denom; 
+             lambda := (slice_dd-slice_aa*xx2-slice_bb*yy2-slice_cc*zz2)/denom; 
              if ( (lambda >= 0) and (lambda <= 1) ) then 
              { 
                xa := xb; ya := yb; za := zb;
@@ -48,16 +56,29 @@ procedure slice2(integer body_num) := {
            local triple;
            dx := xa-xb; dy := ya-yb; dz := za - zb;
            lensum := lensum + sqrt(dx^2+dy^2+dz^2);
-           zaa := za - dd/cc; zbb := zb - dd/cc;
+           zaa := za - slice_dd/slice_cc; zbb := zb - slice_dd/slice_cc;
            fx := ff.x; fy := ff.y; fz := ff.z;
-           triple := fx*(dy*cc-dz*bb)+fy*(dz*aa-dx*cc)+fz*(dx*bb-dy*aa);
+           triple := fx*(dy*slice_cc-dz*slice_bb)+fy*(dz*slice_aa-dx*slice_cc)+fz*(dx*slice_bb-dy*slice_aa);
 
            darea := (xa*yb-xb*ya)/2;
            if ( triple > 0 ) then areasum := areasum + darea
            else areasum := areasum - darea;
          }
        };
-       areasum := areasum*sqrt(aa*aa+bb*bb+cc*cc)/cc;
+       areasum := areasum*sqrt(slice_aa*slice_aa+slice_bb*slice_bb+slice_cc*slice_cc)/slice_cc;
        printf "Circumference: %18.15g  Area: %18.15g\n",lensum,areasum;
      } // end slice
+
+
+// end slice2.cmd
+
+/* Usage:
+   set  slice_aa, slice_bb, slice_cc, slice_dd
+   call slice2(integer body_id)
+*/
+
+
+
+
+
 

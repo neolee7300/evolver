@@ -36,7 +36,7 @@
 /* maximum number of shared memory processors */
 #ifdef SHARED_MEMORY
 #ifndef MAXPROCS
-#define MAXPROCS 4
+#define MAXPROCS 144
 #endif
 #else
 #define MAXPROCS 1
@@ -44,7 +44,7 @@
 
 /* maximum dimensionality */
 #ifndef MAXCOORD
-#define MAXCOORD 4
+#define MAXCOORD 6
 #endif
 
 /* MAXPARAM is maximum number of boundary parameters. Must be

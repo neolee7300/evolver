@@ -65,7 +65,7 @@ void kusner_energy()
       binary_tree_add(web.total_energy_addends,
                      modulus*s1s1*(1 - cos_th)/(a1 + a2));
     }
-}
+} // end kusner_energy()
 
 
 /************************************************************************
@@ -175,7 +175,7 @@ void kusner_force()
             of[i]  += f;
          }
     }
-}
+} // end kusner_force()
 
 /**************************************************************************
 *
@@ -194,15 +194,15 @@ void kusner_force()
 /*  C declarations of the YSMP routines  */
 #include "f2c.h"
 
-int odrv_ ARGS(( integer *, integer *,integer *,REAL *, integer *,integer *,
-integer *,integer *, integer *, integer *));
+int odrv_( integer *, integer *,integer *,REAL *, integer *,integer *,
+integer *,integer *, integer *, integer *);
 
-int sdrvmd_ ARGS(( integer *, integer *,integer *, integer *,integer *,REAL *,
+int sdrvmd_( integer *, integer *,integer *, integer *,integer *,REAL *,
           REAL *,REAL *, integer *,integer *,REAL *,integer *,
-          integer *, integer *, REAL *));
+          integer *, integer *, REAL *);
                                                      
-void sdrv_flag_check ARGS((integer , integer , integer ));
-void odrv_flag_check ARGS((integer , integer ));
+void sdrv_flag_check(integer , integer , integer );
+void odrv_flag_check(integer , integer );
 
 void approx_curvature()
 {
@@ -337,7 +337,7 @@ for ( i = 0 ; i < N ; i++ )
   temp_free((char *)ISP);
   temp_free((char *)IP);
   temp_free((char *)P);
-}
+} // end approx_curvature()
 
 /**************************************************************/
 
@@ -488,7 +488,7 @@ void mobility_setup()
   /* and fill in star areas */
 
   if ( web.representation == STRING )
-  FOR_ALL_EDGES(e_id)
+  { FOR_ALL_EDGES(e_id)
     { int tord = loc_ordinal(get_edge_tailv(e_id));
       int hord = loc_ordinal(get_edge_headv(e_id));
       int tail = IA_INV[tord];
@@ -570,9 +570,10 @@ void mobility_setup()
                 }
         }
     }
+  }
 
   if ( web.representation == SOAPFILM )
-  FOR_ALL_FACETS(f_id)
+  { FOR_ALL_FACETS(f_id)
     {
       REAL area = get_facet_area(f_id);
       REAL s1s1,s2s2,s1s2;  /* dot products */
@@ -653,6 +654,7 @@ void mobility_setup()
             }
         }
     }
+  }
 
 #ifdef GDEBUG
 /* some debug printing */
@@ -706,12 +708,10 @@ for ( i = 0 ; i < N ; i++ )
 *
 */
 
-void conbasis_mult ARGS((REAL*,REAL*));
-void conbasis_tmult ARGS((REAL*,REAL*));
-
-void conbasis_mult(X,Y)
-REAL *X;  /* incoming, SDIM coords per vertex */
-REAL *Y;  /* outgoing, degrees of freedom per vertex */
+void conbasis_mult(
+  REAL *X,  /* incoming, SDIM coords per vertex */
+  REAL *Y   /* outgoing, degrees of freedom per vertex */
+)
 {
   vertex_id v_id;
   int i=0;
@@ -732,7 +732,7 @@ REAL *Y;  /* outgoing, degrees of freedom per vertex */
          for ( j = 0 ; j < dim ; j++,i++ )
           Y[i] = X[k+j];
      }
-}
+} // end void conbasis_mult()
 
 
 /*********************************************************************
@@ -743,9 +743,10 @@ REAL *Y;  /* outgoing, degrees of freedom per vertex */
 *
 */
 
-void conbasis_tmult(X,Y)
-REAL *X;  /* incoming, degrees of freedom per vertex */
-REAL *Y;  /* outgoing, SDIM coords per vertex */
+void conbasis_tmult(
+  REAL *X,  /* incoming, degrees of freedom per vertex */
+  REAL *Y   /* outgoing, SDIM coords per vertex */
+)
 {
   vertex_id v_id;
   int i;
@@ -770,7 +771,7 @@ REAL *Y;  /* outgoing, SDIM coords per vertex */
          for ( j = 0 ; j < dim ; j++,i++ )
           Y[k+j] = X[i];
      }
-}
+} // end conbasis_tmult()
 
 /*********************************************************************
 *
@@ -782,8 +783,7 @@ REAL *Y;  /* outgoing, SDIM coords per vertex */
 *
 */
 
-void mobility_mult(B)
-doublereal *B;
+void mobility_mult(doublereal *B)
 {
   integer PATH, FLAG=0;
   integer ESP;
@@ -803,7 +803,7 @@ doublereal *B;
 #endif
  
   conbasis_tmult(temp,B);
-}
+} // end mobility_mult()
 
 /***********************************************************************
 *
@@ -831,7 +831,7 @@ void mobility_cleanup()
   temp_free((char *)cb_list);  cb_list = NULL;
   if ( conbasis ) { temp_free((char *)conbasis); conbasis = NULL; }
   temp_free((char*)dimf); dimf = NULL;
-}
+} // end mobility_cleanup()
 
 /********************************************************************
 *
@@ -861,7 +861,7 @@ void stability_test()
     }
   mobility_cleanup();
   temp_free((char *)B);
-}
+} // end stability_test()
 
 
 /********************************************************************
@@ -926,7 +926,7 @@ void conf_edge_curv_energy()
     }
 
  free_matrix(mat);
-}
+} // end conf_edge_curv_energy()
 
 
 /************************************************************************
@@ -1028,5 +1028,5 @@ void conf_edge_curv_force()
             of[i]  += f;
          }
     }
-}
+} // end conf_edge_curv_force()
 

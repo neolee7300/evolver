@@ -28,7 +28,7 @@ void refine()
   #else
   local_refine();
   #endif
-}
+} // end void refine()
 
 /****************************************************************
 *
@@ -38,7 +38,7 @@ void refine()
 *                triangulation into four congruent triangles.
 */
 
-void local_refine()     /* REAL the resolution of triangulation */
+void local_refine()     
 {
   vertex_id v_id;
   edge_id e_id;
@@ -59,7 +59,7 @@ void local_refine()     /* REAL the resolution of triangulation */
     kb_error(1338,"No refining in simplex Lagrange model yet.\n",RECOVERABLE );
     if ( web.representation == SOAPFILM )
     { FOR_ALL_EDGES(e_id)
-      { int attr = get_eattr(e_id);
+      { ATTR attr = get_eattr(e_id);
         if ( (attr & NO_REFINE) && !(attr & BARE_EDGE) )
           kb_error(2195,
            "Can't refine in Lagrange model with no_refine edge yet.\n",
@@ -575,14 +575,9 @@ windup:
 *  Return:     Number of edges deleted.
 */
 
-
-#ifdef ANSI_DEF
 int areaweed(
-REAL min_area)    /* criterion for weeding out small triangles */
-#else
-int areaweed(min_area)
-REAL min_area;    /* criterion for weeding out small triangles */
-#endif
+  REAL min_area    /* criterion for weeding out small triangles */
+)
 {
   facet_id f_id;  /* facet being worked on */
   facet_id sentinel;
@@ -609,7 +604,7 @@ REAL min_area;    /* criterion for weeding out small triangles */
   { REAL side[FACET_EDGES][MAXCOORD];  /* side vector */
     REAL sside[FACET_EDGES]; /* squares of side lengths */
     REAL area;      /* area of triangle */
-    facetedge_id fe[FACET_EDGES]; /* edges of triangle */
+    facetedge_id fe[FACET_EDGES+1]; /* edges of triangle */
     edge_id e_id;
     int i;              /* side number */
     int elimcount;
@@ -640,24 +635,23 @@ REAL min_area;    /* criterion for weeding out small triangles */
     i = (sside[0] < sside[1]) ? 0 : 1;
     i = (sside[i] < sside[2]) ? i : 2;
    
-    if ( sside[(i+1)%3] < sside[(i+2)%3] )
-      e_id = inverse_id(get_fe_edge(fe[i]));
-    else 
-      e_id = get_fe_edge(fe[i]);
+    e_id = get_fe_edge(fe[i]);
+    elimcount = delete_edge(e_id);
+    if ( elimcount ) goto elimdone;
 
     if ( sside[(i+1)%3] < sside[(i+2)%3] )
     { e_id = get_fe_edge(fe[(i+1)%3]);
-      elimcount = eliminate_edge(e_id);
+      elimcount = delete_edge(e_id);
       if ( elimcount ) goto elimdone;
       e_id = get_fe_edge(fe[(i+2)%3]);
-      elimcount = eliminate_edge(e_id);
+      elimcount = delete_edge(e_id);
     }
     else
     { e_id = get_fe_edge(fe[(i+2)%3]);
-      elimcount = eliminate_edge(e_id);
+      elimcount = delete_edge(e_id);
       if ( elimcount ) goto elimdone;
       e_id = get_fe_edge(fe[(i+1)%3]);
-      elimcount = eliminate_edge(e_id);
+      elimcount = delete_edge(e_id);
     }
 elimdone:
     if ( elimcount )
@@ -679,18 +673,17 @@ elimdone:
 
   if ( weedcount > 0 ) top_timestamp = ++global_timestamp;
   return weedcount;
-}
+} // end int areaweed()
 
 /***********************************************************************
 *
-*  Function: eliminate_facet()
+*  Function: delete_facet()
 *
 *  Purpose: Delete facet by finding shortest edge and eliminating it.
 *
 *  Return: 1 if eliminated.
 */
-int eliminate_facet(f_id)
-facet_id f_id;
+int delete_facet(facet_id f_id)
 {
   REAL side[MAXCOORD];  /* side vector */
   REAL sside[FACET_EDGES]; /* squares of side lengths */
@@ -699,7 +692,7 @@ facet_id f_id;
   int i;              /* side number */
   int elimcount;
 
-  if ( web.dimension == 1 ) return string_eliminate_facet(f_id);
+  if ( web.dimension == 1 ) return string_delete_facet(f_id);
   if ( web.representation == SIMPLEX ) return simplex_delete_facet(f_id);
 
   ENTER_GRAPH_MUTEX;
@@ -707,34 +700,34 @@ facet_id f_id;
   /* find sides */
   fe[0] = get_facet_fe(f_id);
   for ( i = 0 ; i < FACET_EDGES ; i++ ) 
-    {
-       get_fe_side(fe[i],side);
-       sside[i] = SDIM_dot(side,side);
-       fe[i+1] = get_next_edge(fe[i]);
-    }
+  {
+     get_fe_side(fe[i],side);
+     sside[i] = SDIM_dot(side,side);
+     fe[i+1] = get_next_edge(fe[i]);
+  }
 
   /* weed by eliminating shortest side. eliminate obtuse vertex,
-      the one between the two shortest sides, if possible.
-    */
+     the one between the two shortest sides, if possible.
+  */
   i = (sside[0] < sside[1]) ? 0 : 1;
   i = (sside[i] < sside[2]) ? i : 2;
   e_id = get_fe_edge(fe[i]);
-  elimcount = eliminate_edge(e_id);
+  elimcount = delete_edge(e_id);
   if ( elimcount ) goto elimdone;
 
   if ( sside[(i+1)%3] < sside[(i+2)%3] )
   { e_id = get_fe_edge(fe[(i+1)%3]);
-    elimcount = eliminate_edge(e_id);
+    elimcount = delete_edge(e_id);
     if ( elimcount ) goto elimdone;
     e_id = get_fe_edge(fe[(i+2)%3]);
-    elimcount = eliminate_edge(e_id);
+    elimcount = delete_edge(e_id);
   }
   else 
   { e_id = get_fe_edge(fe[(i+2)%3]);
-    elimcount = eliminate_edge(e_id);
+    elimcount = delete_edge(e_id);
     if ( elimcount ) goto elimdone;
     e_id = get_fe_edge(fe[(i+1)%3]);
-    elimcount = eliminate_edge(e_id);
+    elimcount = delete_edge(e_id);
   }
 elimdone:
   if ( elimcount )
@@ -750,19 +743,18 @@ elimdone:
     }
   LEAVE_GRAPH_MUTEX;
   return elimcount;
-}
+} // end delete_facet()
 
 
 /***********************************************************************
 *
-*  Function: string_eliminate_facet()
+*  Function: string_delete_facet()
 *
 *  Purpose: Delete facet in string model by deleting all its edges.
 *
 *  Return: 1 if eliminated.
 */
-int string_eliminate_facet(f_id)
-facet_id f_id;
+int string_delete_facet(facet_id f_id)
 {
   facetedge_id fe,start_fe,next_fe; 
   edge_id e_id,final_e=NULLID;
@@ -800,7 +792,7 @@ facet_id f_id;
     e_id = get_fe_edge(fe);
     if ( valid_id(next_fe) )
       final_e = get_fe_edge(next_fe);
-    done = eliminate_edge(e_id);
+    done = delete_edge(e_id);
     if ( done )
     { elimcount++;
       free_element(e_id);
@@ -811,7 +803,7 @@ facet_id f_id;
 
   // clean up dangling edge maybe left by last deletion
   if ( valid_element(final_e) )
-  { done = eliminate_edge(final_e);
+  { done = delete_edge(final_e);
     if ( done )
     { elimcount++;
       free_element(final_e);
@@ -832,7 +824,7 @@ facet_id f_id;
     outstring(msg);
   }
   return -elimcount;
-}
+} // end string_delete_facet()
 
 /***********************************************************************
 *
@@ -879,7 +871,7 @@ void area_histogram()
                   (DOUBLE)(exp((n-HISTO_BINS/2)/HISTO_BINSIZE)*ref_area),bincount[n]);
         outstring(msg);
      }
-}
+} // end area_histogram()
 
 
 /***********************************************************
@@ -898,13 +890,14 @@ void area_histogram()
 *  Return:     Number of facets created.
 */
 
-int skinny(min_angle)
-REAL min_angle;    /* criterion for weeding out small triangles */
+int skinny(REAL min_angle   /* criterion for weeding out small triangles */)
 {
   facet_id f_id;  /* facet being worked on */
   facet_id sentinel;
   int weedcount = 0; /* number of facets created */
-
+  REAL cosa;  // cosine of smallest angle
+  edge_id e_id;
+  REAL lambda; // foot of altibude bary coord
   web.vol_flag = 0;
 
   /* first, unmark all NEWFACET attributes */
@@ -922,6 +915,7 @@ REAL min_angle;    /* criterion for weeding out small triangles */
     facetedge_id fe[FACET_EDGES+1]; /* edges of triangle, with wrap */
     int i;              /* side number */
     int smallside, mid, big;
+    REAL *tailx,*newx;
 
     /* skip already modified triangles */
     if ( get_fattr(f_id) & NEWFACET )
@@ -943,11 +937,33 @@ REAL min_angle;    /* criterion for weeding out small triangles */
     big = (sside[big] > sside[2]) ? big : 2;
     /* find middle side */
     mid = 3 - (smallside+big);
-    angle = acos( (sside[mid]+sside[big]-sside[smallside])/2/
-                             sqrt(sside[mid]*sside[big]) );
+	cosa = (sside[mid]+sside[big]-sside[smallside])/2/
+                             sqrt(sside[mid]*sside[big]) ;
+    angle = acos(cosa);
     if ( angle > min_angle )  /* skip fat triangles */
          continue;
-    edge_refine(get_fe_edge(fe[big]));
+
+    e_id = get_fe_edge(fe[big]);
+    if ( K_altitude_flag )
+    {
+   	  // Calculate foot of altitude     
+	  lambda = sqrt(sside[mid])*cosa/sqrt(sside[big]);
+	  if ( (mid==big+1 || mid==big-2) == !inverted(e_id) )
+        lambda = 1-lambda;
+    }
+    else
+      lambda = 0.5;
+    get_edge_side(e_id,side);
+	tailx = get_coord(get_edge_tailv(e_id));
+
+    edge_refine(positive_id(e_id));
+
+    // Move division vertex to foot of altitude
+	newx = get_coord(get_edge_headv(positive_id(e_id)));
+	for ( i = 0 ; i < SDIM ; i++ )
+	   newx[i] = tailx[i] + lambda*side[i];
+
+    
 
     weedcount++;
 
@@ -957,7 +973,7 @@ REAL min_angle;    /* criterion for weeding out small triangles */
 
   if ( weedcount > 0 ) top_timestamp = ++global_timestamp;
   return weedcount;
-}
+} // end skinny()
 
 
 /***********************************************************************
@@ -1029,7 +1045,7 @@ void skinny_histogram()
                   (DOUBLE)(exp((n-HISTO_BINS+1)/HISTO_BINSIZE)*M_PI),bincount[n]);
         outstring(msg);
      }
-}
+} // end skinny_histogram()
 
 
 /******************************************************************
@@ -1046,8 +1062,7 @@ void skinny_histogram()
 *  Output:  number of facets removed
 */
 
-int edgeweed(min_length)
-REAL min_length; /* minimum allowed edge length */
+int edgeweed(REAL min_length /* minimum allowed edge length */)
 {
   edge_id e_id,sentinel;
   int weedcount = 0;
@@ -1070,7 +1085,7 @@ REAL min_length; /* minimum allowed edge length */
     calc_edge(e_id);
     side_len = get_edge_length(e_id);
 
-    if ( side_len < min_length ) elimcount = eliminate_edge(e_id);
+    if ( side_len < min_length ) elimcount = delete_edge(e_id);
     if ( elimcount ) 
     { free_element(e_id);
       weedcount++ ;
@@ -1080,7 +1095,7 @@ REAL min_length; /* minimum allowed edge length */
 
   if ( weedcount > 0 ) top_timestamp = ++global_timestamp;
     return weedcount;
-} 
+} // end edgeweed()
 
 /***********************************************************************
 *
@@ -1100,7 +1115,7 @@ void edge_histogram()
 
   /* main loop over all edges */
 
-  if ( overall_size == 0.0 ) resize();
+  if ( overall_size <= 0.0 ) resize();
   FOR_ALL_EDGES(e_id)
      {
         REAL side_len;  /* actual side length */
@@ -1117,7 +1132,7 @@ void edge_histogram()
   outstring("     side length            number\n");
   if ( bincount[0] )
      {
-        sprintf(msg,"%f - %g      %6d \n",0.0,
+        sprintf(msg,"%8.6g - %8.6g      %6d \n",0.0,
             (DOUBLE)(overall_size*exp((-HISTO_BINS/2)/HISTO_BINSIZE)),
                                                                   bincount[0]);
         outstring(msg);
@@ -1125,17 +1140,17 @@ void edge_histogram()
   for ( n = 1 ; n < HISTO_BINS ; n++ )
     if ( bincount[n] )
      {
-        sprintf(msg,"%g - %g      %6d\n",
+        sprintf(msg,"%8.6g - %8.6g      %6d\n",
             (DOUBLE)(overall_size*exp((n-HISTO_BINS/2-1)/HISTO_BINSIZE)),
             (DOUBLE)(overall_size*exp((n-HISTO_BINS/2)/HISTO_BINSIZE)),bincount[n]);
         outstring(msg);
      }
-}
+} // end edge_histogram()
 
 
 /*******************************************************************
 *
-*  Function: eliminate_edge()
+*  Function: delete_edge()
 *
 *  Purpose: delete an edge and adjacent facets (if triangles in STRING);
 *           merges head of edge to tail, unless head fixed.
@@ -1150,8 +1165,7 @@ void edge_histogram()
 *  Output:  returns number of edges eliminated
 */
 
-int eliminate_edge(short_edge)
-edge_id short_edge;
+int delete_edge(edge_id short_edge)
 {
   facetedge_id base_fe;  /* along edge to be eliminated */
   vertex_id headv,tailv;
@@ -1168,7 +1182,7 @@ edge_id short_edge;
      kb_error(1341,"Cannot eliminate edge in simplex model.\n",RECOVERABLE);
 
   if ( web.modeltype == LAGRANGE )
-     kb_error(1342,"No eliminate_edge() in Lagrange model yet.\n",RECOVERABLE );
+     kb_error(1342,"No delete_edge() in Lagrange model yet.\n",RECOVERABLE );
 
   if ( !valid_element(short_edge) ) return 0;
   if ( get_eattr(short_edge) & FIXED )
@@ -1200,19 +1214,23 @@ edge_id short_edge;
                           !(get_vattr(headv) & FIXED); 
   edge_tail_same =  ((tail_edge_comp==A_SUB_B) || (tail_edge_comp==A_EQ_B)) &&
                           !(get_vattr(tailv) & FIXED);
-  if ( (edge_head_same || 
-    ((head_edge_comp == A_EQ_B || head_edge_comp == A_SUPER_B) &&
-     (tail_head_comp == A_EQ_B || tail_head_comp == A_SUPER_B)) ) && 
-        (get_boundary(headv) == get_edge_boundary(short_edge) ) 
-        &&   !( get_vattr(headv) & (FIXED|AXIAL_POINT)) )
+  if ( ( edge_head_same || 
+         ((head_edge_comp == A_EQ_B || head_edge_comp == A_SUPER_B) &&
+         (tail_head_comp == A_EQ_B || tail_head_comp == A_SUPER_B)) 
+       ) 
+     && 
+        (get_boundary(headv) == get_edge_boundary(short_edge)) 
+     &&   !( get_vattr(headv) & (FIXED|AXIAL_POINT)) )
   { /* short_edge ok */
   }
   else 
-  if ( (edge_tail_same ||
-    ((tail_edge_comp == A_EQ_B || tail_edge_comp == A_SUPER_B) &&
-     (tail_head_comp == A_EQ_B || tail_head_comp == A_SUB_B))  ) &&
+  if ( ( edge_tail_same ||
+         ((tail_edge_comp == A_EQ_B || tail_edge_comp == A_SUPER_B) &&
+         (tail_head_comp == A_EQ_B || tail_head_comp == A_SUB_B))  
+        ) 
+     &&
        (get_boundary(tailv) == get_edge_boundary(short_edge) ) 
-       &&   !( get_vattr(tailv) & (FIXED|AXIAL_POINT)) )
+     &&   !( get_vattr(tailv) & (FIXED|AXIAL_POINT)) )
 
   { short_edge = edge_inverse(short_edge);
   }
@@ -1281,8 +1299,6 @@ edge_id short_edge;
     while ( !equal_id(short_edge,e_id) );
   }
 
-
-
   /* Go through facets around edge,  checking for stars (adjacent
      triangulated triangle) and unstarring if found.              */
   if ( web.representation == SOAPFILM )
@@ -1310,8 +1326,6 @@ edge_id short_edge;
       } 
       else return 0;
     }
-
-
   }
 
   if ( verbose_flag )
@@ -1325,10 +1339,12 @@ edge_id short_edge;
  if ( web.torus_flag )
    torus_unwrap_edge(short_edge);
  else if ( web.symmetry_flag )
-  { edge_id pos_e = positive_id(short_edge);  /* in case of quadratic */
-    int wrap = get_edge_wrap(pos_e);
+  { 
+    int wrap = get_edge_wrap(short_edge);
     if ( wrap )
-      wrap_vertex(get_edge_headv(pos_e),wrap);
+      wrap_vertex(elim_v,wrap);
+    if ( (web.modeltype == QUADRATIC) && inverted(short_edge) )
+      wrap_vertex(get_edge_midv(short_edge),wrap);
   }
 
   /* put keep_v at middle of old edge if possible */
@@ -1406,7 +1422,7 @@ edge_id short_edge;
     third_v = get_fe_headv(next_fe);
     if ( (web.representation == STRING) && 
        ((!valid_id(get_fe_facet(base_fe)) || !valid_id(prev_fe) || 
-       (!equal_id(get_next_edge(next_fe), prev_fe)) && !equal_id(prev_fe,next_fe))
+       ((!equal_id(get_next_edge(next_fe), prev_fe)) && !equal_id(prev_fe,next_fe)))
         || ((web.modeltype == QUADRATIC) && (!equal_id(prev_fe,next_fe)))) ) 
     {
       /* do not eliminate facets with more than 3 edges */
@@ -1416,11 +1432,11 @@ edge_id short_edge;
   /*    do  */
       {
         next_fe = get_next_edge(bbase_fe);
-        if ( equal_element(short_edge,get_fe_edge(next_fe)) )
+        if ( valid_id(next_fe) && equal_element(short_edge,get_fe_edge(next_fe)) )
           next_fe = get_next_edge(next_fe);
 
         prev_fe = get_prev_edge(bbase_fe);
-        if ( equal_element(short_edge,get_fe_edge(prev_fe)) )
+        if ( valid_id(prev_fe) && equal_element(short_edge,get_fe_edge(prev_fe)) )
           prev_fe = get_prev_edge(prev_fe);
 
         set_next_edge(prev_fe,next_fe);
@@ -1600,6 +1616,10 @@ edge_id short_edge;
       if ( (web.representation == STRING) && phase_flag )
           set_e_phase_density(keep_edge);
 
+      /* fix no_refine, in favor of not no_refine */
+      if ( !(get_eattr(throw_edge) & NO_REFINE) )
+        unset_attr(keep_edge,NO_REFINE);
+
       /* fix method instances. Oppositely oriented signed methods cancel;
          others combined.                                                   */
       { struct edge *ea_ptr = eptr(keep_edge);
@@ -1633,13 +1653,12 @@ edge_id short_edge;
           if ( handled ) continue;
           /* Not found on keep_edge, so paste onto keep_edge */
           if ( orientable && same_sign(keep_edge,throw_edge) )
-            ameths[ea_ptr->method_count++] = -bmeths[i];
-          else
             ameths[ea_ptr->method_count++] = bmeths[i];
+          else
+            ameths[ea_ptr->method_count++] = -bmeths[i];
        } /* end b meth loop */
       } /* end method adjust */
-
-        
+      
 wasloop:
 
 #ifdef MPI_EVOLVER
@@ -1685,7 +1704,7 @@ wasloop:
   if ( !valid_id(get_vertex_edge(keep_v)) ) /* get rid of bare vertex */
   { free_element(keep_v);
     retval = 1; 
-    goto eliminate_edge_exit;
+    goto delete_edge_exit;
   }
 
 
@@ -1717,12 +1736,12 @@ wasloop:
   }
   retval = 1;
 
-eliminate_edge_exit:
+delete_edge_exit:
   LEAVE_GRAPH_MUTEX;
 
   top_timestamp = ++global_timestamp;
   return retval;
-} /* end eliminate_edge() */
+} /* end delete_edge() */
 
 /**************************************************************************
 *
@@ -1730,8 +1749,7 @@ eliminate_edge_exit:
 *  purpose: Fix up any body facet links to a removed facet.
 */
 
-void body_facet_fixup(facet)
-facet_id facet;
+void body_facet_fixup(facet_id facet)
 {
   body_id b_id;
   facet_id bf_id;
@@ -1767,7 +1785,7 @@ facet_id facet;
       }
     }
   }
-}
+} // end body_facet_fixup()
 
 
 /************************************************************
@@ -1780,11 +1798,12 @@ facet_id facet;
 *            edge predecessor.
 */
 
-void change_vertex(fe,old_v,new_v,wrap)
-facetedge_id fe;  /* known to have tail at old vertex */
-vertex_id  old_v; /* old vertex */
-vertex_id  new_v; /* new vertex */
-WRAPTYPE wrap;  /* wraps to add to edges */
+void change_vertex(
+  facetedge_id fe,  /* known to have tail at old vertex */
+  vertex_id  old_v, /* old vertex */
+  vertex_id  new_v, /* new vertex */
+  WRAPTYPE wrap  /* wraps to add to edges */
+)
 {
   facetedge_id next_fe;  /* looping around current edge */
   facetedge_id pre_fe;    /* going back around facet to new edge */
@@ -1807,7 +1826,7 @@ WRAPTYPE wrap;  /* wraps to add to edges */
         next_fe = get_next_facet(next_fe);
      }
   while ( !equal_id(next_fe,fe) );
-}
+} // end change_vertex()
 
 
 /*******************************************************************
@@ -1824,13 +1843,8 @@ WRAPTYPE wrap;  /* wraps to add to edges */
 *  Return value: number of facets created
 */
 
-#ifdef ANSI_DEF
-int articulate(
-REAL max_len)  /* maximum allowed edge length */
-#else
-int articulate(max_len)
-REAL max_len;  /* maximum allowed edge length */
-#endif
+
+int articulate(REAL max_len  /* maximum allowed edge length */)
 {
   edge_id e_id,sentinel;
   int new_edge_count = 0;
@@ -1863,7 +1877,7 @@ REAL max_len;  /* maximum allowed edge length */
 
   if ( new_edge_count > 0 ) top_timestamp = ++global_timestamp;
     return new_edge_count;
-} 
+} // end articulate()
 
 /*************************************************************
 *
@@ -1877,8 +1891,7 @@ REAL max_len;  /* maximum allowed edge length */
 *  Output:  ID of new edge half 
 */
 
-edge_id edge_refine(e_id)
-edge_id e_id;
+edge_id edge_refine(edge_id e_id)
 {
   facetedge_id fe; /* for facet being subdvided */
   edge_id new_e;
@@ -1915,7 +1928,7 @@ edge_id e_id;
 
   top_timestamp = ++global_timestamp;
   return new_e;
-}
+} // end edge_refine()
 
 /***********************************************************************
 *
@@ -1927,8 +1940,7 @@ edge_id e_id;
 */
 int did_global_edge_calc = 0;  /* efficiency measure */
 
-int equiangulate_edge(e_id)
-edge_id e_id;
+int equiangulate_edge(edge_id e_id)
 { facetedge_id fe_a; /* for edge under test */
   facetedge_id fe_ai; /* other facetedge of e_id */
   REAL a;  /* length of e_id */
@@ -2005,10 +2017,18 @@ edge_id e_id;
         if ( a*a + d*d <= e*e + 0.0001 ) return 0;
 */
   /* may want to switch, but test that opposite vertices are different */
-  if ( equal_id(get_fe_tailv(fe_c),get_fe_headv(fe_d)) ) return 0;
-  if ( eartest(get_fe_tailv(fe_c),get_fe_headv(fe_d)) ) return 0;
-   /* if we are here, we want to switch diagonals */
+  if ( !force_edgeswap_flag )
+  {
+    if ( equal_id(get_fe_tailv(fe_c),get_fe_headv(fe_d)) ) 
+        return 0;
+    if ( eartest(get_fe_tailv(fe_c),get_fe_headv(fe_d), get_edge_tailv(e_id),
+          get_edge_headv(e_id)) ) 
+       return 0;
+  }
+
+  /* if we are here, we want to switch diagonals */
   return do_edgeswap(e_id);
+
 } /* end equiangulate_edge() */ 
 
 /*************************************************************
@@ -2048,20 +2068,69 @@ int equiangulate()
   
   web.vol_flag = 0;
 
-  MFOR_ALL_EDGES(e_id)
-    calc_edge(e_id);
+  if ( threadflag )
+    thread_launch(TH_CALC_EDGES,EDGE);
+  else
+  { MFOR_ALL_EDGES(e_id)
+      calc_edge(e_id);
+  }
   did_global_edge_calc = 1;
 
   /* main loop through edges */
   ENTER_GRAPH_MUTEX;
-  e_id = NULLEDGE;
-  while ( generate_all(EDGE,&e_id,&sentinel) )
-    switchcount += equiangulate_edge(e_id);
+  if ( threadflag )
+  { int i;
+    thread_launch(TH_EQUIANGULATE,EDGE);
+    for ( i = 0 ; i < nprocs ; i++ )
+      switchcount += proc_int_ret[i];
+  }
+  else
+  { e_id = NULLEDGE;
+    while ( generate_all(EDGE,&e_id,&sentinel) )
+      switchcount += equiangulate_edge(e_id);
+  }
   LEAVE_GRAPH_MUTEX;
 
   did_global_edge_calc = 0;
   return switchcount;
-}
+} // end equiangulate()
+
+/**********************************************************************
+*
+* function: thread_equiangulate()
+*
+* purpose: thread-friendly equiangulation.
+*/
+
+void thread_equiangulate()
+{ int count = 0;
+  struct thread_data *data = GET_THREAD_DATA;
+
+  THREAD_FOR_ALL_NEW(EDGE,
+      { 
+          count += equiangulate_edge(*idptr);
+      }
+  )
+
+  proc_int_ret[data->worker_id] = count;
+
+} // end thread_equiangulate()
+
+/**********************************************************************
+*
+* function: thread_calc_edges()
+*
+* purpose: thread-friendly updating of edge lengths.
+*/
+
+void thread_calc_edges()
+{ 
+  THREAD_FOR_ALL_NEW(EDGE,
+      { 
+          calc_edge(*idptr);
+      }
+  )
+} // end thread_calc_edges()
 
 /*************************************************************************
 *
@@ -2070,22 +2139,38 @@ int equiangulate()
 *  purpose: see if edge swapping would create an ear. Counts
 *      edges already connecting proposed points.
 *
-*  Input: The two vertex id's
+*  Input: The two pairs of vertex id's
 *
 *  Output: 1 if ear would be created. 0 else.
 */
 
-int eartest(v1,v2)
-vertex_id v1,v2;
+int eartest(
+  vertex_id v1, vertex_id v2,
+  vertex_id v3, vertex_id v4
+)
 { edge_id e_id,start_id;
 
   e_id = start_id = get_vertex_edge(v1);
   do
-  { if ( equal_id(v2,get_edge_headv(e_id)) ) return 1; 
-     e_id = get_next_tail_edge(e_id);
+  { if ( equal_id(v2,get_edge_headv(e_id)) )
+    { /* see if facets on edge have third vertex equal to v3 or v4 */
+      facetedge_id fe,start_fe,next_fe;
+      vertex_id other_v;
+      fe = start_fe = get_edge_fe(e_id);
+      if ( valid_id(start_fe) )
+      do
+      {
+        next_fe = get_next_edge(fe);
+        other_v = get_fe_headv(next_fe);
+        if ( equal_id(other_v,v3) || equal_id(other_v,v4) ) 
+          return 1; 
+        fe = get_next_facet(fe); 
+      } while ( !equal_id(fe,start_fe) );
+    }
+    e_id = get_next_tail_edge(e_id);
   } while ( e_id != start_id );
   return 0;
-}
+} // end eartest()
 
 
 /*************************************************************
@@ -2101,8 +2186,7 @@ vertex_id v1,v2;
 *
 */
 
-int edgeswap(e_id)
-edge_id e_id;
+int edgeswap(edge_id e_id)
 {
   facetedge_id fe_a; /* for edge under test */
   facetedge_id fe_ai; /* other facetedge of e_id */
@@ -2201,23 +2285,28 @@ edge_id e_id;
   fe_d = get_next_edge(fe_ai); 
 
   /* may want to switch, but test that opposite vertices are different */
-  if ( equal_id(get_fe_tailv(fe_c),get_fe_headv(fe_d)) ) 
+  if ( !force_edgeswap_flag )
+  {
+    if ( equal_id(get_fe_tailv(fe_c),get_fe_headv(fe_d)) ) 
     { if ( verbose_flag )
       { sprintf(msg,"Not swapping edge %s. Would be a loop on vertex %s.\n",
                 ELNAME(e_id),ELNAME1(get_fe_tailv(fe_c))); outstring(msg);
       }
       return 0;
     }
-  if ( eartest(get_fe_tailv(fe_c),get_fe_headv(fe_d)) )
+    if ( eartest(get_fe_tailv(fe_c),get_fe_headv(fe_d),get_edge_tailv(e_id),
+                     get_edge_headv(e_id)) )
     { if (verbose_flag )
       { sprintf(msg,"Not swapping edge %s. Would create two facets with same vertices.\n",
                 ELNAME(e_id)); outstring(msg);
       }
       return 0;
     }
+  }
 
-    return do_edgeswap(e_id);
-}
+  return do_edgeswap(e_id);
+
+} // end edgeswap()
 
 /***************************************************************************
 *
@@ -2226,8 +2315,7 @@ edge_id e_id;
 * Purpose: make sure axial point at start of facet.
 */
 
-void test_axial_points(f_id)
-facet_id f_id;
+void test_axial_points(facet_id f_id)
 { facetedge_id fe;
   int i;
 
@@ -2240,7 +2328,7 @@ facet_id f_id;
     { set_facet_fe(f_id,fe); return; }
     fe = get_next_edge(fe);
   }
-}
+} // end test_axial_points()
 
 /***************************************************************************
 *
@@ -2251,8 +2339,7 @@ facet_id f_id;
 * return: 1 if edge swapped, 0 if not.
 */
 
-int do_edgeswap(e_id)
-edge_id e_id;
+int do_edgeswap(edge_id e_id)
 {
   vertex_id v_id;
   facetedge_id fe_a; /* for edge under test */
@@ -2370,8 +2457,7 @@ edge_id e_id;
 *
 */
 
-REAL vertex_angle(v_id)
-vertex_id v_id;
+REAL vertex_angle(vertex_id v_id)
 {
   REAL b[MAXCOORD];  /* edge vectors */
   REAL angle;
@@ -2398,7 +2484,7 @@ vertex_id v_id;
   ac = sqrt(SDIM_dot(netforce,netforce));
   angle = (ac >= 2.0) ? M_PI : 2*asin(ac/2);
   return angle;
-}
+} // end vertex_angle()
     
 /***********************************************************************
 *
@@ -2412,8 +2498,7 @@ vertex_id v_id;
 *  method: uses 2-vector dot product for cosine angle
 */
 
-REAL dihedral(e_id)
-edge_id e_id;
+REAL dihedral(edge_id e_id)
 {
   facetedge_id fe_a; /* for edge under test */
   facetedge_id fe_ai; /* other facetedge of e_id */
@@ -2452,7 +2537,7 @@ edge_id e_id;
   if ( costh < -1.0 ) return M_PI;
   return acos(costh);
 
-}
+} // end dihedral()
 
 /******************************************************************
 *
@@ -2468,8 +2553,7 @@ edge_id e_id;
 *
 */
 
-int ridge_notcher(max_angle)
-REAL max_angle;
+int ridge_notcher(REAL max_angle)
 {
   int notchcount = 0;  /* number of edges notched */
   edge_id e_id;          /* edge to notch */
@@ -2522,15 +2606,13 @@ REAL max_angle;
 
   if ( notchcount > 0 ) top_timestamp = ++global_timestamp;
   return notchcount;
-}
+} // end ridge_notcher()
 
 /******************************************************************
 *
 *  Function:  ridge_histogram()
 *
 *  Purpose:    Calculate histogram of ridge angles.
-*
-*
 */
 
 void ridge_histogram()
@@ -2540,7 +2622,6 @@ void ridge_histogram()
   int n;
 
   for ( n = 0 ; n < HISTO_BINS ; n++ ) bincount[n] = 0;
-
 
   /* main loop over all edges */
   FOR_ALL_EDGES(e_id)
@@ -2575,7 +2656,7 @@ void ridge_histogram()
         outstring(msg);
      }
 
-}
+} // end ridge_histogram()
 
 
 #ifdef UNDER_DEVELOPMENT
@@ -2603,7 +2684,7 @@ void merge_collapsed_facets()
              
     }
   }
-}
+} // end merge_collapsed_facets()
 #endif
 
 /***************************************************************************
@@ -2611,21 +2692,20 @@ void merge_collapsed_facets()
  *   function: fixup_vertex_content_meths()
  *
  *   purpose: Make sure vertex has right set of content method instances.
- *            To be called during eliminate_edge().
+ *            To be called during delete_edge().
  *
  *   algorithm: Delete old content methods, then go through adjacent 
  *              facets and look for bodies.
  */
-void fixup_vertex_content_meths(v_id)
-vertex_id v_id;
+void fixup_vertex_content_meths(vertex_id v_id)
 { int  meth_offset = get_meth_offset(VERTEX); 
   struct vertex *v_ptr = (struct vertex*)vptr(v_id);
   int *instlist = (int*)((char*)v_ptr + meth_offset);
   facetedge_id start_fe,fe;
   conmap_t *map;
   struct boundary *bdry = get_vertex_boundary(v_id);
-  int attr;
-  int i,k;
+  ATTR attr;
+  int i,k; 
   char name[200];
   
   if ( !everything_quantities_flag )
@@ -2638,7 +2718,9 @@ vertex_id v_id;
   /* Delete old content methods. */
   for ( i = 0 ; i < (int)v_ptr->method_count ; i++ )
   { if ( METH_INSTANCE(instlist[i])->flags & BODY_INSTANCE )
-      instlist[i] = instlist[--v_ptr->method_count];
+    { instlist[i] = instlist[--v_ptr->method_count];
+      i--;
+    }
   }
 
   map = get_v_constraint_map(v_id);
@@ -2662,7 +2744,7 @@ vertex_id v_id;
             { if ( con->attr & NAMED_THING )
                  sprintf(name,"body_%d_%s_meth",ordinal(b_id)+1,con->name);
               else
-                 sprintf(name,"body_%d_con_%d_meth",ordinal(b_id)+1,map[k]);
+                 sprintf(name,"body_%d_con_%d_meth",ordinal(b_id)+1,map[k]&CONMASK);
               apply_method(inverse_id(vv_id),name); 
             }
           }
@@ -2684,24 +2766,56 @@ vertex_id v_id;
  *   function: fixup_edge_content_meths()
  *
  *   purpose: Make sure edge has right set of content method instances.
- *            To be called during eliminate_edge().
+ *            To be called during delete_edge().
  *
  *   algorithm: Delete old content methods, then go through adjacent 
  *              facets and look for bodies.
  */
-void fixup_edge_content_meths(e_id)
-edge_id e_id;
+void fixup_edge_content_meths(edge_id e_id)
 { int  meth_offset = get_meth_offset(EDGE); 
   struct edge *e_ptr = (struct edge*)eptr(e_id);
   int *instlist = (int*)((char*)e_ptr + meth_offset);
   facetedge_id start_fe,fe;
   conmap_t *map;
   struct boundary *bdry = get_edge_boundary(e_id);
-  int attr;
+  ATTR attr;
   int i,k;
   char name[200];
   
   if ( !everything_quantities_flag )
+    return;
+
+  if ( web.representation == STRING )
+  { facet_id f_id;
+    body_id b_id,bb_id;
+
+    /* Delete old content methods. */
+    for ( i = 0 ; i < (int)e_ptr->method_count ; i++ )
+    { if ( METH_INSTANCE(instlist[i])->flags & BODY_INSTANCE )
+      { instlist[i] = instlist[--e_ptr->method_count];
+        i--;
+      }
+    }
+    fe = start_fe = get_edge_fe(e_id);
+    if ( valid_id(fe) )
+      do
+      { f_id = get_fe_facet(fe);
+        b_id = get_facet_body(f_id);
+        if ( valid_id(b_id) )
+        { int m = get_body_volmeth(b_id);
+          apply_method_num(e_id,m);
+        }
+        bb_id = get_facet_body(inverse_id(f_id));
+        if ( valid_id(bb_id) )
+        { int m = get_body_volmeth(bb_id);
+          apply_method_num(e_id,-m);
+        }
+        fe = get_next_facet(fe);
+      } while ( valid_id(fe) && !equal_id(fe,start_fe) );
+    return;
+  }
+
+  if ( web.representation != SOAPFILM )
     return;
 
   attr = get_eattr(e_id);
@@ -2711,7 +2825,9 @@ edge_id e_id;
   /* Delete old content methods. */
   for ( i = 0 ; i < (int)e_ptr->method_count ; i++ )
   { if ( METH_INSTANCE(instlist[i])->flags & BODY_INSTANCE )
-      instlist[i] = instlist[--e_ptr->method_count];
+    { instlist[i] = instlist[--e_ptr->method_count];
+      i--;
+    }
   }
 
   map = get_e_constraint_map(e_id);
@@ -2723,7 +2839,6 @@ edge_id e_id;
   { int sides;
     facet_id f_id = get_fe_facet(fe);
     edge_id ee_id = e_id;
-    if ( inverted(f_id) ) invert(ee_id);
     for ( sides = 0 ; sides < 2 ; sides++ )
     { body_id b_id;
     
@@ -2736,7 +2851,7 @@ edge_id e_id;
             { if ( con->attr & NAMED_THING )
                  sprintf(name,"body_%d_%s_meth",ordinal(b_id)+1,con->name);
               else
-                 sprintf(name,"body_%d_con_%d_meth",ordinal(b_id)+1,map[k]);
+                 sprintf(name,"body_%d_con_%d_meth",ordinal(b_id)+1,map[k]&CONMASK);
               apply_method(ee_id,name); 
             }
           }
@@ -2746,7 +2861,7 @@ edge_id e_id;
        }
       }
       f_id = inverse_id(f_id);
-      e_id = inverse_id(ee_id);
+      ee_id = inverse_id(ee_id);
     }
     fe = get_next_facet(fe);
   } while ( !equal_id(fe,start_fe) );

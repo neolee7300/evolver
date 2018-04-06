@@ -5,7 +5,7 @@
 *
 *  Contents: lexical analyzer for evolver data files.
 *            Constructed from datafile.lex by lex.
-*/
+*/ 
 
 /* will have my own input() and output() */
 
@@ -38,14 +38,14 @@ extern int ubuff_spot;
 
 struct ckey { char *name; int token; } const_expr_keywords[] =
 {
-  {"pi",PI_},
-  {"e",E_},
-  {"g",G_}
+  {"pi",PI_TOK},
+  {"e",E_TOK},
+  {"g",G_TOK}
 };
 
-void savein ARGS((int));
-void get_more_input ARGS((void));
-int keyword_compare ARGS(( struct ckey *, struct ckey *));
+void savein (int);
+void get_more_input(void);
+int keyword_compare ( struct ckey *, struct ckey *);
 
 /* Wrapper for yylex() to buffer look-ahead token */
 #define UNPUTMAX 10
@@ -53,9 +53,9 @@ int unputted_tok[UNPUTMAX];  /* unput token number   */
 int unput_tok_count;  /* 1 if token was unput */
 YYSTYPE yylval;
 
-char kb_input_new ARGS((void));
-void kb_unput ARGS((char));
-int kblex ARGS((void));
+char kb_input_new (void);
+void kb_unput(char);
+int kblex (void);
 #define KB_INPUT kb_input_new
 #define KB_UNPUT kb_unput
 
@@ -65,8 +65,11 @@ int next_err_token = 0;  /* token in file for which to generate error */
 int token_count; /* resets on file initialization */
 int err_tok_gen_flag;  /* whether -E option in effect */
 
-int kb_yylex(lvalp)
-YYSTYPE *lvalp;  /* for pure parser destination for yylval */
+/***********************************************************************
+* function: kb_yylex()
+* purpose: to be called to get next token.
+*/
+int kb_yylex(YYSTYPE *lvalp  /* for pure parser destination for yylval */)
 {
   if ( lvalp )
   { PROF_FINISH(yyparse); /* exclude from yyparse time */
@@ -120,24 +123,26 @@ YYSTYPE *lvalp;  /* for pure parser destination for yylval */
 
   PROF_FINISH(yylex);
   return tok;
-}
-/* For unputting unneeded look-ahead token */
+} // end kb_yylex()
+
+/*********************************************************************
+* function: unput_tok()
+* purpose: For unputting unneeded look-ahead token 
+*/
 void unput_tok()
 { 
   if ( unput_tok_count >= UNPUTMAX )
-    kb_error(2324,"Internal error: unputted_tok stack overflow.\n",RECOVERABLE);
+    kb_error(2324,"Internal error: unputted_tok stack overflow.\n",DATAFILE_ERROR);
   unputted_tok[unput_tok_count++] = tok;
   /* fprintf(stderr,"UNPUT %3d %s %s\n",tok,tokname(tok),yytext); */
-  /* tok = UNPUTTED_; */ /* some places depend on knowing unput lookahead */
+  /* tok = UNPUTTED_TOK; */ /* some places depend on knowing unput lookahead */
  
-}
+} // end unput_tok()
 
-#ifndef NOPROTO
-int rawinput ARGS((void));
+int rawinput(void);
 int yyback(int *,int);
 /* #define yyoutput yyout_unused */
 /* #define yyunput yyunput_unused */
-#endif
 
 extern FILE *data_fd;
 extern char *cmdptr;
@@ -157,620 +162,666 @@ int  macro_subs_top;  /* index of top of string space */
 int  macro_subs_max;   /* space allocated for strings */
 
 struct dkey { char *name; int token; } datafile_keywords[] =
-{ 
-  {"content_rank",CONTENT_RANK_},
-  {"clip_coeff",CLIP_COEFF},
-  {"slice_coeff",SLICE_COEFF},
+{ {"calculate_in_3d",CALC_IN_3D_TOK},
+  {"vertices_predicted",VERTICES_PREDICTED_TOK},
+  {"edges_predicted",EDGES_PREDICTED_TOK},
+  {"facets_predicted",FACETS_PREDICTED_TOK},
+  {"bodies_predicted",BODIES_PREDICTED_TOK},
+  {"facetedges_predicted",FACETEDGES_PREDICTED_TOK},
+  {"quantities_predicted",QUANTITIES_PREDICTED_TOK},
+  {"method_instances_predicted",METHOD_INSTANCES_PREDICTED_TOK},
+  {"opacity",OPACITY_TOK},
+  {"mpi_local_bodies",MPI_LOCAL_BODIES_NODE},
+  {"clip_coeff",CLIP_COEFF_TOK},
+  {"slice_coeff",SLICE_COEFF_TOK},
+  {"on_constraint",ON_CONSTRAINT_TOK},
+  {"hit_constraint",HIT_CONSTRAINT_TOK},
+  {"value_of_constraint",VALUE_OF_CONSTRAINT_TOK},
+  {"on_boundary",ON_BOUNDARY_TOK},
+  {"on_quantity",ON_QUANTITY_TOK},
+  {"on_method_instance",ON_METHOD_INSTANCE_TOK},
+  {"content_rank",CONTENT_RANK_TOK},
   {"high_constraint",V_HIGH_CONSTRAINT},
   {"high_boundary",V_HIGH_BOUNDARY},
-  {"suppress_warning",SUPPRESS_WARNING_},
-  {"unsuppress_warning",UNSUPPRESS_WARNING_},
-  {"volume_method_name",VOLUME_METHOD_NAME_},
-  {"partner_hitting",PARTNER_HITTING_},
-  {"procedure",PROCEDURE_WORD_},
-  {"display_origin",DISPLAY_ORIGIN_},
-  {"length_method_name",LENGTH_METHOD_NAME_},
-  {"area_method_name",AREA_METHOD_NAME_},
-  {"hessian_special_normal_vector",HESSIAN_SPECIAL_NORMAL_VECTOR_},
-  {"keep_originals",KEEP_ORIGINALS_},
-  {"element_modulus",ELEMENT_MODULUS_},
-  {"swap_colors",SWAP_COLORS_},
-  {"self",SELF_},
-  {"conserved",CONSERVED_},
-  {"actual_volume",ACTUAL_VOLUME_},
-  {"keep_macros",KEEP_MACROS_},
-  {"pdelta",DELTA_ },
-  {"tolerance",TOLERANCE_},
-  {"lagrange_multiplier",LAGRANGE_MULTIPLIER_ },
-  {"evolver_version",VERSION_},
-  {"orientation",ORIENTATION_},
-  {"ignore_constraints",IGNORE_CONSTRAINTS_},
-  {"ignore_fixed",IGNORE_FIXED_},
-  {"load_library",LOAD_LIBRARY_},
-  {"interp_bdry_param",INTERP_BDRY_PARAM_},
-  {"axial_point",AXIAL_POINT_},
-  {"lagrange",LAGRANGE_},
-  {"lagrange_order",LAGRANGE_ORDER_},
-  {"parameter_1",PARAMETER_1_},
-  {"optimizing_parameter",OPTIMIZING_PARAMETER_},
-  {"optimising_parameter",OPTIMIZING_PARAMETER_},
-  {"everything_quantities",EVERYTHING_QUANTITIES_},
-  {"value",VALUE_},
-  {"target",TARGET_},
-  {"define",DEFINE_},
-  {"attribute",ATTRIBUTE_},
-  {"method_instance",METHOD_INSTANCE_},
-  {"method",METHOD_},
-  {"scalar_integrand",SCALAR_INTEGRAND_},
-  {"vector_integrand",VECTOR_INTEGRAND_},
-  {"k_vector_order",K_VEC_ORDER_},
-  {"form_integrand",FORM_INTEGRAND_},
-  {"mobility",MOBILITY_},
-  {"mobility_tensor",MOBILITY_TENSOR_},
-  {"bare",BARE_},
-  {"boundary_curvature",BOUNDARY_CURVATURE_},
-  {"modulus",MODULUS_},
-  {"info_only",INFO_ONLY_},
-  {"global_method",GLOBAL_METHOD_},
-  {"global",GLOBAL_},
-  {"area_fixed",AREA_FIXED_},
-  {"fixed_area",AREA_FIXED_},
-  {"view_matrix",VIEW_MATRIX_},
-  {"view_transforms",VIEW_TRANSFORMS_},
-  {"view_transform_generators",VIEW_TRANSFORM_GENS_},
-  {"homothety",HOMOTHETY_},
-  {"approximate_curvature",APPROX_CURV_},
-  {"approx_curvature",APPROX_CURV_},
-  {"phasefile",PHASEFILE_},
-  {"phase",PHASE_},
-  {"autopop",AUTOPOP_},
-  {"autopop_quartic",AUTOPOP_QUARTIC_},
-  {"autochop",AUTOCHOP_},
-  {"total_time",TOTAL_TIME_},
-  {"effective_area",EFFECTIVE_AREA_},
-  {"runge_kutta",RUNGE_KUTTA_},
-  {"color",COLOR_},
-  {"backcolor",BACKCOLOR_},
-  {"frontcolor",FRONTCOLOR_},
-  {"mean_curvature_integral",MEAN_CURV_INT_},
-  {"normal_curvature",NORMAL_CURVATURE_},
-  {"square_curvature",SQUARE_CURVATURE_},
-  {"squared_curvature",SQUARE_CURVATURE_},
-  {"square_gaussian_curvature",SQGAUSS_},
-  {"squared_gaussian_curvature",SQGAUSS_},
-  {"gauss_curvature",GAUSS_CURVATURE_},
-  {"insulating_knot_energy",INSULATING_KNOT_ENERGY_},
-  {"conducting_knot_energy",CONDUCTING_KNOT_ENERGY_},
-  {"space_dimension",SPACE_DIMENSION_},
-  {"surface_dimension",SURFACE_DIMENSION_},
-  {"simplex_representation",SIMPLEX_REP_},
-  {"metric",METRIC_},
-  {"klein_metric",KLEIN_METRIC_},
-  {"conformal_metric",CONFORMAL_},
-  {"fixed",FIXED_},
-  {"no_refine",NO_REFINE_},
-  {"hit_partner",HIT_PARTNER_},
-  {"no_display",NODISPLAY_},
-  {"noncontent",NONCONTENT_},
-  {"efixed",EFIXED_},
-  {"symmetry_group",SYMMETRY_GROUP_},
-  {"wrap",WRAP_},
-  {"torus",TORUS_},
-  {"torus_filled",TORUS_FILLED_},
-  {"torus_periods",TORUS_PERIODS_},
-  {"periods",PERIODS_},
-  {"display_periods",DISPLAY_PERIODS_},
-  {"string",STRING_},
-  {"soapfilm",SOAPFILM_},
-  {"wulff",WULFF_},
-  {"boundary",BOUNDARY_},
-  {"boundaries",BOUNDARY_},
-  {"constraint",CONSTRAINT_},
-  {"constraints",CONSTRAINT_},
-  {"surface_energy",SURFACE_ENERGY_},
-  {"formula",FUNCTION_},
-  {"function",FUNCTION_},
-  {"parameter",PARAMETERS_},
-  {"parameters",PARAMETERS_},
-  {"parameter_file",PARAMETER_FILE_},
-  {"symmetric_content",SYMMETRIC_CONTENT_},
+  {"suppress_warning",SUPPRESS_WARNING_TOK},
+  {"unsuppress_warning",UNSUPPRESS_WARNING_TOK},
+  {"volume_method_name",VOLUME_METHOD_NAME_TOK},
+  {"partner_hitting",PARTNER_HITTING_TOK},
+  {"procedure",PROCEDURE_WORD_TOK},
+  {"display_origin",DISPLAY_ORIGIN_TOK},
+  {"length_method_name",LENGTH_METHOD_NAME_TOK},
+  {"area_method_name",AREA_METHOD_NAME_TOK},
+  {"hessian_special_normal_vector",HESSIAN_SPECIAL_NORMAL_VECTOR_TOK},
+  {"keep_originals",KEEP_ORIGINALS_TOK},
+  {"element_modulus",ELEMENT_MODULUS_TOK},
+  {"swap_colors",SWAP_COLORS_TOK},
+  {"self",SELF_TOK},
+  {"conserved",CONSERVED_TOK},
+  {"actual_volume",ACTUAL_VOLUME_TOK},
+  {"keep_macros",KEEP_MACROS_TOK},
+  {"pdelta",PDELTA_TOK},
+  {"on_assign_call",ON_ASSIGN_CALL_TOK},
+  {"tolerance",TOLERANCE_TOK},
+  {"lagrange_multiplier",LAGRANGE_MULTIPLIER_TOK},
+  {"evolver_version",VERSION_TOK},
+  {"orientation",ORIENTATION_TOK},
+  {"ignore_constraints",IGNORE_CONSTRAINTS_TOK},
+  {"ignore_fixed",IGNORE_FIXED_TOK},
+  {"load_library",LOAD_LIBRARY_TOK},
+  {"interp_bdry_param",INTERP_BDRY_PARAM_TOK},
+  {"axial_point",AXIAL_POINT_TOK},
+  {"lagrange",LAGRANGE_TOK},
+  {"lagrange_order",LAGRANGE_ORDER_TOK},
+  {"parameter_1",PARAMETER_1_TOK},
+  {"parameter_2",PARAMETER_2_TOK},
+  {"optimizing_parameter",OPTIMIZING_PARAMETER_TOK},
+  {"optimising_parameter",OPTIMIZING_PARAMETER_TOK},
+  {"everything_quantities",V_EVERYTHING_QUANTITIES_TOK},
+  {"value",VALUE_TOK},
+  {"target",TARGET_TOK},
+  {"define",DEFINE_TOK},
+  {"attribute",ATTRIBUTE_TOK},
+  {"method_instance",METHOD_INSTANCE_TOK},
+  {"method",METHOD_TOK},
+  {"scalar_integrand",SCALAR_INTEGRAND_TOK},
+  {"vector_integrand",VECTOR_INTEGRAND_TOK},
+  {"k_vector_order",K_VEC_ORDER_TOK},
+  {"form_integrand",FORM_INTEGRAND_TOK},
+  {"mobility",MOBILITY_TOK},
+  {"mobility_tensor",MOBILITY_TENSOR_TOK},
+  {"bare",BARE_TOK},
+  {"boundary_curvature",BOUNDARY_CURVATURE_TOK},
+  {"modulus",MODULUS_TOK},
+  {"info_only",INFO_ONLY_TOK},
+  {"global_method",GLOBAL_METHOD_TOK},
+  {"global",GLOBAL_TOK},
+  {"area_fixed",AREA_FIXED_TOK},
+  {"fixed_area",AREA_FIXED_TOK},
+  {"view_matrix",VIEW_MATRIX_TOK},
+  {"view_transforms",VIEW_TRANSFORMS_TOK},
+  {"view_transform_generators",VIEW_TRANSFORM_GENS_TOK},
+  {"homothety",HOMOTHETY_TOK},
+  {"approximate_curvature",APPROX_CURV_TOK},
+  {"approx_curvature",APPROX_CURV_TOK},
+  {"phasefile",PHASEFILE_TOK},
+  {"phase",PHASE_TOK},
+  {"autopop",AUTOPOP_TOK},
+  {"autopop_quartic",AUTOPOP_QUARTIC_TOK},
+  {"autochop",AUTOCHOP_TOK},
+  {"total_time",TOTAL_TIME_TOK},
+  {"effective_area",EFFECTIVE_AREA_TOK},
+  {"runge_kutta",RUNGE_KUTTA_TOK},
+  {"color",COLOR_TOK},
+  {"backcolor",BACKCOLOR_TOK},
+  {"frontcolor",FRONTCOLOR_TOK},
+  {"mean_curvature_integral",MEAN_CURV_INT_TOK},
+  {"normal_curvature",NORMAL_CURVATURE_TOK},
+  {"square_curvature",SQUARE_CURVATURE_TOK},
+  {"squared_curvature",SQUARE_CURVATURE_TOK},
+  {"square_gaussian_curvature",SQGAUSS_TOK},
+  {"squared_gaussian_curvature",SQGAUSS_TOK},
+  {"gauss_curvature",GAUSS_CURVATURE_TOK},
+  {"insulating_knot_energy",INSULATING_KNOT_ENERGY_TOK},
+  {"conducting_knot_energy",CONDUCTING_KNOT_ENERGY_TOK},
+  {"space_dimension",SPACE_DIMENSION_TOK},
+  {"surface_dimension",SURFACE_DIMENSION_TOK},
+  {"simplex_representation",SIMPLEX_REP_TOK},
+  {"metric",METRIC_TOK},
+  {"klein_metric",KLEIN_METRIC_TOK},
+  {"conformal_metric",CONFORMAL_TOK},
+  {"fixed",FIXED_TOK},
+  {"no_refine",NO_REFINE_TOK},
+  {"no_transform",NO_TRANSFORM_TOK},
+  {"hit_partner",HIT_PARTNER_TOK},
+  {"centerofmass",CENTEROFMASS_TOK},
+  {"no_display",NODISPLAY_TOK},
+  {"noncontent",NONCONTENT_TOK},
+  {"efixed",EFIXED_TOK},
+  {"symmetry_group",SYMMETRY_GROUP_TOK},
+  {"wrap",WRAP_TOK},
+  {"torus",TORUS_TOK},
+  {"torus_filled",TORUS_FILLED_TOK},
+  {"torus_periods",TORUS_PERIODS_TOK},
+  {"periods",PERIODS_TOK},
+  {"display_periods",DISPLAY_PERIODS_TOK},
+  {"string",STRING_TOK},
+  {"soapfilm",SOAPFILM_TOK},
+  {"wulff",WULFF_TOK},
+  {"boundary",BOUNDARY_TOK},
+  {"boundaries",BOUNDARY_TOK},
+  {"constraint",CONSTRAINT_TOK},
+  {"constraints",CONSTRAINT_TOK},
+  {"surface_energy",SURFACE_ENERGY_TOK},
+  {"formula",FUNCTION_TOK},
+  {"function",FUNCTION_TOK},
+  {"parameter",PARAMETERS_TOK},
+  {"parameters",PARAMETERS_TOK},
+  {"parameter_file",PARAMETER_FILE_TOK},
+  {"symmetric_content",SYMMETRIC_CONTENT_TOK},
   {"integral_order",V_INTEGRAL_ORDER},
   {"integral_order_1d",V_INTEGRAL_ORDER_1D},
   {"integral_order_2d",V_INTEGRAL_ORDER_2D},
   {"integration_order",V_INTEGRAL_ORDER},
   {"integration_order_1d",V_INTEGRAL_ORDER_1D},
   {"integration_order_2d",V_INTEGRAL_ORDER_2D},
-  {"constraint_tolerance",CONSTRAINT_TOLERANCE_ },
-  {"convex",CONVEX_},
-  {"nonwall",NONWALL_},
-  {"nonnegative",NONNEGATIVE_},
-  {"nonpositive",NONPOSITIVE_},
-  {"global",GLOBAL_},
-  {"energy",ENERGY_},
-  {"content",CONTENT_},
-  {"quadratic",QUADRATIC_},
-  {"linear",LINEAR_},
-  {"area_normalization",MEAN_CURV_},
-  {"jiggle",JIGGLE_},
-  {"diffusion",DIFFUSION_},
-  {"merit_factor",MERITFACTOR_},
-  {"gravity_constant",GRAV_CONST_},
-  {"spring_constant",SPRING_CONSTANT_},
-  {"gap_constant",GAP_CONSTANT_},
-  {"scale",SCALE_},
-  {"pscale",SCALE_},
-  {"temperature",TEMPERATURE_},
-  {"pressure",PRESSURE_},
-  {"volume",VOLUME_},
-  {"density",DENSITY_},
-  {"tension",DENSITY_},
-  {"nodisplay",NODISPLAY_},
-  {"scale_limit",SCALE_LIMIT_},
-  {"zoom_vertex",ZOOM_VERTEX_},
-  {"zoom_radius",ZOOM_RADIUS_},
-  {"quantity",QUANTITY_ },
-  {"volconst",VOLCONST_ },
-  {"read",READ_},
-  {"and",AND_},
-  {"or",OR_},
-  {"not",NOT_},
+  {"constraint_tolerance",CONSTRAINT_TOLERANCE_TOK},
+  {"convex",CONVEX_TOK},
+  {"nonwall",NONWALL_TOK},
+  {"nonnegative",NONNEGATIVE_TOK},
+  {"nonpositive",NONPOSITIVE_TOK},
+  {"global",GLOBAL_TOK},
+  {"energy",ENERGY_TOK},
+  {"content",CONTENT_TOK},
+  {"quadratic",QUADRATIC_TOK},
+  {"linear",LINEAR_TOK},
+  {"area_normalization",MEAN_CURV_TOK},
+  {"jiggle",JIGGLE_TOK},
+  {"diffusion",DIFFUSION_TOK},
+  {"merit_factor",MERITFACTOR_TOK},
+  {"gravity_constant",GRAV_CONST_TOK},
+  {"spring_constant",SPRING_CONSTANT_TOK},
+  {"gap_constant",GAP_CONSTANT_TOK},
+  {"scale",SCALE_TOK},
+  {"pscale",PSCALE_TOK},
+  {"temperature",TEMPERATURE_TOK},
+  {"pressure",PRESSURE_TOK},
+  {"volume",VOLUME_TOK},
+  {"density",DENSITY_TOK},
+  {"tension",DENSITY_TOK},
+  {"nodisplay",NODISPLAY_TOK},
+  {"scale_limit",SCALE_LIMIT_TOK},
+  {"zoom_vertex",ZOOM_VERTEX_TOK},
+  {"zoom_radius",ZOOM_RADIUS_TOK},
+  {"quantity",QUANTITY_TOK},
+  {"volconst",VOLCONST_TOK},
+  {"read",READ_TOK},
+  {"and",AND_TOK},
+  {"or",OR_TOK},
+  {"not",NOT_TOK},
   {"mod",'%'},
-  {"imod",IMOD_},
-  {"idiv",IDIV_},
-  {"dot_product",DOT_},
-  {"pi",PI_},
-  {"e",E_},
-  {"g",G_},
-  {"tag",TAG_},
-  {"original",ORIGINAL_},
-  {"vertices",VERTICES_},
-  {"vertex",VERTICES_},
-  {"edges",EDGES_},
-  {"edge",EDGES_},
-  {"faces",FACES_},
-  {"face",FACES_},
-  {"facets",FACES_},
-  {"facet",FACES_},
-  {"bodies",BODIES_},
-  {"body",BODIES_},
-  {"facet_edges",FACETEDGES_},
-  {"facet_edge",FACETEDGES_},
-  {"facetedges",FACETEDGES_},
-  {"facetedge",FACETEDGES_}
+  {"imod",IMOD_TOK},
+  {"idiv",IDIV_TOK},
+  {"dot_product",DOT_TOK},
+  {"pi",PI_TOK},
+  {"e",E_TOK},
+  {"g",G_TOK},
+  {"original",ORIGINAL_TOK},
+  {"vertices",VERTICES_TOK},
+  {"vertex",VERTICES_TOK},
+  {"edges",EDGES_TOK},
+  {"edge",EDGES_TOK},
+  {"faces",FACES_TOK},
+  {"face",FACES_TOK},
+  {"facets",FACES_TOK},
+  {"facet",FACES_TOK},
+  {"bodies",BODIES_TOK},
+  {"body",BODIES_TOK},
+  {"facet_edges",FACETEDGES_TOK},
+  {"facet_edge",FACETEDGES_TOK},
+  {"facetedges",FACETEDGES_TOK},
+  {"facetedge",FACETEDGES_TOK}
 };
 
 
 struct ckey mathfunc_keywords[] = {
-  {"wrap_inverse",WRAP_INVERSE_},
-  {"ellipticK",ELLIPTICK},
-  {"ellipticE",ELLIPTICE},
-  {"log",LOG},
-  {"exp",EXP},
-  {"sin",SIN},
-  {"cos",COS},
-  {"tan",TAN},
-  {"asin",ASIN},
-  {"acos",ACOS},
-  {"atan",ATAN},
-  {"sinh",SINH},
-  {"cosh",COSH},
-  {"tanh",TANH},
-  {"asinh",ASINH},
-  {"acosh",ACOSH},
-  {"atanh",ATANH},
-  {"sqrt",SQRT},
-  {"sqr",SQR},
-  {"ceil",CEIL_},
-  {"floor",FLOOR_},
-  {"abs",ABS}
+  {"wrap_inverse",WRAP_INVERSE_NODE},
+  {"ellipticK",ELLIPTICK_NODE},
+  {"ellipticE",ELLIPTICE_NODE},
+  {"log",LOG_NODE},
+  {"exp",EXP_NODE},
+  {"sin",SIN_NODE},
+  {"cos",COS_NODE},
+  {"tan",TAN_NODE},
+  {"asin",ASIN_NODE},
+  {"acos",ACOS_NODE},
+  {"atan",ATAN_NODE},
+  {"sinh",SINH_NODE},
+  {"cosh",COSH_NODE},
+  {"tanh",TANH_NODE},
+  {"asinh",ASINH_NODE},
+  {"acosh",ACOSH_NODE},
+  {"atanh",ATANH_NODE},
+  {"sqrt",SQRT_NODE},
+  {"sqr",SQR_NODE},
+  {"ceil",CEIL_NODE},
+  {"floor",FLOOR_NODE},
+  {"abs",ABS_NODE}
 };
 
 struct ckey mathfunc2_keywords[] = { /* two arguments */
-  {"wrap_compose",WRAP_COMPOSE_},
-  {"atan2",ATAN2_},
-  {"incompleteEllipticF",INCOMPLETE_ELLIPTICF},
-  {"incompleteEllipticE",INCOMPLETE_ELLIPTICE},
-  {"maximum",MAXIMUM_},
-  {"minimum",MINIMUM_},
-  {"pow",POW}
+  {"wrap_compose",WRAP_COMPOSE_NODE},
+  {"atan2",ATAN2_NODE},
+  {"incompleteEllipticF",INCOMPLETE_ELLIPTICF_NODE},
+  {"incompleteEllipticE",INCOMPLETE_ELLIPTICE_NODE},
+  {"maximum",MAXIMUM_NODE},
+  {"minimum",MINIMUM_NODE},
+  {"pow",POW_NODE}
 };
 
 struct ckey command_keywords[] =
-{ 
-  {"valid_constraint",VALID_CONSTRAINT_},
-  {"valid_boundary",VALID_BOUNDARY_},
-  {"profiling",PROFILING_},
-  {"reset_profiling",RESET_PROFILING_},
-  {"suppress_warning",SUPPRESS_WARNING_},
-  {"unsuppress_warning",UNSUPPRESS_WARNING_},
-  {"delete_text",DELETE_TEXT_},
-  {"display_text", DISPLAY_TEXT_ },
-  {"simplex_to_fe", SIMPLEX_TO_FE_ },
-  {"addload", ADDLOAD_ },
-  {"whereami",WHEREAMI_},
-  {"breakpoint",BREAKPOINT_},
-  {"breakpoints",BREAKPOINT_},
-  {"abort",ABORT_},
-  {"subcommand",SUBCOMMAND_},
-  {"global",GLOBAL_},
-  {"repartition",REPARTITION_},
-  {"free_discards",FREE_DISCARDS_},
-  {"dump_memlist",DUMP_MEMLIST_},
-  {"reverse_orientation",REVERSE_ORIENTATION_},
-  {"matrix_multiply",MATRIX_MULTIPLY_},
-  {"matrix_inverse",MATRIX_INVERSE_},
-  {"matrix_determinant",MATRIX_DETERMINANT_},
-  {"mid_edge",MID_EDGE_},
-  {"mid_facet",MID_FACET_},
-  {"flush_counts",FLUSH_COUNTS_},
-  {"valid_element",VALID_ELEMENT_},
-  {"reset_counts",RESET_COUNTS_},
-  {"vertex_merge",MERGE_VERTEX_},
-  {"edge_merge",MERGE_EDGE_},
-  {"facet_merge",MERGE_FACET_},
-  {"mpi_task",MPI_TASK_ATTR_},
-  {"mean_curvature",MEAN_CURVATURE_},
-  {"element_modulus",ELEMENT_MODULUS_},
-  {"ignore_constraints",IGNORE_CONSTRAINTS_},
-  {"ignore_fixed",IGNORE_FIXED_},
-  {"global_method",GLOBAL_METHOD_},
-  {"scalar_integrand",SCALAR_INTEGRAND_},
-  {"vector_integrand",VECTOR_INTEGRAND_},
-  {"k_vector_order",K_VEC_ORDER_},
-  {"form_integrand",FORM_INTEGRAND_},
-  {"info_only",INFO_ONLY_},
-  {"method",METHOD_},
-  {"parallel_exec",PARALLEL_EXEC_},
-  {"task_exec",TASK_EXEC_},
-  {"pop",POP_},
-  {"pop_tri_to_edge",POP_TRI_TO_EDGE_},
-  {"pop_edge_to_tri",POP_EDGE_TO_TRI_},
-  {"pop_quad_to_quad",POP_QUAD_TO_QUAD_},
-  {"local",LOCAL_},
-  {"for",FOR_},
-  {"warning_messages",WARNING_MESSAGES_},
-  {"equiangulate",EQUIANGULATE_},
-  {"no_refine",NO_REFINE_},
-  {"hit_partner",HIT_PARTNER_},
-  {"no_display",NODISPLAY_},
-  {"vertexnormal",VERTEXNORMAL_},
-  {"colorfile",COLORFILE_},
-  {"date_and_time",DATE_AND_TIME_},
-  {"exprint",EXPRINT_},
-  {"energy",ENERGY_},
-  {"info_only",INFO_ONLY_},
-  {"conserved",CONSERVED_},
-  {"exec",EXEC_},
-  {"wrap_vertex",WRAP_VERTEX_},
-  {"self",SELF_},
-  {"is_defined",IS_DEFINED_},
-  {"nodisplay",NODISPLAY_},
-  {"no_display",NODISPLAY_},
-  {"function",FUNCTION_},
-  {"reorder_storage",REORDER_STORAGE_},
-  {"renumber_all",RENUMBER_ALL_},
-/*  {"view_matrix",VIEW_MATRIX_}, */
-  {"pause",PAUSE_},
-  {"pdelta",DELTA_ },
-  {"pscale",SCALE_ },
-  {"scale",SCALE_ },
-  {"tolerance",TOLERANCE_},
-  {"method_instance",METHOD_INSTANCE_},
-  {"logfile",LOGFILE_},
-  {"keylogfile",KEYLOGFILE_},
-  {"frontbody",FRONTBODY_},
-  {"backbody",BACKBODY_},
-  {"new_vertex",NEWVERTEX_},
-  {"new_edge",NEWEDGE_},
-  {"new_facet",NEWFACET_},
-  {"new_body",NEWBODY_},
-  {"noncontent",NONCONTENT_},
-/*  {"inverse_periods",INVERSE_PERIODS_}, */
-  {"return",RETURN_},
-  {"postscript",POSTSCRIPT_},
-  {"ooglfile",OOGLFILE_},
-  {"binary_off_file",BINARY_OFF_FILE_},
-  {"vertex_average",VERTEX_AVERAGE_},
-  {"raw_vertex_average",RAW_VERTEX_AVERAGE_},
-  {"rawest_vertex_average",RAWEST_VERTEX_AVERAGE_},
-  {"axial_point",AXIAL_POINT_},
-  {"metis_factor",METIS_FACTOR_},
-  {"lagrange",LAGRANGE_},
-  {"metis",METIS_},
-  {"metis_readjust",METIS_READJUST_},
-  {"body_metis",BODY_METIS_},
-  {"kmetis",KMETIS_},
-  {"ometis",OMETIS_},
-  {"sizeof",SIZEOF_},
-  {"move",MOVE_},
-  {"geompipe",GEOMPIPE_},
-  {"convert_to_quantities",CONVERT_TO_QUANTS_},
-  {"edgeswap",EDGESWAP_},
-  {"t1_edgeswap",T1_EDGESWAP_},
-/*  {"torus_periods",TORUS_PERIODS_}, */
-  {"break",BREAK_},
-  {"volfixed",FIXEDVOL_},
-  {"continue",CONTINUE_},
-  {"volconst",VOLCONST_ },
-  {"ritz",RITZ_},
-  {"orientation",ORIENTATION_},
-  {"eigenprobe",EIGENPROBE_},
-  {"lanczos",LANCZOS_},
-  {"tetra_point",TETRA_POINT_},
-  {"triple_point",TRIPLE_POINT_},
-  {"value",VALUE_},
-  {"target",TARGET_},
-  {"datafilename",DATAFILENAME_},
-  {"geomview",GEOMVIEW_},
-  {"saddle",HESSIAN_SADDLE_},
-  {"midv",MIDV_},
-  {"define",DEFINE_},
-  {"attribute",ATTRIBUTE_},
-  {"attributes",ATTRIBUTE_},
-  {"string",STRING_},
-  {"sobolev",SOBOLEV_},
-  {"sobolev_seek",SOBOLEV_SEEK_},
-  {"dirichlet",DIRICHLET_},
-  {"dirichlet_seek",DIRICHLET_SEEK_},
-  {"wrap",WRAP_},
-  {"total",TOTAL_},
-  {"history",HISTORY_},
-  {"fix",FIX_},
-  {"unfix",UNFIX_},
-  {"bare",BARE_},
-  {"phase",PHASE_},
-  {"foreach",FOREACH_},
-  {"rebody", REBODY_},
-  {"burchard", BURCHARD_},
-  {"close_show",CLOSE_SHOW_},
-  {"show_off",CLOSE_SHOW_},
-/*  {"view_transforms",VIEW_TRANSFORMS_}, */
-/*  {"view_transform_swap_colors",VIEW_TRANSFORM_SWAP_COLORS_}, */
-/*  {"view_transform_parity",VIEW_TRANSFORM_PARITY_}, */
-  {"transform_depth",TRANSFORM_DEPTH_},
-  {"transform_expr",TRANSFORM_EXPR_},
-  {"modulus",MODULUS_},
-  {"boundary",BOUNDARY_},
-  {"on_constraint",ON_CONSTRAINT_},
-  {"hit_constraint",HIT_CONSTRAINT_},
-  {"on_boundary",ON_BOUNDARY_},
-  {"on_quantity",ON_QUANTITY_},
-  {"on_method_instance",ON_METHOD_INSTANCE_},
-  {"hessian",HESSIAN_},
-  {"hessian_seek",HESSIAN_SEEK_},
-  {"hessian_menu",HESSIAN_MENU_},
-  {"help",HELP_},
-  {"quit",QUIT_},
-  {"exit",QUIT_},
-  {"bye",QUIT_},
-  {"dump",DUMP_},
-  {"load",LOAD_},
-  {"permload",PERMLOAD_},
-  {"quantity",QUANTITY_},
-  {"spring_constant",GAP_CONSTANT_},
-  {"gap_constant",GAP_CONSTANT_},
-  {"notch",NOTCH_},
-  {"while",WHILE_},
-  {"do",DO_},
-  {"if",IF_},
-  {"then",THEN_},
-  {"else",ELSE_},
-  {"histogram",HISTOGRAM_},
-  {"loghistogram",LOGHISTOGRAM_},
-  {"show_expr",SHOW_EXPR_},
-  {"show_trans",SHOW_TRANS_},
-  {"dihedral",DIHEDRAL_},
-  {"max",MAX_},
-  {"min",MIN_},
-  {"avg",AVG_},
-  {"sum",SUM_},
-  {"count",COUNT_},
-  {"print",PRINT_},
-  {"eprint",EPRINT_},
-  {"printf",PRINTF_},
-  {"errprintf",ERRPRINTF_},
-  {"sprintf",SPRINTF_},
-  {"binary_printf",BINARY_PRINTF_},
-  {"procedures",PROCEDURES_},
-  {"procedure",PROCEDURE_WORD_},
-  {"on",ON_},
-  {"counts",COUNTS_},
-  {"extrapolate",EXTRAPOLATE_},
-  {"off",OFF_},
-  {"areaweed",AREAWEED_},
-  {"edgeweed",EDGEWEED_},
-  {"edge_divide",EDGEDIVIDE_},
-  {"alice",ALICE_},
-  {"stability_test",STABILITY_TEST_},
-  {"zoom",ZOOM_},
-  {"utest",UTEST_},
-  {"system",SYSTEM_},
-  {"chdir",CHDIR_},
-  {"longj",LONG_JIGGLE_},
-  {"rawv",RAW_VERAVG_},
-  {"rawestv",RAWEST_VERAVG_},
-  {"go",GO_},
-  {"refine",REFINE_},
-  {"check",CHECK_},
-  {"show_vol",SHOW_VOL_},
-  {"id",ID_},
-  {"oid",OID_},
-  {"and",AND_},
-  {"or",OR_},
-  {"not",NOT_},
+{ {"normal",NORMAL_TOK},
+  {"nonnegative",NONNEGATIVE_TOK},
+  {"nonpositive",NONPOSITIVE_TOK},
+  {"normal_vector",NORMAL_VECTOR_TOK},
+  {"no_dump",NO_DUMP_TOK},
+  {"p_velocity",P_VELOCITY_TOK},
+  {"p_force",P_FORCE_TOK},
+  {"no_hessian_normal",NO_HESSIAN_NORMAL_TOK},
+  {"make_thread_lists",MAKE_THREAD_LISTS_TOK},
+  {"facet_crosscut",FACET_CROSSCUT_TOK},
+  {"detorus",DETORUS_TOK},
+  {"is_constraint",IS_CONSTRAINT_TOK},
+  {"valid_constraint",VALID_CONSTRAINT_TOK},
+  {"valid_boundary",VALID_BOUNDARY_TOK},
+  {"profiling",PROFILING_TOK},
+  {"reset_profiling",RESET_PROFILING_TOK},
+  {"suppress_warning",SUPPRESS_WARNING_TOK},
+  {"unsuppress_warning",UNSUPPRESS_WARNING_TOK},
+  {"delete_text",DELETE_TEXT_TOK},
+  {"display_text", DISPLAY_TEXT_TOK},
+  {"simplex_to_fe", SIMPLEX_TO_FE_TOK},
+  {"addload", ADDLOAD_TOK},
+  {"replace_load", REPLACE_LOAD_TOK},
+  {"whereami",WHEREAMI_TOK},
+  {"breakpoint",BREAKPOINT_TOK},
+  {"breakpoints",BREAKPOINT_TOK},
+  {"abort",ABORT_TOK},
+  {"subcommand",SUBCOMMAND_TOK},
+  {"global",GLOBAL_TOK},
+  {"repartition",REPARTITION_TOK},
+  {"free_discards",FREE_DISCARDS_TOK},
+  {"dump_memlist",DUMP_MEMLIST_TOK},
+  {"reverse_orientation",REVERSE_ORIENTATION_TOK},
+  {"matrix_multiply",MATRIX_MULTIPLY_TOK},
+  {"matrix_inverse",MATRIX_INVERSE_TOK},
+  {"matrix_determinant",MATRIX_DETERMINANT_TOK},
+  {"mid_edge",MID_EDGE_TOK},
+  {"mid_facet",MID_FACET_TOK},
+  {"flush_counts",FLUSH_COUNTS_TOK},
+  {"valid_element",VALID_ELEMENT_TOK},
+  {"reset_counts",RESET_COUNTS_TOK},
+  {"vertex_merge",MERGE_VERTEX_TOK},
+  {"edge_merge",MERGE_EDGE_TOK},
+  {"facet_merge",MERGE_FACET_TOK},
+  {"mpi_task",MPI_TASK_ATTR_TOK},
+  {"mean_curvature",MEAN_CURVATURE_TOK},
+  {"element_modulus",ELEMENT_MODULUS_TOK},
+  {"ignore_constraints",IGNORE_CONSTRAINTS_TOK},
+  {"ignore_fixed",IGNORE_FIXED_TOK},
+  {"global_method",GLOBAL_METHOD_TOK},
+  {"scalar_integrand",SCALAR_INTEGRAND_TOK},
+  {"vector_integrand",VECTOR_INTEGRAND_TOK},
+  {"k_vector_order",K_VEC_ORDER_TOK},
+  {"form_integrand",FORM_INTEGRAND_TOK},
+  {"info_only",INFO_ONLY_TOK},
+  {"method",METHOD_TOK},
+  {"parallel_exec",PARALLEL_EXEC_TOK},
+  {"task_exec",TASK_EXEC_TOK},
+  {"pop",POP_TOK},
+  {"pop_tri_to_edge",POP_TRI_TO_EDGE_TOK},
+  {"pop_edge_to_tri",POP_EDGE_TO_TRI_TOK},
+  {"pop_quad_to_quad",POP_QUAD_TO_QUAD_TOK},
+  {"local",LOCAL_TOK},
+  {"for",FOR_TOK},
+  {"warning_messages",WARNING_MESSAGES_TOK},
+  {"equiangulate",EQUIANGULATE_TOK},
+  {"no_refine",NO_REFINE_TOK},
+  {"no_transform",NO_TRANSFORM_TOK},
+  {"hit_partner",HIT_PARTNER_TOK},
+  {"centerofmass",CENTEROFMASS_TOK},
+  {"no_display",NODISPLAY_TOK},
+  {"vertexnormal",VERTEXNORMAL_TOK},
+  {"colorfile",COLORFILE_TOK},
+  {"date_and_time",DATE_AND_TIME_TOK},
+  {"evolver_version",EVOLVER_VERSION_TOK},
+  {"exprint",EXPRINT_TOK},
+  {"energy",ENERGY_TOK},
+  {"info_only",INFO_ONLY_TOK},
+  {"conserved",CONSERVED_TOK},
+  {"exec",EXEC_TOK},
+  {"wrap_vertex",WRAP_VERTEX_TOK},
+  {"self",SELF_TOK},
+  {"is_defined",IS_DEFINED_TOK},
+  {"nodisplay",NODISPLAY_TOK},
+  {"no_display",NODISPLAY_TOK},
+  {"function",FUNCTION_TOK},
+  {"reorder_storage",REORDER_STORAGE_TOK},
+  {"renumber_all",RENUMBER_ALL_TOK},
+/*  {"view_matrix",VIEW_MATRIX_TOK}, */
+  {"pause",PAUSE_TOK},
+  {"pdelta",PDELTA_TOK},
+  {"on_assign_call",ON_ASSIGN_CALL_TOK},
+  {"pscale",PSCALE_TOK},
+  {"scale",SCALE_TOK},
+  {"tolerance",TOLERANCE_TOK},
+  {"method_instance",METHOD_INSTANCE_TOK},
+  {"logfile",LOGFILE_TOK},
+  {"keylogfile",KEYLOGFILE_TOK},
+  {"frontbody",FRONTBODY_TOK},
+  {"backbody",BACKBODY_TOK},
+  {"new_vertex",NEWVERTEX_TOK},
+  {"new_edge",NEWEDGE_TOK},
+  {"new_facet",NEWFACET_TOK},
+  {"new_body",NEWBODY_TOK},
+  {"noncontent",NONCONTENT_TOK},
+/*  {"inverse_periods",INVERSE_PERIODS_TOK}, */
+  {"return",RETURN_TOK},
+  {"postscript",POSTSCRIPT_TOK},
+  {"ooglfile",OOGLFILE_TOK},
+  {"binary_off_file",BINARY_OFF_FILE_TOK},
+  {"vertex_average",VERTEX_AVERAGE_TOK},
+  {"raw_vertex_average",RAW_VERTEX_AVERAGE_TOK},
+  {"rawest_vertex_average",RAWEST_VERTEX_AVERAGE_TOK},
+  {"axial_point",AXIAL_POINT_TOK},
+  {"metis_factor",METIS_FACTOR_TOK},
+  {"lagrange",LAGRANGE_TOK},
+  {"metis",METIS_TOK},
+  {"metis_readjust",METIS_READJUST_TOK},
+  {"body_metis",BODY_METIS_TOK},
+  {"kmetis",KMETIS_TOK},
+  {"ometis",OMETIS_TOK},
+  {"sizeof",SIZEOF_TOK},
+  {"move",MOVE_TOK},
+  {"geompipe",GEOMPIPE_TOK},
+  {"convert_to_quantities",CONVERT_TO_QUANTS_TOK},
+  {"edgeswap",EDGESWAP_TOK},
+  {"t1_edgeswap",T1_EDGESWAP_TOK},
+/*  {"torus_periods",TORUS_PERIODS_TOK}, */
+  {"break",BREAK_TOK},
+  {"volfixed",FIXEDVOL_TOK},
+  {"continue",CONTINUE_TOK},
+  {"volconst",VOLCONST_TOK},
+  {"ritz",RITZ_TOK},
+  {"orientation",ORIENTATION_TOK},
+  {"eigenprobe",EIGENPROBE_TOK},
+  {"lanczos",LANCZOS_TOK},
+  {"tetra_point",TETRA_POINT_TOK},
+  {"triple_point",TRIPLE_POINT_TOK},
+  {"value",VALUE_TOK},
+  {"target",TARGET_TOK},
+  {"datafilename",DATAFILENAME_TOK},
+  {"geomview",GEOMVIEW_TOK},
+  {"saddle",HESSIAN_SADDLE_TOK},
+  {"midv",MIDV_TOK},
+  {"define",DEFINE_TOK},
+  {"attribute",ATTRIBUTE_TOK},
+  {"attributes",ATTRIBUTE_TOK},
+  {"string",STRING_TOK},
+  {"sobolev",SOBOLEV_TOK},
+  {"sobolev_seek",SOBOLEV_SEEK_TOK},
+  {"dirichlet",DIRICHLET_TOK},
+  {"dirichlet_seek",DIRICHLET_SEEK_TOK},
+  {"wrap",WRAP_TOK},
+  {"total",TOTAL_TOK},
+  {"history",HISTORY_TOK},
+  {"fix",FIX_TOK},
+  {"unfix",UNFIX_TOK},
+  {"bare",BARE_TOK},
+  {"phase",PHASE_TOK},
+  {"foreach",FOREACH_TOK},
+  {"rebody", REBODY_TOK},
+  {"burchard", BURCHARD_TOK},
+  {"close_show",CLOSE_SHOW_TOK},
+  {"show_off",CLOSE_SHOW_TOK},
+/*  {"view_transforms",VIEW_TRANSFORMS_TOK}, */
+/*  {"view_transform_swap_colors",VIEW_TRANSFORM_SWAP_COLORS_TOK}, */
+/*  {"view_transform_parity",VIEW_TRANSFORM_PARITY_TOK}, */
+  {"transform_depth",TRANSFORM_DEPTH_TOK},
+  {"transform_expr",TRANSFORM_EXPR_TOK},
+  {"modulus",MODULUS_TOK},
+  {"boundary",BOUNDARY_TOK},
+  {"on_constraint",ON_CONSTRAINT_TOK},
+  {"hit_constraint",HIT_CONSTRAINT_TOK},
+  {"value_of_constraint",VALUE_OF_CONSTRAINT_TOK},
+  {"on_boundary",ON_BOUNDARY_TOK},
+  {"on_quantity",ON_QUANTITY_TOK},
+  {"on_method_instance",ON_METHOD_INSTANCE_TOK},
+  {"hessian",HESSIAN_TOK},
+  {"hessian_seek",HESSIAN_SEEK_TOK},
+  {"hessian_menu",HESSIAN_MENU_TOK},
+  {"help",HELP_TOK},
+  {"quit",QUIT_TOK},
+  {"exit",QUIT_TOK},
+  {"bye",QUIT_TOK},
+  {"dump",DUMP_TOK},
+  {"load",LOAD_TOK},
+  {"permload",PERMLOAD_TOK},
+  {"quantity",QUANTITY_TOK},
+  {"spring_constant",GAP_CONSTANT_TOK},
+  {"gap_constant",GAP_CONSTANT_TOK},
+  {"notch",NOTCH_TOK},
+  {"while",WHILE_TOK},
+  {"do",DO_TOK},
+  {"if",IF_TOK},
+  {"then",THEN_TOK},
+  {"else",ELSE_TOK},
+  {"histogram",HISTOGRAM_TOK},
+  {"loghistogram",LOGHISTOGRAM_TOK},
+  {"show_expr",SHOW_EXPR_TOK},
+  {"show_trans",SHOW_TRANS_TOK},
+  {"dihedral",DIHEDRAL_TOK},
+  {"max",MAX_TOK},
+  {"min",MIN_TOK},
+  {"avg",AVG_TOK},
+  {"sum",SUM_TOK},
+  {"count",COUNT_TOK},
+  {"print",PRINT_TOK},
+  {"eprint",EPRINT_TOK},
+  {"printf",PRINTF_TOK},
+  {"errprintf",ERRPRINTF_TOK},
+  {"sprintf",SPRINTF_TOK},
+  {"binary_printf",BINARY_PRINTF_TOK},
+  {"procedures",PROCEDURES_TOK},
+  {"procedure",PROCEDURE_WORD_TOK},
+  {"on",ON_TOK},
+  {"counts",COUNTS_TOK},
+  {"extrapolate",EXTRAPOLATE_TOK},
+  {"off",OFF_TOK},
+  {"areaweed",AREAWEED_TOK},
+  {"edgeweed",EDGEWEED_TOK},
+  {"edge_divide",EDGEDIVIDE_TOK},
+  {"alice",ALICE_TOK},
+  {"stability_test",STABILITY_TEST_TOK},
+  {"zoom",ZOOM_TOK},
+  {"utest",UTEST_TOK},
+  {"system",SYSTEM_TOK},
+  {"chdir",CHDIR_TOK},
+  {"longj",LONG_JIGGLE_TOK},
+  {"rawv",RAW_VERAVG_TOK},
+  {"rawestv",RAWEST_VERAVG_TOK},
+  {"go",GO_TOK},
+  {"refine",REFINE_TOK},
+  {"check",CHECK_TOK},
+  {"show_vol",SHOW_VOL_TOK},
+  {"id",ID_TOK},
+  {"oid",OID_TOK},
+  {"and",AND_TOK},
+  {"or",OR_TOK},
+  {"not",NOT_TOK},
   {"mod",'%'},
-  {"imod",IMOD_},
-  {"idiv",IDIV_},
-  {"dot_product",DOT_},
-  {"pi",PI_},
-  {"e",E_},
-  {"g",G_},
-  {"tag",TAG_},
-  {"original",ORIGINAL_},
-  {"fixed",FIXED_},
-  {"vertices",VERTICES_},
-  {"vertex",VERTICES_},
-  {"edges",EDGES_},
-  {"edge",EDGES_},
-  {"facets",FACETS_},
-  {"facet",FACETS_},
-  {"faces",FACETS_},
-  {"face",FACETS_},
-  {"facet_edges",FACETEDGES_},
-  {"facet_edge",FACETEDGES_},
-  {"facetedges",FACETEDGES_},
-  {"facetedge",FACETEDGES_},
-  {"bodies",BODIES_},
-  {"body",BODIES_},
-  {"topinfo",TOPINFO_},
-  {"bottominfo",BOTTOMINFO_},
-  {"length",LENGTH_ },
-  {"valence",VALENCE_ },
-  {"area",AREA_ },
-  {"volume",VOLUME_ },
-  {"sqcurve",SQ_MEAN_CURV_},
-  {"where",WHERE_ },
-  {"list",LIST_ },
-  {"show",SHOW_},
-  {"showq",SHOWQ_},
-  {"delete",DELETE_ },
-  {"dissolve",DISSOLVE_ },
-  {"refine",REFINE_ },
-  {"shell",SHELL_},
-  {"constraint",CONSTRAINT_},
-  {"pressure",PRESSURE_},
-  {"color",COLOR_},
-  {"backcolor",BACKCOLOR_},
-  {"frontcolor",FRONTCOLOR_},
-  {"opacity",OPACITY_},
-  {"volume",VOLUME_},
-  {"density",DENSITY_},
-  {"tension",DENSITY_},
-  {"set",SET_},
-  {"read",READ_},
-  {"unset",UNSET_},
-  {"recalc",RECALC_},
-  {"optimize",OPTIMIZE_},
-  {"optimise",OPTIMIZE_},
-  {"autochop",AUTOCHOP_},
+  {"imod",IMOD_TOK},
+  {"idiv",IDIV_TOK},
+  {"dot_product",DOT_TOK},
+  {"pi",PI_TOK},
+  {"e",E_TOK},
+  {"g",G_TOK},
+  {"original",ORIGINAL_TOK},
+  {"fixed",FIXED_TOK},
+  {"vertices",VERTICES_TOK},
+  {"vertex",VERTICES_TOK},
+  {"edges",EDGES_TOK},
+  {"edge",EDGES_TOK},
+  {"facets",FACETS_TOK},
+  {"facet",FACETS_TOK},
+  {"faces",FACETS_TOK},
+  {"face",FACETS_TOK},
+  {"facet_edges",FACETEDGES_TOK},
+  {"facet_edge",FACETEDGES_TOK},
+  {"facetedges",FACETEDGES_TOK},
+  {"facetedge",FACETEDGES_TOK},
+  {"bodies",BODIES_TOK},
+  {"body",BODIES_TOK},
+  {"topinfo",TOPINFO_TOK},
+  {"bottominfo",BOTTOMINFO_TOK},
+  {"length",LENGTH_TOK},
+  {"valence",VALENCE_TOK},
+  {"area",AREA_TOK},
+  {"volume",VOLUME_TOK},
+  {"sqcurve",SQ_MEAN_CURV_TOK},
+  {"where",WHERE_TOK},
+  {"list",LIST_TOK},
+  {"show",SHOW_TOK},
+  {"showq",SHOWQ_TOK},
+  {"delete",DELETE_TOK},
+  {"dissolve",DISSOLVE_TOK},
+  {"refine",REFINE_TOK},
+  {"shell",SHELL_TOK},
+  {"constraint",CONSTRAINT_TOK},
+  {"pressure",PRESSURE_TOK},
+  {"color",COLOR_TOK},
+  {"backcolor",BACKCOLOR_TOK},
+  {"frontcolor",FRONTCOLOR_TOK},
+  {"opacity",OPACITY_TOK},
+  {"volume",VOLUME_TOK},
+  {"density",DENSITY_TOK},
+  {"tension",DENSITY_TOK},
+  {"set",SET_TOK},
+  {"read",READ_TOK},
+  {"unset",UNSET_TOK},
+  {"recalc",RECALC_TOK},
+  {"optimize",OPTIMIZE_TOK},
+  {"optimise",OPTIMIZE_TOK},
+  {"autochop",AUTOCHOP_TOK}
  }; 
 
 struct ckey togglenames[] = {
-  {"immediate_autopop",IMMEDIATE_AUTOPOP_},
-  {"star_finagling",STAR_FINAGLING_},
-  {"force_deletion",FORCE_DELETION_},
-  {"function_quantity_sparse",FUNCTION_QUANTITY_SPARSE_},
-  {"slice_view",SLICE_VIEW_},
-  {"clip_view",CLIP_VIEW_},
-  {"quietload",QUIETLOAD_},
-  {"big_endian",BIG_ENDIAN_},
-  {"little_endian",LITTLE_ENDIAN_},
-  {"full_bounding_box",FULL_BOUNDING_BOX_},
-  {"pop_disjoin",POP_DISJOIN_},
-  {"pop_enjoin",POP_ENJOIN_},
-  {"pop_to_edge",POP_TO_EDGE_},
-  {"pop_to_face",POP_TO_FACE_},
-  {"mpi_debug",MPI_DEBUG_},
-  {"smooth_graph",SMOOTH_GRAPH_},
-  {"bezier_basis",BEZIER_BASIS_},
-  {"break_after_warning",BREAK_AFTER_WARNING_},
-  {"blas_flag",BLAS_FLAG_},
-  {"diffusion",DIFFUSION_},
-  {"augmented_hessian",AUGMENTED_HESSIAN_},
-  {"sparse_constraints",SPARSE_CONSTRAINTS_},
-  {"visibility_test", VISIBILITY_TEST_},
-  {"circular_arc_draw",CIRCULAR_ARC_DRAW_},
-  {"rgb_colors",RGB_COLORS_FLAG_},
-  {"kraynikpopvertex",KRAYNIKPOPVERTEX_FLAG_},
-  {"kraynikpopedge",KRAYNIKPOPEDGE_FLAG_},
-  {"sobolev_mode",SOBOLEV_MODE_},
-  {"dirichlet_mode",DIRICHLET_MODE_},
-  {"verbose",VERBOSE_},
-  {"torus_filled",TORUS_FILLED_},
-  {"ambient_pressure",AMBIENT_PRESSURE_},
-  {"backcull",BACKCULL_},
-  {"interp_normals",INTERP_NORMALS_},
-  {"volgrads_every",VOLGRADS_EVERY_},
-  {"zener_drag",ZENER_DRAG_},
-  {"hessian_special_normal",HESSIAN_SPECIAL_NORMAL_},
-  {"hessian_normal_perp",HESSIAN_NORMAL_PERP_},
-  {"show_all_quantities",SHOW_ALL_QUANTITIES_},
-  {"pscolorflag",PSCOLORFLAG_},
-  {"ps_colorflag",PSCOLORFLAG_},
-  {"ps_gridflag",GRIDFLAG_},
-  {"gridflag",GRIDFLAG_},
-  {"crossingflag",CROSSINGFLAG_},
-  {"labelflag",LABELFLAG_},
-  {"ps_labelflag",LABELFLAG_},
-  {"hessian_normal_one",HESSIAN_NORMAL_ONE_},
-  {"interp_bdry_param",INTERP_BDRY_PARAM_},
-  {"hessian_double_normal",HESSIAN_DOUBLE_NORMAL_},
-  {"h_inverse_metric",H_INVERSE_METRIC_},
-  {"squared_gradient",SQUARED_GRADIENT_},
-  {"linear_metric",LINEAR_METRIC_},
-  {"metric_convert",METRIC_CONVERT_},
-  {"quantities_only",QUANTITIES_ONLY_},
-  {"ysmp",YSMP_},
-  {"bunch_kaufman",BUNCH_KAUFMAN_},
-  {"bunch_kauffman",BUNCH_KAUFMAN_},
-  {"hessian_normal",HESSIAN_NORMAL_},
-  {"jiggle",JIGGLE_TOGGLE_},
-  {"assume_oriented",ASSUME_ORIENTED_},
-  {"ribiere",RIBIERE_CG_},
-  {"area_normalization",MEAN_CURV_},
-  {"force_pos_def",FORCE_POS_DEF_},
-  {"autodisplay",AUTODISPLAY_},
-  {"lagrange",LAGRANGE_},
-  {"quadratic",QUADRATIC_},
-  {"linear",LINEAR_},
-  {"show_inner",SHOW_INNER_},
-  {"area_fixed",AREA_FIXED_},
-  {"fixed_area",AREA_FIXED_},
-  {"clipped",CLIPPED_CELLS_},
-  {"clipped_cells",CLIPPED_CELLS_},
-  {"raw_cells",RAW_CELLS_},
-  {"connected",CONNECTED_CELLS_},
-  {"connected_cells",CONNECTED_CELLS_},
-  {"show_outer",SHOW_OUTER_},
-  {"colormap",COLORMAP_},
-  {"thicken",THICKEN_},
-  {"hessian_diff",HESSIAN_DIFF_},
-  {"normal_motion",NORMAL_MOTION_},
-  {"runge_kutta",RUNGE_KUTTA_},
-  {"deturck",DETURCK_},
-  {"kusner",KUSNER_},
-  {"view_4d",VIEW_4D_},
-  {"conf_edge",CONF_EDGE_SQCURV_},
-  {"mean_curvature_integral",MEAN_CURV_INT_},
-  {"sqgauss",SQGAUSS_},
-  {"autopop",AUTOPOP_},
-  {"autopop_quartic",AUTOPOP_QUARTIC_},
-  {"old_area",OLD_AREA_}, 
-  {"approx_curv",APPROX_CURV_},
-  {"check_increase",CHECK_INCREASE_},
-  {"debug",DEBUG_},
-  {"memdebug",MEMDEBUG_},
-  {"itdebug",ITDEBUG_},
-  {"gravity",GRAVITY_},
-  {"effective_area",EFFECTIVE_AREA_},
-  {"estimate",ESTIMATE_},
-  {"post_project",POST_PROJECT_},
-  {"transforms",TRANSFORMS_},
-  {"quiet",QUIET_},
-  {"quietgo",QUIETGO_},
-  {"hessian_quiet",HESSIAN_QUIET_},
-  {"conj_grad",CONJ_GRAD_},
-  {"homothety",HOMOTHETY_},
-  {"facet_colors",FACET_COLORS_},
-  {"shading",SHADING_},
-  {"div_normal_curvature",DIV_NORMAL_CURVATURE_},
-  {"normal_curvature",NORMAL_CURVATURE_},
-  {"boundary_curvature",BOUNDARY_CURVATURE_},
-  {"self_similar",SELF_SIMILAR_},
-  {"gv_binary",GV_BINARY_},
-  {"metric_conversion",METRIC_CONVERSION_},
-  {"autorecalc",AUTORECALC_},
-  {"pinning",PINNING_}
+  {"force_edgeswap",FORCE_EDGESWAP_NODE},
+  {"show_all_edges",SHOW_ALL_EDGES_NODE},
+  {"K_altitude_mode",K_ALTITUDE_FLAG_NODE},
+  {"show_bounding_box",BOX_FLAG_NODE},
+  {"septum_flag",SEPTUM_FLAG_NODE},
+  {"view_transforms_use_unique_point",VIEW_TRANSFORMS_USE_UNIQUE_NODE},
+  {"detorus_sticky",DETORUS_STICKY_NODE},
+  {"immediate_autopop",IMMEDIATE_AUTOPOP_NODE},
+  {"star_finagling",STAR_FINAGLING_NODE},
+  {"force_deletion",FORCE_DELETION_NODE},
+  {"function_quantity_sparse",FUNCTION_QUANTITY_SPARSE_NODE},
+  {"slice_view",SLICE_VIEW_NODE},
+  {"clip_view",CLIP_VIEW_NODE},
+  {"quietload",QUIETLOAD_NODE},
+  {"big_endian",BIG_ENDIAN_NODE},
+  {"little_endian",LITTLE_ENDIAN_NODE},
+  {"full_bounding_box",FULL_BOUNDING_BOX_NODE},
+  {"pop_disjoin",POP_DISJOIN_NODE},
+  {"pop_enjoin",POP_ENJOIN_NODE},
+  {"pop_to_edge",POP_TO_EDGE_NODE},
+  {"pop_to_face",POP_TO_FACE_NODE},
+  {"mpi_debug",MPI_DEBUG_NODE},
+  {"smooth_graph",SMOOTH_GRAPH_NODE},
+  {"bezier_basis",BEZIER_BASIS_NODE},
+  {"break_after_warning",BREAK_AFTER_WARNING_NODE},
+  {"break_on_warning",BREAK_ON_WARNING_NODE},
+  {"blas_flag",BLAS_FLAG_NODE},
+  {"diffusion",DIFFUSION_NODE},
+  {"augmented_hessian",AUGMENTED_HESSIAN_NODE},
+  {"sparse_constraints",SPARSE_CONSTRAINTS_NODE},
+  {"visibility_test", VISIBILITY_TEST_NODE},
+  {"circular_arc_draw",CIRCULAR_ARC_DRAW_NODE},
+  {"rgb_colors",RGB_COLORS_FLAG_NODE},
+  {"kraynikpopvertex",KRAYNIKPOPVERTEX_FLAG_NODE},
+  {"kraynikpopedge",KRAYNIKPOPEDGE_FLAG_NODE},
+  {"sobolev_mode",SOBOLEV_MODE_NODE},
+  {"dirichlet_mode",DIRICHLET_MODE_NODE},
+  {"verbose",VERBOSE_NODE},
+  {"torus_filled",TORUS_FILLED_NODE},
+  {"ambient_pressure",AMBIENT_PRESSURE_NODE},
+  {"backcull",BACKCULL_NODE},
+  {"rotate_lights",ROTATE_LIGHTS_NODE},
+  {"interp_normals",INTERP_NORMALS_NODE},
+  {"volgrads_every",VOLGRADS_EVERY_NODE},
+  {"zener_drag",ZENER_DRAG_NODE},
+  {"hessian_special_normal",HESSIAN_SPECIAL_NORMAL_NODE},
+  {"hessian_normal_perp",HESSIAN_NORMAL_PERP_NODE},
+  {"show_all_quantities",SHOW_ALL_QUANTITIES_NODE},
+  {"pscolorflag",PSCOLORFLAG_NODE},
+  {"ps_colorflag",PSCOLORFLAG_NODE},
+  {"ps_cmykflag",PS_CMYKFLAG_NODE},
+  {"ps_gridflag",GRIDFLAG_NODE},
+  {"gridflag",GRIDFLAG_NODE},
+  {"crossingflag",CROSSINGFLAG_NODE},
+  {"ps_crossingflag",CROSSINGFLAG_NODE},
+  {"labelflag",LABELFLAG_NODE},
+  {"ps_labelflag",LABELFLAG_NODE},
+  {"hessian_normal_one",HESSIAN_NORMAL_ONE_NODE},
+  {"interp_bdry_param",INTERP_BDRY_PARAM_NODE},
+  {"hessian_double_normal",HESSIAN_DOUBLE_NORMAL_NODE},
+  {"h_inverse_metric",H_INVERSE_METRIC_NODE},
+  {"squared_gradient",SQUARED_GRADIENT_NODE},
+  {"linear_metric",LINEAR_METRIC_NODE},
+  {"metric_convert",METRIC_CONVERT_NODE},
+  {"quantities_only",QUANTITIES_ONLY_NODE},
+  {"ysmp",YSMP_NODE},
+  {"mkl",MKL_NODE},
+  {"bunch_kaufman",BUNCH_KAUFMAN_NODE},
+  {"bunch_kauffman",BUNCH_KAUFMAN_NODE},
+  {"hessian_normal",HESSIAN_NORMAL_NODE},
+  {"jiggle",JIGGLE_TOGGLE_NODE},
+  {"assume_oriented",ASSUME_ORIENTED_NODE},
+  {"ribiere",RIBIERE_CG_NODE},
+  {"area_normalization",MEAN_CURV_NODE},
+  {"force_pos_def",FORCE_POS_DEF_NODE},
+  {"autodisplay",AUTODISPLAY_NODE},
+  {"lagrange",LAGRANGE_NODE},
+  {"quadratic",QUADRATIC_NODE},
+  {"linear",LINEAR_NODE},
+  {"show_inner",SHOW_INNER_NODE},
+  {"area_fixed",AREA_FIXED_TOK},
+  {"fixed_area",AREA_FIXED_TOK},
+  {"clipped",CLIPPED_CELLS_NODE},
+  {"clipped_cells",CLIPPED_CELLS_NODE},
+  {"raw_cells",RAW_CELLS_NODE},
+  {"connected",CONNECTED_CELLS_NODE},
+  {"connected_cells",CONNECTED_CELLS_NODE},
+  {"show_outer",SHOW_OUTER_NODE},
+  {"colormap",COLORMAP_NODE},
+  {"thicken",THICKEN_NODE},
+  {"hessian_diff",HESSIAN_DIFF_NODE},
+  {"normal_motion",NORMAL_MOTION_NODE},
+  {"runge_kutta",RUNGE_KUTTA_NODE},
+  {"deturck",DETURCK_NODE},
+  {"kusner",KUSNER_NODE},
+  {"view_4d",VIEW_4D_NODE},
+  {"conf_edge",CONF_EDGE_SQCURV_NODE},
+  {"mean_curvature_integral",MEAN_CURV_INT_NODE},
+  {"sqgauss",SQGAUSS_NODE},
+  {"autopop",AUTOPOP_NODE},
+  {"autopop_quartic",AUTOPOP_QUARTIC_NODE},
+  {"old_area",OLD_AREA_NODE}, 
+  {"approx_curv",APPROX_CURV_NODE},
+  {"check_increase",CHECK_INCREASE_NODE},
+  {"debug",DEBUG_NODE},
+  {"memdebug",MEMDEBUG_NODE},
+  {"itdebug",ITDEBUG_NODE},
+  {"gravity",GRAVITY_NODE},
+  {"effective_area",EFFECTIVE_AREA_NODE},
+  {"estimate",ESTIMATE_NODE},
+  {"post_project",POST_PROJECT_NODE},
+  {"transforms",TRANSFORMS_NODE},
+  {"quiet",QUIET_NODE},
+  {"quietgo",QUIETGO_NODE},
+  {"hessian_quiet",HESSIAN_QUIET_NODE},
+  {"conj_grad",CONJ_GRAD_NODE},
+  {"homothety",HOMOTHETY_NODE},
+  {"facet_colors",FACET_COLORS_NODE},
+  {"shading",SHADING_NODE},
+  {"div_normal_curvature",DIV_NORMAL_CURVATURE_NODE},
+  {"normal_curvature",NORMAL_CURVATURE_NODE},
+  {"boundary_curvature",BOUNDARY_CURVATURE_NODE},
+  {"self_similar",SELF_SIMILAR_NODE},
+  {"gv_binary",GV_BINARY_NODE},
+  {"metric_conversion",METRIC_CONVERSION_NODE},
+  {"autorecalc",AUTORECALC_NODE},
+  {"pinning",PINNING_NODE}
   };
 struct ckey colornames[] = {
     {"clear",CLEAR},     /* transparent */
@@ -798,6 +849,10 @@ struct ckey colornames[] = {
     };
 
 struct ckey internal_variables[] = {
+  {"bounding_box_color",V_BOUNDING_BOX_COLOR},
+  {"detorus_epsilon",V_DETORUS_EPSILON},
+  {"high_constraint",V_HIGH_CONSTRAINT},
+  {"high_boundary",V_HIGH_BOUNDARY},
   {"autochop_length",V_AUTOCHOP_LENGTH},
   {"string_curve_tolerance",V_STRING_CURVE_TOLERANCE},
   {"corona_state",V_CORONA_STATE},
@@ -824,19 +879,26 @@ struct ckey internal_variables[] = {
   {"pop_quad_to_quad_count",V_POP_QUAD_TO_QUAD_COUNT},
   {"edgeswap_count",V_EDGESWAP_COUNT},
   {"t1_edgeswap_count",V_T1_EDGESWAP_COUNT},
-  {"ps_labelsize",V_PS_LABELSIZE_},
-  {"ps_stringwidth",V_PS_STRINGWIDTH_},
-  {"ps_fixededgewidth",V_PS_FIXEDEDGEWIDTH_},
-  {"ps_tripleedgewidth",V_PS_TRIPLEEDGEWIDTH_},
-  {"ps_conedgewidth",V_PS_CONEDGEWIDTH_},
-  {"ps_bareedgewidth",V_PS_BAREEDGEWIDTH_},
-  {"ps_gridedgewidth",V_PS_GRIDEDGEWIDTH_},
-  {"scrollbuffersize",V_SCROLLBUFFERSIZE_},
-  {"visibility_debug",V_VISIBILITY_DEBUG_},
-  {"check_count",V_CHECK_COUNT_},
-  {"breakflag",V_BREAKFLAG_},
-  {"everything_quantities",EVERYTHING_QUANTITIES_},
-  {"gravity_constant",GRAV_CONST_},
+  {"ps_labelsize",V_PS_LABELSIZE},
+  {"ps_stringwidth",V_PS_STRINGWIDTH},
+  {"ps_fixededgewidth",V_PS_FIXEDEDGEWIDTH},
+  {"ps_tripleedgewidth",V_PS_TRIPLEEDGEWIDTH},
+  {"ps_conedgewidth",V_PS_CONEDGEWIDTH},
+  {"ps_bareedgewidth",V_PS_BAREEDGEWIDTH},
+  {"ps_gridedgewidth",V_PS_GRIDEDGEWIDTH},
+  {"scrollbuffersize",V_SCROLLBUFFERSIZE},
+  {"visibility_debug",V_VISIBILITY_DEBUG},
+  {"check_count",V_CHECK_COUNT},
+  {"bad_next_prev_count",V_BAD_NEXT_PREV_COUNT},
+  {"inconsistent_bodies_count",V_INCONSISTENT_BODIES_COUNT},
+  {"edge_loop_count",V_EDGE_LOOP_COUNT},
+  {"edges_same_vertices_count",V_EDGES_SAME_VERTICES_COUNT},
+  {"facets_same_vertices_count",V_FACETS_SAME_VERTICES_COUNT},
+  {"bad_error_count",V_BAD_ERRORS_COUNT}, 
+
+  {"breakflag",V_BREAKFLAG},
+  {"everything_quantities",V_EVERYTHING_QUANTITIES},
+  {"gravity_constant",GRAV_CONST_TOK},
   {"hessian_slant_cutoff",V_HESSIAN_SLANT_CUTOFF},
   {"ambient_pressure_value",V_AMBIENT_PRESSURE},
   {"last_error",V_LAST_ERROR},
@@ -927,7 +989,7 @@ W     [ \t\r\032]
             if ( c == '\n' ) line_no++; 
               }
             if ( c == 0 && yywrap() )
-              { kb_error(2325,"End-of-file in comment\n",RECOVERABLE ); break; }
+              { kb_error(2325,"End-of-file in comment\n",DATAFILE_ERROR ); break; }
           }
          in_comment = 0; 
        }
@@ -935,14 +997,14 @@ W     [ \t\r\032]
 "//".*    /* comment */ ;
 
 \n           { line_no++; }
-_anti_line_no_  { errspot -= 15; line_no--; }
+_anti_line_no_TOK { errspot -= 15; line_no--; }
 
 ^{W}*-?{D}+  { char *c = strtok(yytext,whitespace);
                yylval.r = atof(strtok(yytext,whitespace));
                yylval.i = atoi(strtok(yytext,whitespace));
-               if ( lists_flag==LISTS_FULL ) return(tok=LEAD_INTEGER_); 
+               if ( lists_flag==LISTS_FULL ) return(tok=LEAD_INTEGER_TOK); 
                else if ( uminus_flag || c[0] != '-' )  
-                 return(tok = (fabs(yylval.r) > MAXINT) ? REAL_ : INTEGER_);
+                 return(tok = (fabs(yylval.r) > MAXINT) ? REAL_TOK: INTEGER_TOK);
                else { unput_string(c+1);  c[1] = 0;
                return (tok = minus_type(c[0])); 
              }
@@ -952,7 +1014,7 @@ _anti_line_no_  { errspot -= 15; line_no--; }
                yylval.r = atof(strtok(c,whitespace));
                yylval.qnum = 0;
                if ((lists_flag!=LISTS_OFF) && uminus_flag && (parens==0))
-               return(tok = (fabs(yylval.r) > MAXINT) ? REAL_ : INTEGER_);
+               return(tok = (fabs(yylval.r) > MAXINT) ? REAL_TOK: INTEGER_TOK);
                else { unput_string(c+1);  c[1] = 0;
                return (tok = minus_type(c[0])); 
              }
@@ -960,29 +1022,29 @@ _anti_line_no_  { errspot -= 15; line_no--; }
 {D}+      { yylval.i = atoi(yytext); 
             yylval.r = atof(strtok(yytext,whitespace));
             yylval.qnum = 0;
-            return(tok = (fabs(yylval.r) > MAXINT) ? REAL_ : INTEGER_);
+            return(tok = (fabs(yylval.r) > MAXINT) ? REAL_TOK: INTEGER_TOK);
           }
 ^{W}*{D}+"@"{D}+ { yylval.i = atoi(yytext);
               yylval.qnum = atoi(strchr(yytext,'@')+1);
-              return(tok = LEAD_INTEGER_AT_);
+              return(tok = LEAD_INTEGER_AT_TOK);
             }
 {W}+-?{D}+"@"{D}+ { yylval.i = atoi(yytext);
               yylval.qnum = atoi(strchr(yytext,'@')+1);
-              return(tok = INTEGER_AT_);
+              return(tok = INTEGER_AT_TOK);
             }
 
 0x{H}+      { sscanf(yytext+2,"%x",&yylval.i); 
               yylval.r = (REAL)(yylval.i);
-              return(tok = INTEGER_);
+              return(tok = INTEGER_TOK);
             }  /* hex */
 [01]+[Bb]   { char *c = yytext;  /* binary */
               yylval.i = 0;
               while ( isdigit(*c) ) { yylval.i = 2*yylval.i + *c - '0'; c++;}
               yylval.r = (REAL)(yylval.i);
-              return(tok = INTEGER_);
+              return(tok = INTEGER_TOK);
             }
 
-{D}+"."{D}+[a-z]+   return VERSIONTOKEN_;
+{D}+"."{D}+[a-z]+   return VERSIONTOKEN_TOK;
 
 ^{W}*[+-]{D}+"."{D}*({E})?  |
 ^{W}*[+-]{D}*"."{D}+({E})?  |
@@ -993,7 +1055,7 @@ _anti_line_no_  { errspot -= 15; line_no--; }
              char *c = strtok(yytext,whitespace);
              yylval.r = atof(c); 
              if ((lists_flag!=LISTS_OFF) && uminus_flag && (parens==0))
-               return(tok = REAL_); 
+               return(tok = REAL_TOK); 
              else 
              { unput_string(c+1);   c[1] = 0;
                verb_flag = 0;  
@@ -1007,7 +1069,7 @@ _anti_line_no_  { errspot -= 15; line_no--; }
 {D}+"."{D}*({E})?   |
 {D}*"."{D}+({E})?   |
 {D}+{E}    { yylval.r = atof(yytext);
-     return(tok = REAL_); }
+     return(tok = REAL_TOK); }
 
 \"          { /* read quoted string */
               int n;
@@ -1024,55 +1086,55 @@ _anti_line_no_  { errspot -= 15; line_no--; }
           yytext[n] = 0;
           reduce_string(yytext);
           in_quote = 0;
-          return(tok = QUOTATION_);
+          return(tok = QUOTATION_TOK);
         }
 
 {W}+-{W}+  verb_flag = 0; return (tok = minus_type('-'));   
 {W}+-$     verb_flag = 0; return (tok = minus_type('-'));   
 
 {W}+-      { if (datafile_flag && uminus_flag && (parens == 0) )  
-               return(tok = UMINUS_);
+               return(tok = UMINUS_TOK);
              else { verb_flag = 0; return ( tok = minus_type('-') );}
            }
-{W}+-=     { verb_flag = 2; yylval.i = SUBASSIGN_; return (tok= ASSIGNOP_);}
+{W}+-=     { verb_flag = 2; yylval.i = SUBASSIGN_OP; return (tok= ASSIGNOP_TOK);}
 
 ^-{W}      { return ( tok = minus_type('-')); }
 ^-         { if (datafile_flag && uminus_flag && (parens == 0) ) 
-               return ( tok = UMINUS_);
+               return ( tok = UMINUS_TOK);
              else { verb_flag = 0; return ( tok = minus_type('-') ); }
            }
-":="       { verb_flag = 2; return (tok= ASSIGN_);}
+":="       { verb_flag = 2; return (tok= ASSIGN_TOK);}
 ";="       { verb_flag = 2; 
              kb_error(2327,"You mistyped ';=' for ':='?\n",WARNING);
-             return (tok= ASSIGN_);
+             return (tok= ASSIGN_TOK);
            }
-"+="        { verb_flag = 2; yylval.i = PLUSASSIGN_; return (tok= ASSIGNOP_);}
-"-="        { verb_flag = 2; yylval.i = SUBASSIGN_; return (tok= ASSIGNOP_);}
-"*="        { verb_flag = 2; yylval.i = MULTASSIGN_; return (tok= ASSIGNOP_);}
-"/="        { verb_flag = 2; yylval.i = DIVASSIGN_; return (tok= ASSIGNOP_);}
-"::="       { verb_flag = 2; return (tok = PERM_ASSIGN_);}
-":::="      { verb_flag = 2; return (tok = REDEFINE_); }
+"+="        { verb_flag = 2; yylval.i = PLUSASSIGN_OP; return (tok= ASSIGNOP_TOK);}
+"-="        { verb_flag = 2; yylval.i = SUBASSIGN_OP; return (tok= ASSIGNOP_TOK);}
+"*="        { verb_flag = 2; yylval.i = MULTASSIGN_OP; return (tok= ASSIGNOP_TOK);}
+"/="        { verb_flag = 2; yylval.i = DIVASSIGN_OP; return (tok= ASSIGNOP_TOK);}
+"::="       { verb_flag = 2; return (tok = PERM_ASSIGN_TOK);}
+":::="      { verb_flag = 2; return (tok = REDEFINE_TOK); }
 -           { return (tok = minus_type('-'));  }
 [<>+*/,.?%^\[\]]       { verb_flag = 0 ;  return(tok = yytext[0]); }
 ";"         { verb_flag = 1; return tok = ';'; }
 "{"         {  verb_flag = 1; return(tok = yytext[0]); }
 "}"         {  return(tok = yytext[0]);  }
-"="         { return tok = (datafile_flag ? '=' : EQ_); }
+"="         { return tok = (datafile_flag ? '=' : EQ_TOK); }
 "("         {   verb_flag = 0; return(tok = yytext[0]); }
 ")"         {  return(tok = yytext[0]);  }
 "`"         {  return(tok = yytext[0]);  }
 "**"        { return(tok = '^'); }
-"=="        { return(tok = EQ_); }
-"!="        { return(tok = NE_); }
-"<="        { return(tok = LE_); }
-">="        { return(tok = GE_); }
-"||"        { return(tok = OR_); }
-"&&"        { return(tok = AND_); }
-"!"         { return(tok = NOT_); }
-"|"         { return (tok = PIPE_); /* pipe followed by quoted string */ }
-">>"        { return (tok = REDIRECT_); /* for redirection */ }
-">>>"       { return (tok = REDIRECTOVER_); /* for overwrite redirection */ }
-"`"" "*","  { return (tok = BACKQUOTE_COMMA_); }
+"=="        { return(tok = EQ_TOK); }
+"!="        { return(tok = NE_TOK); }
+"<="        { return(tok = LE_TOK); }
+">="        { return(tok = GE_TOK); }
+"||"        { return(tok = OR_TOK); }
+"&&"        { return(tok = AND_TOK); }
+"!"         { return(tok = NOT_TOK); }
+"|"         { return (tok = PIPE_TOK); /* pipe followed by quoted string */ }
+">>"        { return (tok = REDIRECT_TOK); /* for redirection */ }
+">>>"       { return (tok = REDIRECTOVER_TOK); /* for overwrite redirection */ }
+"`"" "*","  { return (tok = BACKQUOTE_COMMA_TOK); }
 
 #define    { if (!datafile_flag)
              kb_error(1880,"#define valid only in top of datafile.\n",WARNING);
@@ -1084,11 +1146,11 @@ _anti_line_no_  { errspot -= 15; line_no--; }
              push_commandfd(NULL,name);
            }
 
-[A-Za-z_][A-Za-z0-9_]*   { strncpy(yylval.lexeme,yytext,31);
+[A-Za-z_][A-Za-z0-9_]*   { strncpy(yylval.lexeme,yytext,LEXEME_SIZE);
                            if ( !macro() ) return identcase(yytext); 
                          } 
 
-"'"[A-Za-z]"'"     { yylval.i = yytext[1]; return tok = SINGLE_LETTER_; }
+"'"[A-Za-z]"'"     { yylval.i = yytext[1]; return tok = QUOTED_LETTER_TOK; }
 {W}      ;
 ":"     { if ( cond_expr_flag ) return tok = ':';}
 .       { if ( isprint(yytext[0]) )
@@ -1103,13 +1165,15 @@ _anti_line_no_  { errspot -= 15; line_no--; }
 /* My own input() function to handle case insensitivity and macros */
 /* and line counting */
 
-/* for saving input for command definition */
+/*********************************************************************
+* function: savein()
+* purpose:  for saving input for command definition 
+*/
 int inputbuffersize = 0;
 int inputbufferspot = 0;  /* where next character will go */
 int inputsave_flag = 0;  /* so only save when reading command */
 char *inputbuffer;
-void savein(c)
-int c;
+void savein(int c)
 { if ( !inputsave_flag ) return;
   if ( inputbufferspot >= inputbuffersize )
   { int newsize = inputbuffersize?2*inputbuffersize:1000;
@@ -1117,8 +1181,12 @@ int c;
     inputbuffersize = newsize;
   }
   inputbuffer[inputbufferspot++] = (char)c;
-}
+} // end savein()
  
+/*********************************************************************
+* function: reset_inputbuffer()
+* purpose:  reset the input buffer to empty.
+*/
 void reset_inputbuffer()
 { inputbufferspot = 0;
   inputsave_flag = 1;
@@ -1127,6 +1195,10 @@ void reset_inputbuffer()
 #define MOREMAX 1000
 char morebuff[MOREMAX+2];
 
+/*********************************************************************
+* function: rawinput()
+* purpose: get one character from input.
+*/
 int rawinput()
 {
   int c=0,retval;
@@ -1193,7 +1265,12 @@ rawexit:
 
 rawreturn:
   return  retval;
-}
+} // end rawinput()
+
+/***************************************************************************
+* function: get_more_input()
+* purpose: prompt user for more input.
+*/
 
 void get_more_input()
 {int n; 
@@ -1204,13 +1281,17 @@ void get_more_input()
      outstring("more> ");
   getstring(morebuff,MOREMAX);
  #endif
-  n = strlen(morebuff); 
+  n = (int)strlen(morebuff); 
   if ( (morebuff[n-1] != MOREIN) && (morebuff[n-1] != '\n') )
   morebuff[n] = '\n'; morebuff[n+1] = 0;
   catfulltext(morebuff);
   cmdptr = morebuff;
 }
 
+/***************************************************************************
+* function: kb_input()
+* purpose: get next character from putback buffer or input.
+*/
 int kb_input()
 {
   int c;
@@ -1223,7 +1304,7 @@ int kb_input()
 retry:
   c = rawinput();
 
-  if ( (c == '\\') )  /* line splicing */
+  if ( c == '\\' )  /* line splicing */
   { /* have to do line splicing as input filter to remove 
        special character of line start */
     int cc = c;
@@ -1245,10 +1326,13 @@ retry:
 input_exit:
 
   return c;
-}
+} // end kb_input()
 
-void rawunput(c)
-int c;
+/*********************************************************************
+* function: rawunput()
+* purpose: put back one character to raw input stream.
+*/
+void rawunput(int c)
 {
   if ( spot >= BUFFSIZE - 1 ) 
   { buff = my_list_realloc(buff,BUFFSIZE+500,ETERNAL_BLOCK);
@@ -1256,22 +1340,29 @@ int c;
   }
 
   buff[spot++] = (char)c;
-}
+} // end rawunput()
 
-void unput_string(s) 
-char *s;
+/*********************************************************************
+* function: unput_string()
+* purpose: put back string to input stream.
+*/
+void unput_string(char *s)
 { char *c;
   c = s ; while ( *c )  c++;   /* find end of token */
   while ( c != s ) { --c; unput(*c); }
-}
+} // end unput_string()
 
-
-void dump_buff(str,size) /* for error reporting */
-char *str;
-size_t size;
+/*********************************************************************
+* function: dump_buff()
+* purpose: for error reporting 
+*/
+void dump_buff( 
+  char *str,
+  size_t size
+)
 { int place;
   strcpy(str,"  Input line so far: \n");
-  size -= strlen(str)+3;
+  size -= (int)strlen(str)+3;
   errbuff[errspot] = 0;
   for ( place = errspot-1 ; place >= 0 ; place-- )
   { if (errbuff[place]==0 ) errbuff[place] = ' '; /* nulls creep in */ 
@@ -1279,8 +1370,12 @@ size_t size;
   } 
   strncat(str,errbuff+place+1,size);
   if ( str[strlen(str)-1] != '\n' ) strcat(str,"\n");
-}
+} // end dump_buff()
 
+/*********************************************************************
+* function: yywrap()
+* purpose: end of file handling for lex
+*/
 int yywrap()
 { /* Called at end of input.  Return 1 if really done, 0 if not */
   spot = 0; /* clean buffer */
@@ -1293,21 +1388,25 @@ int yywrap()
         if ( read_wrap_flag ) return 1;
         else { get_more_input(); return 0 ; }
         break;
-      case UMINUS_: case ',':
-      case '=': case '?': case ':': case OR_: case AND_: case NOT_:
-      case EQ_: case '>': case '<': case LE_: case GE_: case NE_:
-      case '/': case '%': case '^': case ON_CONSTRAINT_:
-      case HIT_CONSTRAINT_: case ON_BOUNDARY_: case DO_ : case FOR_:
-      case WHILE_ : case IF_ : case ELSE_: case THEN_ : case SET_:
-      case DEFINE_: case WHERE_: case ASSIGN_ : case PERM_ASSIGN_:
-      case REDEFINE_ : case FUNCTION_: case PROCEDURE_WORD_:
+      case UMINUS_TOK: case ',':
+      case '=': case '?': case ':': case OR_TOK: case AND_TOK: case NOT_TOK:
+      case EQ_TOK: case '>': case '<': case LE_TOK: case GE_TOK: case NE_TOK:
+      case '/': case '%': case '^': case ON_CONSTRAINT_TOK: case VALUE_OF_CONSTRAINT_TOK:
+      case HIT_CONSTRAINT_TOK: case ON_BOUNDARY_TOK: case DO_TOK: case FOR_TOK:
+      case WHILE_TOK: case IF_TOK: case ELSE_TOK: case THEN_TOK: case SET_TOK:
+      case DEFINE_TOK: case WHERE_TOK: case ASSIGN_TOK: case PERM_ASSIGN_TOK:
+      case REDEFINE_TOK: case FUNCTION_TOK: case PROCEDURE_WORD_TOK:
       get_more_input(); return 0;
       break;
       default: return 1;
         }
   return 1;  /* done */
-}
+} // end yywrap()
 
+/*************************************************************************
+* function: macro_init()
+* purpose: initialize macro definition list
+*/
 void macro_init()
 {
   if ( macro_subs ) myfree((char *)macro_subs);
@@ -1315,8 +1414,12 @@ void macro_init()
   macro_subs = NULL;
   macros = NULL;
   macro_count = macro_subs_top = macro_max = macro_subs_max = 0;
-}
+} // end macro_init()
 
+/*************************************************************************
+* function: yylex_init()
+* purpose: initialize lexical analyzer
+*/
 void yylex_init()
 {
   unput_tok_count = 0;
@@ -1329,14 +1432,13 @@ void yylex_init()
 #ifdef FLEX_SCANNER
   if ( yy_current_buffer) YY_FLUSH_BUFFER;
 #endif
-}
+} // end yylex_init()
 
 /*************************************************************
 *
 *  Function: record_macro()
 *
 *  Purpose:  Record macro definition.
-*
 */
 
 void record_macro()
@@ -1403,7 +1505,7 @@ void record_macro()
   /* strip terminal comment */
   if ( strstr(mspot,"//") )
     { *strstr(mspot,"//") = 0;
-      len = strlen(mspot);
+      len = (int)strlen(mspot);
     }
   else mspot[len] = 0;
   /* strip trailing blanks */
@@ -1411,7 +1513,7 @@ void record_macro()
   macros[macro_count].subsize = len;
   macros[macro_count++].offset = macro_subs_top;
   macro_subs_top += len+1;
-}
+} // end record_macro()
 
 /*************************************************************
 *
@@ -1420,7 +1522,6 @@ void record_macro()
 *  Purpose: See if yytext is a macro, and do substitution.
 *
 *  Return:  1 if macro, 0 if not.
-*
 */
 
 int macro()
@@ -1451,43 +1552,46 @@ int macro()
                      preservation of unary minus leading in the macro */
 
   return MACRO_EXPANDED;
-}
+} // end macro()
 
-/* for deciding type of minus sign or plus sign */
-int minus_type(c)
-int c; /* '+' or '-' */
+/*************************************************************************
+* function: minus_type()
+* purpose: for deciding type of minus sign or plus sign 
+*/
+int minus_type(int c /* '+' or '-' */)
 { int result;
   switch ( tok )
-  {  case LEAD_INTEGER_:
-     case SIGNED_NUMBER_:
-     case INTEGER_:
-     case REAL_:
-     case PI_:
-     case E_:
-     case G_:
-     case PARAM_: case ARRAYIDENT_:
-     case COORD_: case VALUE_: case BARE_:
-     case IDENT_: case QUANTITY_NAME_: case WRAP_: case PERM_IDENT_:
-     case LENGTH_: case DIHEDRAL_: case VALENCE_:
-     case AREA_: case VOLUME_: case DENSITY_: case TAG_:
-     case ID_: case ORIGINAL_: case SQ_MEAN_CURV_:
-     case OID_: case INTERNAL_VARIABLE_: case COLOR_:
-     case TOGGLEVALUE_: case EXTRA_ATTRIBUTE_: case PRESSURE_:
-     case ARRAY_ATTRIBUTE_:
-     case FRONTCOLOR_: case BACKCOLOR_: case TARGET_:
-     case NO_REFINE_: case VOLCONST_: case FRONTBODY_: case NONCONTENT_:
-     case BACKBODY_: case TETRA_POINT_: case TRIPLE_POINT_:
-     case MIDV_: case PHASE_: case MODULUS_: 
-     case METHOD_NAME_: case NODISPLAY_: case HIT_PARTNER_:
+  {  case LEAD_INTEGER_TOK:
+     case SIGNED_NUMBER_TOK:
+     case INTEGER_TOK:
+     case REAL_TOK:
+     case PI_TOK:
+     case E_TOK:
+     case G_TOK:
+     case PARAM_TOK: case ARRAYIDENT_TOK: case STRINGARRAY_TOK:
+     case COORD_TOK: case VALUE_TOK: case BARE_TOK:
+     case IDENT_TOK: case QUANTITY_NAME_TOK: case WRAP_TOK: case PERM_IDENT_TOK:
+     case LENGTH_TOK: case DIHEDRAL_TOK: case VALENCE_TOK:
+     case AREA_TOK: case VOLUME_TOK: case DENSITY_TOK: case TAG_TOK:
+     case ID_TOK: case ORIGINAL_TOK: case SQ_MEAN_CURV_TOK:
+     case OID_TOK: case INTERNAL_VARIABLE_TOK: case COLOR_TOK:
+     case TOGGLEVALUE_TOK: case EXTRA_ATTRIBUTE_TOK: case PRESSURE_TOK:
+     case ARRAY_ATTRIBUTE_TOK:
+     case FRONTCOLOR_TOK: case BACKCOLOR_TOK: case TARGET_TOK:
+     case NO_REFINE_TOK: case VOLCONST_TOK: case FRONTBODY_TOK: case NONCONTENT_TOK:
+     case BACKBODY_TOK: case TETRA_POINT_TOK: case TRIPLE_POINT_TOK:
+     case MIDV_TOK: case PHASE_TOK: case MODULUS_TOK: 
+     case METHOD_NAME_TOK: case NODISPLAY_TOK: case HIT_PARTNER_TOK:
+     case CENTEROFMASS_TOK:
      case ']': case ')':
         result = c; 
         break; 
      default: 
-        result = (c=='-' ? UMINUS_ : UPLUS_) ; 
+        result = (c=='-' ? UMINUS_TOK: UPLUS_TOK) ; 
         break;
   }
   return result; 
-}
+} // end minus_type()
 
 /****************************************************************************
 *
@@ -1495,12 +1599,10 @@ int c; /* '+' or '-' */
 *
 *  purpose: handle case of identifier token, maybe macro, keyword, etc.
 */
-int keyword_compare(a,b)
-struct ckey *a,*b;
+int keyword_compare(struct ckey *a, struct ckey *b)
 { return stricmp(a->name,b->name); }
 
-int identcase(lexeme)
-char *lexeme;
+int identcase(char *lexeme)
 {
    int k,i;
    int type;
@@ -1538,8 +1640,8 @@ char *lexeme;
      sorted = 1;
    }
 
-   if ( strcmp(lexeme,"_command_") == 0 )  { return tok = COMMAND_START_ ; }
-   if ( strcmp(lexeme,"_expr_") == 0 )   { return tok = EXPRESSION_START_; }
+   if ( strcmp(lexeme,"_command_") == 0 )  { return tok = COMMAND_START_TOK; }
+   if ( strcmp(lexeme,"_expr_") == 0 )   { return tok = EXPRESSION_START_TOK; }
 
    /* strip whitespace from front of lexeme */
    c = strtok(lexeme,whitespace);
@@ -1547,49 +1649,59 @@ char *lexeme;
 
    if ( strlen(lexeme) == 1 )
    { char ch = lexeme[0];
-     if ( verb_flag == 1 || tok==PRINT_ ||
+     if ( verb_flag == 1 || // tok==PRINT_TOK||
        (verb_flag == 2 && (toupper(ch) < 'W'))  )
      { yylval.i=lexeme[0]; 
-       if ( single_redefine[yylval.i].start ) return tok = SINGLE_REDEFD_;
+       if ( single_redefine[yylval.i].start ) return tok = SINGLE_REDEFD_TOK;
        switch ( yylval.i )
        { case 't': case 'l': case 'j': case 'P': case 'M':
          case 'w': case 'n': case 'm':  case 'b':
-         case 'k': case 'K': case 'p': case 'y':
-           return ( tok = SINGLE_LETTER_ARG_ );
-           case 'G': if ( verb_flag ) return ( tok = SINGLE_LETTER_ARG_ );
-         else return tok=G_;
-         default: return ( tok = SINGLE_LETTER_ );
+         case 'k': case 'K': case 'p': case 'y': case 'q':
+           return ( tok = SINGLE_LETTER_ARG_TOK);
+           case 'G': if ( verb_flag ) return ( tok = SINGLE_LETTER_ARG_TOK);
+         else return tok=G_TOK;
+         default: return ( tok = SINGLE_LETTER_TOK);
        } 
      }
      else 
       switch ( toupper(lexeme[0]) )
       { case 'X': case 'Y': case 'Z': case 'W':
           yylval.i = ((toupper(lexeme[0]) - 'X' + 4) % 4) + 1;
-          return COORD_;
+          return COORD_TOK;
+        case 'P':
+        { strncpy(idname,lexeme,sizeof(idname)); /* save text */
+          yylval.qnum = V_PARAM_ATTR;
+          yylval.etype = VERTEX;
+          yylval.i = 1;
+          return tok = ARRAY_ATTRIBUTE_TOK; 
+        }
       }
     }
 
+    // x1, x2, ... form of coordinates
     if ( toupper(lexeme[0]) == 'X' )
     { char *c;
       for ( c = lexeme+1 ; isdigit(*c) ; c++ ) ;
       if ( *c == 0 )
       { yylval.i = atoi(lexeme+1);
         if ( yylval.i != 0 )
-          return COORD_;
+          return COORD_TOK;
       }
     }
 
+    // parameter names p1, p2, ...
     if ( toupper(lexeme[0]) == 'P' && isdigit(lexeme[1]) && !lexeme[2] )
     { yylval.i = atoi(lexeme+1);
-      return PARAM_;
+      return PARAM_TOK;
     }
 
+    // special gn kludge
     if ( lexeme[0] == 'g' )
     { char *c;
       for ( c = lexeme+1 ; isdigit(*c) ; c++ ) ;
       if ( *c == 0 )
       { yylval.i = atoi(lexeme+1);
-        return GO_COUNT_;
+        return GO_COUNT_TOK;
       }
     }
 
@@ -1598,7 +1710,7 @@ char *lexeme;
       for ( c = lexeme+3 ; isdigit(*c) ; c++ ) ;
       if ( *c == 0 )
       { yylval.i = atoi(lexeme+3);
-        return USERFUNC_;
+        return USERFUNC_TOK;
       }
     }
  
@@ -1612,14 +1724,14 @@ char *lexeme;
     keyptr = BSEARCH(colornames);
     if ( keyptr )
         { yylval.r = yylval.i = keyptr->token;
-          return (tok = INTEGER_);
+          return (tok = INTEGER_TOK);
         }
     /* search math funcs */
     keyptr = BSEARCH(mathfunc_keywords);
-    if ( keyptr ) {  yylval.i = keyptr->token; return (tok = MATHFUNC_); }
+    if ( keyptr ) {  yylval.i = keyptr->token; return (tok = MATHFUNC_TOK); }
 
     keyptr = BSEARCH(mathfunc2_keywords);
-    if ( keyptr ) {  yylval.i  = keyptr->token; return (tok = MATHFUNC2_); }
+    if ( keyptr ) {  yylval.i  = keyptr->token; return (tok = MATHFUNC2_TOK); }
 
     if ( const_expr_flag )
     { for ( k=0 ; k<sizeof(const_expr_keywords)/ sizeof(struct ckey) ; k++ )
@@ -1627,10 +1739,29 @@ char *lexeme;
            return (tok = const_expr_keywords[k].token);
     }
 
-    /* kludge for some backward compatibility */
+    /* kludges for some backward compatibility */
     if ( strcmp(lexeme,"vertexnormal") == 0 )
-      strcpy(lexeme,"__vertex_normal");
-
+      strcpy(lexeme,"vertex_normal");
+    if ( lexeme[0] == '_' )
+    {
+      if ( strcmp(lexeme,"__vertex_normal") == 0 )
+        strcpy(lexeme,"vertex_normal");
+      if ( strcmp(lexeme,"__edge_vector") == 0 )
+        strcpy(lexeme,"edge_vector");
+      if ( strcmp(lexeme,"__facet_normal") == 0 )
+        strcpy(lexeme,"facet_normal");
+      if ( strcmp(lexeme,"__force") == 0 )
+        strcpy(lexeme,"v_force");
+      if ( strcmp(lexeme,"__velocity") == 0 )
+        strcpy(lexeme,"v_velocity");
+      if ( strcmp(lexeme,"__v_constraint_list") == 0 )
+        strcpy(lexeme,"v_constraint_list");
+      if ( strcmp(lexeme,"__e_constraint_list") == 0 )
+        strcpy(lexeme,"e_constraint_list");
+      if ( strcmp(lexeme,"__f_constraint_list") == 0 )
+        strcpy(lexeme,"f_constraint_list");
+     }
+     
     if ( datafile_flag && !backquote_flag )
     { keyptr = BSEARCH(datafile_keywords);
       if ( keyptr ) {  return tok = keyptr->token;}
@@ -1650,25 +1781,25 @@ char *lexeme;
         yylval.i = tok = keyptr->token;
         switch ( tok )
         { /* set verb_flag when expecting a command */
-          case THEN_: case ELSE_: case DO_: verb_flag = 1; break;
+          case THEN_TOK: case ELSE_TOK: case DO_TOK: verb_flag = 1; break;
           /* clear verb_flag when expecting an expression */
-          case PRINT_: 
-          case IF_: case WHILE_: case VIEW_TRANSFORMS_: case TRANSFORM_DEPTH_:
-          case METIS_: case KMETIS_: case OMETIS_: case EDGEWEED_:
-          case AREAWEED_: case EDGEDIVIDE_: case LANCZOS_: case RITZ_:
-          case EIGENPROBE_: case MOVE_: case ZOOM_: case LAGRANGE_: case SET_:
-          case PRINTF_: case LIST_: case DELETE_: case VERTEX_AVERAGE_:
-          case BINARY_PRINTF_: 
-          case DISSOLVE_: case REFINE_: case EDGESWAP_: case FIX_: case UNFIX_:
-              case SPRINTF_: case EPRINT_: case HISTOGRAM_: case LOGHISTOGRAM_:
-          case FOREACH_: case SHOW_EXPR_: case UNSET_:
-          case HESSIAN_SADDLE_: case HESSIAN_SEEK_: case NOTCH_:
-          case AUTOCHOP_: case AUTOPOP_: case OPTIMIZE_:
+          case PRINT_TOK: 
+          case IF_TOK: case WHILE_TOK: case VIEW_TRANSFORMS_TOK: case TRANSFORM_DEPTH_TOK:
+          case METIS_TOK: case KMETIS_TOK: case OMETIS_TOK: case EDGEWEED_TOK:
+          case AREAWEED_TOK: case EDGEDIVIDE_TOK: case LANCZOS_TOK: case RITZ_TOK:
+          case EIGENPROBE_TOK: case MOVE_TOK: case ZOOM_TOK: case LAGRANGE_TOK: case SET_TOK:
+          case PRINTF_TOK: case LIST_TOK: case DELETE_TOK: case VERTEX_AVERAGE_TOK:
+          case BINARY_PRINTF_TOK: 
+          case DISSOLVE_TOK: case REFINE_TOK: case EDGESWAP_TOK: case FIX_TOK: case UNFIX_TOK:
+              case SPRINTF_TOK: case EPRINT_TOK: case HISTOGRAM_TOK: case LOGHISTOGRAM_TOK:
+          case FOREACH_TOK: case SHOW_EXPR_TOK: case UNSET_TOK:
+          case HESSIAN_SADDLE_TOK: case HESSIAN_SEEK_TOK: case NOTCH_TOK:
+          case AUTOCHOP_TOK: case AUTOPOP_TOK: case OPTIMIZE_TOK:
                verb_flag = 0; break;
-          case SHOW_: if ( verb_flag ) tok = SHOWVERB_;
+          case SHOW_TOK: if ( verb_flag ) tok = SHOWVERB_TOK;
                       verb_flag = 0;
                       break;
-          case TRANSFORM_EXPR_: if ( verb_flag ) tok = TRANSFORM_EXPR_VERB_;
+          case TRANSFORM_EXPR_TOK: if ( verb_flag ) tok = TRANSFORM_EXPR_VERB_TOK;
                       verb_flag = 0;
                       break;
         }
@@ -1678,22 +1809,22 @@ char *lexeme;
 
     for ( i = 0 ; i < NUMDATATYPES ; i++ )
       if ( stricmp(lexeme,datatype_name[i]) == 0 )
-      { yylval.i = DATATYPE_;
+      { yylval.i = DATATYPE_TOK;
         yylval.datatype = i;
-        return tok = DATATYPE_;
+        return tok = DATATYPE_TOK;
       }
 
     keyptr = BSEARCH(togglenames);
     if ( keyptr ) 
     { yylval.i = keyptr->token;
-      if ( verb_flag != 0 ) tok = TOGGLENAME_;
-      else tok = TOGGLEVALUE_;
+      if ( verb_flag != 0 ) tok = TOGGLENAME_TOK;
+      else tok = TOGGLEVALUE_TOK;
       return tok;
     }
     keyptr = BSEARCH(internal_variables);
     if ( keyptr ) 
     { yylval.i = keyptr->token;
-      return tok = INTERNAL_VARIABLE_;
+      return tok = INTERNAL_VARIABLE_TOK;
     }
 
     /* search local variables */
@@ -1702,60 +1833,64 @@ char *lexeme;
     { struct global *g;
       g = globals(yylval.i); 
       if ( g->flags & SUBROUTINE )
-        return ( tok = PROCEDURE_ );
+        return ( tok = PROCEDURE_TOK);
       else if ( g->flags & ORDINARY_PARAM )
       { switch ( g->type )
         { case VERTEX_TYPE: 
              yylval.etype = VERTEX;
-             return ( tok = ELEMENT_IDENT_ );
+             return ( tok = ELEMENT_IDENT_TOK);
           case ELEMENTID_TYPE:
              yylval.etype = -1;
-             return ( tok = ELEMENT_IDENT_ );
+             return ( tok = ELEMENT_IDENT_TOK);
           case EDGE_TYPE:
              yylval.etype = EDGE;
-             return ( tok = ELEMENT_IDENT_ );
+             return ( tok = ELEMENT_IDENT_TOK);
           case FACET_TYPE:
              yylval.etype = FACET;
-             return ( tok = ELEMENT_IDENT_ );
+             return ( tok = ELEMENT_IDENT_TOK);
           case BODY_TYPE:
              yylval.etype = BODY;
-             return ( tok = ELEMENT_IDENT_ );
+             return ( tok = ELEMENT_IDENT_TOK);
           case FACETEDGE_TYPE:
              yylval.etype = FACETEDGE;
-             return ( tok = ELEMENT_IDENT_ );
+             return ( tok = ELEMENT_IDENT_TOK);
           default:
-            return ( tok = IDENT_ );
+            return ( tok = IDENT_TOK);
         }
       }
       else if ( g->flags & FUNCTION_NAME )
-        return ( tok = FUNCTION_IDENT_ );
+        return ( tok = FUNCTION_IDENT_TOK);
       else if ( g->flags & PROCEDURE_NAME )
-        return ( tok = PROCEDURE_IDENT_ );
+        return ( tok = PROCEDURE_IDENT_TOK);
       else if ( g->flags & STRINGVAL )
-        return ( tok = STRINGGLOBAL_ );
+        return ( tok = STRINGGLOBAL_TOK);
       else if ( g->flags & QUANTITY_NAME )  /* can't happen */
-        return ( tok = QUANTITY_NAME_ );
+        return ( tok = QUANTITY_NAME_TOK);
       else if ( g->flags & METHOD_NAME )  /* can't happen */
-        return ( tok = METHOD_NAME_ );
+        return ( tok = METHOD_NAME_TOK);
       else if ( g->flags & CONSTRAINT_NAME )  /* can't happen */
-        return ( tok = CONSTRAINT_NAME_ );
+        return ( tok = CONSTRAINT_NAME_TOK);
       else if ( g->flags & BOUNDARY_NAME )  /* can't happen */
-        return ( tok = BOUNDARY_NAME_ );
+        return ( tok = BOUNDARY_NAME_TOK);
       else if ( g->flags & DYNAMIC_LOAD_FUNC )  /* can't happen */
-        return ( tok = DYNAMIC_LOAD_FUNC_ );
+        return ( tok = DYNAMIC_LOAD_FUNC_TOK);
       else if ( g->flags & ARRAY_PARAM )
-        return ( tok = ARRAYIDENT_ );
+	  {// if ( g->type == STRING )
+	   //   return ( tok = STRINGARRAY_TOK);
+		//else
+          return ( tok = ARRAYIDENT_TOK);
+      }
       else if ( g->flags & GLOB_LOCALVAR )
-        return IDENT_;
+        return IDENT_TOK;
       else 
-        return (tok = NEWIDENT_);
+        return (tok = NEWIDENT_TOK);
     }
 
     /* search symbol table */
     s = symbol_lookup(lexeme);
     if ( s ) 
-    { yysym = s; yylval.i = yysym-symtable; verb_flag = 0;
-      return (tok = SYMBOL_ );
+    { yysym = s; yylval.i = (int)(yysym-symtable); verb_flag = 0;
+      return (tok = SYMBOL_TOK);
     }
 
     /* search parameter names */
@@ -1766,81 +1901,80 @@ char *lexeme;
       yylval.i &= INDEXMASK; /* get plain index */
 
       if ( nametype == QUANTITYNAME )
-        return tok = QUANTITY_NAME_;
+        return tok = QUANTITY_NAME_TOK;
       else if ( nametype == METHODNAME )
-        return tok = METHOD_NAME_;
+        return tok = METHOD_NAME_TOK;
       else if ( nametype == PERM_NAME )
       { yylval.i |= PERMGLOBAL;
         if ( perm_globals(yylval.i)->flags & SUBROUTINE )
-          return ( tok = PERM_PROCEDURE_ );
+          return ( tok = PERM_PROCEDURE_TOK);
         else if ( perm_globals(yylval.i)->flags & STRINGVAL )
-          return ( tok = PERM_STRINGGLOBAL_ );
+          return ( tok = PERM_STRINGGLOBAL_TOK);
         else if ( perm_globals(yylval.i)->flags & ARRAY_PARAM )
-          return ( tok = ARRAYIDENT_ );
-        else return (tok = PERM_IDENT_);
+          return ( tok = ARRAYIDENT_TOK);
+        else return (tok = PERM_IDENT_TOK);
       }
       yylval.i |= EPHGLOBAL;
       g = globals(yylval.i); 
       if ( g->flags & SUBROUTINE )
-        return ( tok = PROCEDURE_ );
+        return ( tok = PROCEDURE_TOK);
       else if ( g->flags & FUNCTION_NAME )
-        return ( tok = FUNCTION_IDENT_ );
+        return ( tok = FUNCTION_IDENT_TOK);
       else if ( g->flags & PROCEDURE_NAME )
-        return ( tok = PROCEDURE_IDENT_ );
+        return ( tok = PROCEDURE_IDENT_TOK);
       else if ( g->flags & STRINGVAL )
-        return ( tok = STRINGGLOBAL_ );
+        return ( tok = STRINGGLOBAL_TOK);
       else if ( g->flags & QUANTITY_NAME )
-        return ( tok = QUANTITY_NAME_ );
+        return ( tok = QUANTITY_NAME_TOK);
       else if ( g->flags & METHOD_NAME )
-        return ( tok = METHOD_NAME_ );
+        return ( tok = METHOD_NAME_TOK);
       else if ( g->flags & CONSTRAINT_NAME )
-        return ( tok = CONSTRAINT_NAME_ );
+        return ( tok = CONSTRAINT_NAME_TOK);
       else if ( g->flags & BOUNDARY_NAME )
-        return ( tok = BOUNDARY_NAME_ );
+        return ( tok = BOUNDARY_NAME_TOK);
       else if ( g->flags & DYNAMIC_LOAD_FUNC )
-        return ( tok = DYNAMIC_LOAD_FUNC_ );
+        return ( tok = DYNAMIC_LOAD_FUNC_TOK);
       else if ( g->flags & ARRAY_PARAM )
-        return ( tok = ARRAYIDENT_ );
+        return ( tok = ARRAYIDENT_TOK);
       else 
       { switch ( g->type )
         { case VERTEX_TYPE: 
              yylval.etype = VERTEX;
-             return ( tok = ELEMENT_IDENT_ );
+             return ( tok = ELEMENT_IDENT_TOK);
           case ELEMENTID_TYPE:
              yylval.etype = -1;
-             return ( tok = ELEMENT_IDENT_ );
+             return ( tok = ELEMENT_IDENT_TOK);
           case EDGE_TYPE:
              yylval.etype = EDGE;
-             return ( tok = ELEMENT_IDENT_ );
+             return ( tok = ELEMENT_IDENT_TOK);
           case FACET_TYPE:
              yylval.etype = FACET;
-             return ( tok = ELEMENT_IDENT_ );
+             return ( tok = ELEMENT_IDENT_TOK);
           case BODY_TYPE:
              yylval.etype = BODY;
-             return ( tok = ELEMENT_IDENT_ );
+             return ( tok = ELEMENT_IDENT_TOK);
           case FACETEDGE_TYPE:
              yylval.etype = FACETEDGE;
-             return ( tok = ELEMENT_IDENT_ );
+             return ( tok = ELEMENT_IDENT_TOK);
           default:
-            return ( tok = IDENT_ );
+            return ( tok = IDENT_TOK);
         }
       }
     }
 
     /* search extra attributes */
     for ( type = 0 ; type < NUMELEMENTS ; type++ )
-      { struct extra *ex;
-        int i;
+    { struct extra *ex;
+      int i;
 
-        for ( i = 0, ex = EXTRAS(type) ; 
-           i < web.skel[type].extra_count ; i++ , ex++ )
+      for ( i=0, ex=EXTRAS(type) ; i < web.skel[type].extra_count ; i++, ex++ )
         if ( stricmp(lexeme, ex->name) == 0 )
         { strncpy(idname,lexeme,sizeof(idname)); /* save text */
           yylval.qnum = i;
           yylval.etype = type;
-          return tok = ex->array_spec.dim ? ARRAY_ATTRIBUTE_ : EXTRA_ATTRIBUTE_; 
+          return tok = ex->array_spec.dim ? ARRAY_ATTRIBUTE_TOK: EXTRA_ATTRIBUTE_TOK; 
         }
-      }
+    }
 
     /* search dynamic load libraries */
     h = search_libraries(lexeme);
@@ -1848,21 +1982,18 @@ char *lexeme;
     { yylval.i = add_global(lexeme);
       globals(yylval.i)->flags |= DYNAMIC_LOAD_FUNC;
       globals(yylval.i)->value.funcptr = h;
-      return ( tok = DYNAMIC_LOAD_FUNC_ );
+      return ( tok = DYNAMIC_LOAD_FUNC_TOK);
     }
 
     /* if here, then not keyword */
     strncpy(idname,lexeme,sizeof(idname)); /* save text */
     if ( strlen(lexeme) == 1 )
-    { sprintf(errmsg,  
-      "Use of single letter command '%c' is illegal here!\n",
-      lexeme[0]);
-       kb_error(2329,errmsg, WARNING);
-       if ( !datafile_flag) return tok = lexeme[0];
+    { yylval.i = lexeme[0];
+      return ( tok = SINGLE_LETTER_TOK);
     }
-
+    
    yylval.i = 0;
-   return(tok = NEWIDENT_) ;
+   return(tok = NEWIDENT_TOK) ;
 } /* end identcase() */
 
 /******************************************************************
@@ -1873,26 +2004,25 @@ char *lexeme;
 *
 */
 
-char *keywordname(toknum)
-int toknum;
+char *keywordname(int toknum)
 {  int k,i,imax;
 
     for ( k = 0 ; k < sizeof(command_keywords)/sizeof(struct ckey) ; k++ )
       if ( toknum == command_keywords[k].token )
-      { static char name[32]; 
-        strncpy(name,command_keywords[k].name,31);
+      { static char name[82]; 
+        strncpy(name,command_keywords[k].name,81);
         return name;
       }
     for ( k = 0 ; k < sizeof(togglenames)/sizeof(struct ckey) ; k++ )
       if ( toknum == togglenames[k].token )
-      { static char name[32]; 
-        strncpy(name,togglenames[k].name,31);
+      { static char name[82]; 
+        strncpy(name,togglenames[k].name,81);
         return name;
       }
     for ( k = 0 ; k < sizeof(internal_variables)/sizeof(struct ckey) ; k++ )
       if ( toknum == internal_variables[k].token )
-      { static char name[32]; 
-        strncpy(name,internal_variables[k].name,31);
+      { static char name[82]; 
+        strncpy(name,internal_variables[k].name,81);
         return name;
       }
 
@@ -1918,7 +2048,8 @@ int toknum;
 
    /* unfound */
    return tokname(toknum);
-}
+
+} // end keywordname()
 
 /****************************************************************************
 *
@@ -1928,8 +2059,7 @@ int toknum;
 *   is_variable() etc. commands.
 */
 
-int identtype(word)
-char *word;
+int identtype(char *word)
 {
    int type;
    struct sym *s;
@@ -1939,28 +2069,28 @@ char *word;
 
    if ( strlen(word) == 1 )
    {
-     if ( single_redefine[yylval.i].start ) return tok = SINGLE_REDEFD_;
+     if ( single_redefine[yylval.i].start ) return tok = SINGLE_REDEFD_TOK;
      switch ( word[0] )
        { case 't': case 'l': case 'j': case 'P': case 'M':
          case 'w': case 'n': case 'm': case 'b':
          case 'k': case 'K': case 'p': case 'y':
-           return ( tok = SINGLE_LETTER_ARG_ );
-             case 'G': if ( verb_flag ) return tok = SINGLE_LETTER_ARG_;
-               else return tok = G_; break;
-         default: return ( tok = SINGLE_LETTER_ );
+           return ( tok = SINGLE_LETTER_ARG_TOK);
+             case 'G': if ( verb_flag ) return tok = SINGLE_LETTER_ARG_TOK;
+               else return tok = G_TOK; break;
+         default: return ( tok = SINGLE_LETTER_TOK);
        } 
     }
     key.name = word;
     keyptr = BSEARCH(colornames);
     if ( keyptr )
-          return  INTEGER_;
+          return  INTEGER_TOK;
 
     /* search math funcs */
     keyptr = BSEARCH(mathfunc_keywords);
-    if ( keyptr ) {  return MATHFUNC_; }
+    if ( keyptr ) {  return MATHFUNC_TOK; }
 
     keyptr = BSEARCH(mathfunc2_keywords);
-    if ( keyptr ) {  return  MATHFUNC2_; }
+    if ( keyptr ) {  return  MATHFUNC2_TOK; }
 
     /* search keywords and internal variables */
     { 
@@ -1974,7 +2104,7 @@ char *word;
       if ( keyptr ) 
            return tok;
       keyptr = BSEARCH(internal_variables);
-      if ( keyptr ) { return  INTERNAL_VARIABLE_; }
+      if ( keyptr ) { return  INTERNAL_VARIABLE_TOK; }
     }
 
     /* search local variables */
@@ -1983,33 +2113,33 @@ char *word;
     { struct global *g;
       g = globals(yylval.i); 
       if ( g->flags & SUBROUTINE )
-        return ( tok = PROCEDURE_ );
+        return ( tok = PROCEDURE_TOK);
       else if ( g->flags & ORDINARY_PARAM )
-        return ( tok = IDENT_ );
+        return ( tok = IDENT_TOK);
       else if ( g->flags & STRINGVAL )
-        return ( tok = STRINGGLOBAL_ );
+        return ( tok = STRINGGLOBAL_TOK);
       else if ( g->flags & QUANTITY_NAME )  /* can't happen */
-        return ( tok = QUANTITY_NAME_ );
+        return ( tok = QUANTITY_NAME_TOK);
       else if ( g->flags & METHOD_NAME )  /* can't happen */
-        return ( tok = METHOD_NAME_ );
+        return ( tok = METHOD_NAME_TOK);
       else if ( g->flags & CONSTRAINT_NAME )  /* can't happen */
-        return ( tok = CONSTRAINT_NAME_ );
+        return ( tok = CONSTRAINT_NAME_TOK);
       else if ( g->flags & BOUNDARY_NAME )  /* can't happen */
-        return ( tok = BOUNDARY_NAME_ );
+        return ( tok = BOUNDARY_NAME_TOK);
       else if ( g->flags & DYNAMIC_LOAD_FUNC )  /* can't happen */
-        return ( tok = DYNAMIC_LOAD_FUNC_ );
+        return ( tok = DYNAMIC_LOAD_FUNC_TOK);
       else if ( g->flags & ARRAY_PARAM )
-        return ( tok = ARRAYIDENT_ );
+        return ( tok = ARRAYIDENT_TOK);
       else if ( g->flags & GLOB_LOCALVAR )
-        return IDENT_;
-      else return (tok = NEWIDENT_);
+        return IDENT_TOK;
+      else return (tok = NEWIDENT_TOK);
     }
 
     /* search symbol table */
     s = symbol_lookup(word);
     if ( s ) 
-    { yysym = s; yylval.i = yysym-symtable; verb_flag = 0;
-      return (tok = SYMBOL_ );
+    { yysym = s; yylval.i = (int)(yysym-symtable); verb_flag = 0;
+      return (tok = SYMBOL_TOK);
     }
 
     /* search parameter names */
@@ -2017,28 +2147,29 @@ char *word;
     if ( yylval.i >= 0 )
       { 
         if ( perm_globals(yylval.i)->flags & SUBROUTINE )
-        return ( tok = PERM_PROCEDURE_ );
+        return ( tok = PERM_PROCEDURE_TOK);
         else if ( globals(yylval.i)->flags & STRINGVAL )
-        return ( tok = PERM_STRINGGLOBAL_ );
-        else return (tok = PERM_IDENT_);
+        return ( tok = PERM_STRINGGLOBAL_TOK);
+        else return (tok = PERM_IDENT_TOK);
       }
 
     yylval.i = lookup_global(word);
     if ( yylval.i >= 0 )
       { 
+        if ( globals(yylval.i)->flags & ORDINARY_PARAM )
+          return ( tok = IDENT_TOK);
         if ( globals(yylval.i)->flags & SUBROUTINE )
-          return ( tok = PROCEDURE_ );
+          return ( tok = PROCEDURE_TOK);
         else if ( globals(yylval.i)->flags & STRINGVAL )
-          return ( tok = STRINGGLOBAL_ );
+          return ( tok = STRINGGLOBAL_TOK);
         else if ( globals(yylval.i)->flags & QUANTITY_NAME )
-          return ( tok = QUANTITY_NAME_ );
+          return ( tok = QUANTITY_NAME_TOK);
         else if ( globals(yylval.i)->flags & METHOD_NAME )
-          return ( tok = METHOD_NAME_ );
+          return ( tok = METHOD_NAME_TOK);
         else if ( globals(yylval.i)->flags & DYNAMIC_LOAD_FUNC )
-          return ( tok = DYNAMIC_LOAD_FUNC_ );
+          return ( tok = DYNAMIC_LOAD_FUNC_TOK);
         else if ( globals(yylval.i)->flags & ARRAY_PARAM )
-          return ( tok = ARRAYIDENT_ );
-        else return (tok = IDENT_);
+          return ( tok = ARRAYIDENT_TOK);
       }
 
     /* search extra attributes */
@@ -2052,22 +2183,21 @@ char *word;
       { strncpy(idname,word,sizeof(idname)); /* save text */
         yylval.qnum = i;
         yylval.etype = type;
-        return tok = ex->array_spec.dim ? ARRAY_ATTRIBUTE_ : EXTRA_ATTRIBUTE_; 
+        return tok = ex->array_spec.dim ? ARRAY_ATTRIBUTE_TOK: EXTRA_ATTRIBUTE_TOK; 
       }
     }
 
     /* if here, then not keyword */
     yylval.i = 0;
-    return(tok = NEWIDENT_) ;
+    return(tok = NEWIDENT_TOK) ;
 } /* end identtype() */
 
-/*********************************************************************
-* 
-* function: kblex()
-*
-* purpose: my own lexical analyzer, faster (for Evolver) and 
-*          more comprehensible.
-*/
+/******************************************************************
+ 
+   My own lexical analyzer.  Faster for my purposes and
+   more comprehensible.
+   
+*******************************************************************/
 
 /* States */
 #define L_START  1
@@ -2107,16 +2237,22 @@ char *word;
 #define L_DIGITS_E_DIGITS 35
 #define L_LEAD_MINUS 36
 #define L_BACKSLASH 37
+#define L_GRGRGR 38
 
 /* Unput buffer */
 int ubuff_max = 0;
 int ubuff_spot = 0;  /* index of first vacant spot in unput_buff */
 char *unput_buff;
 
-/* the token */
-/*char *yytext;*/
+/* maximum lexeme size */
 int yytext_max;
 
+/******************************************************************
+*
+* function: kb_input_new()
+*
+* purpose: fetch next input character from unput buffer or raw input.
+*/
 char kb_input_new()
 { char c;
 
@@ -2126,17 +2262,23 @@ char kb_input_new()
     return c;
   }
   c = rawinput();
-  while ( c == 0 )
-  { if ( yywrap() ) 
-      return 0;
+  while ( c == 0 ) // done with this input
+  { if ( yywrap() ) // check for continuation 
+      return 0;   // no continuation, so done
     else
       c = rawinput();
    }
    return c;
-}
+   
+} // end kb_input_new()
 
-void kb_unput(c)
-char c;
+/******************************************************************
+*
+* function: kb_unput()
+*
+* purpose: put back lookahead character into input stream.
+*/
+void kb_unput( char c )
 { if ( ubuff_spot >= ubuff_max )
   { if ( unput_buff )
     { ubuff_max *= 2;
@@ -2149,11 +2291,23 @@ char c;
   }
 
   unput_buff[ubuff_spot++] = c;
-}
+  
+} // end kb_unput()
+
+/*********************************************************************
+* 
+* function: kblex()
+*
+* purpose: my own lexical analyzer, faster (for Evolver) and 
+*          more comprehensible.
+*
+* return: next token number; lexeme is in yytext, and
+*         other interesting data in yylval.
+*/
 
 int kblex()
 { int state;
-  char nextchar;
+  unsigned char nextchar;
   char *yyspot; /* first empty spot in yytext */
   int retval;
 
@@ -2205,8 +2359,8 @@ int kblex()
              case '|':  state = L_PIPE; break; 
              case '&':  state = L_AND; break; 
              case '>':  state = L_GREATER; break;
-             case '\'':  state = L_SINGLE_QUOTE; break;
-             case '"':  state = L_QUOTE; break;
+             case '\'': case 0x91: state = L_SINGLE_QUOTE; break;
+             case '"': case 0x93: state = L_QUOTE; break;
              case '`':  state = L_BACKQUOTE; break;
              case '=':  state = L_EQUAL; break;
              case '<':  state = L_LESS; break;
@@ -2241,6 +2395,8 @@ int kblex()
            { yyspot = yytext;
              state = L_START;
              line_no++;
+             if ( datafile_flag != IN_DATAFILE )
+               get_more_input();
              break;
            }
            kb_error(3659,
@@ -2251,12 +2407,12 @@ int kblex()
         case L_EQUAL:
            if ( nextchar == '=' )
            { *yyspot = 0;
-             tok = EQ_;
+             tok = EQ_TOK;
              goto kblex_exit;
            }
            kb_unput(nextchar);
            yyspot[-1] = 0;
-           tok = (datafile_flag ? '=' : EQ_);
+           tok = (datafile_flag ? '=' : EQ_TOK);
            goto kblex_exit;
            
         case L_QUOTE:
@@ -2265,7 +2421,7 @@ int kblex()
              in_quote = 1;
              for (n=0;;n++)
              { if ( nextchar == '\n' ) line_no++;
-               if ( nextchar == '"' && (n == 0 || (yytext[n-1] != '\\')) ) 
+               if ( (nextchar == '"' || nextchar == 0x94) && (n == 0 || (yytext[n-1] != '\\')) ) 
                  break;
                if ( n >= yytext_max - 2 )
                { yytext_max *= 2;
@@ -2277,7 +2433,7 @@ int kblex()
              yytext[n] = 0;
              reduce_string(yytext);
              in_quote = 0;
-             tok = QUOTATION_;
+             tok = QUOTATION_TOK;
              goto kblex_exit;
            }
            break;
@@ -2285,7 +2441,7 @@ int kblex()
         case L_LESS:
            if ( nextchar == '=' )
            { *yyspot = 0;
-             tok = LE_;
+             tok = LE_TOK;
              goto kblex_exit;
            }
            else
@@ -2301,7 +2457,7 @@ int kblex()
               state = L_GRGR;
            else if ( nextchar == '=' )
            { *yyspot = 0;
-             tok = GE_;
+             tok = GE_TOK;
              goto kblex_exit;
            }
            else
@@ -2315,29 +2471,48 @@ int kblex()
         case L_GRGR:
            if ( nextchar == '>' )
            { *yyspot = 0;
-             tok = REDIRECTOVER_;
+             tok = REDIRECTOVER_TOK;
+             state = L_GRGRGR;
+           } 
+		   else if ( nextchar == '2' )
+           { *yyspot = 0;
+             tok = REDIRECT_ERR_TOK;
              goto kblex_exit;
            } 
            else
            { kb_unput(nextchar);
              yyspot[-1] = 0;
-             tok = REDIRECT_;
+             tok = REDIRECT_TOK;
+             goto kblex_exit;
+           }
+           break;
+
+        case L_GRGRGR:
+           if ( nextchar == '2' )
+           { *yyspot = 0;
+             tok = REDIRECTOVER_ERR_TOK;
+             goto kblex_exit;
+           } 
+           else
+           { kb_unput(nextchar);
+             yyspot[-1] = 0;
+             tok = REDIRECTOVER_TOK;
              goto kblex_exit;
            }
            break;
 
         case L_SINGLE_QUOTE:
-           if ( nextchar == '\'' )
+           if ( nextchar == '\'' || nextchar == 0x92 )
               kb_error(3577,"Empty single quotes.\n",RECOVERABLE);
            if ( nextchar == 0 || nextchar == '\n' )
               kb_error(3570,"Dangling single quote.\n",RECOVERABLE);
            yylval.i = nextchar;
            nextchar = kb_input_new();
-           if ( nextchar != '\'' ) 
+           if ( nextchar != '\'' && nextchar != 0x92) 
               kb_error(3583,"Single quote not closed after one character.\n",
                               RECOVERABLE);
            yytext[1] = 0;
-           tok = SINGLE_LETTER_;
+           tok = QUOTED_LETTER_TOK;
            goto kblex_exit;
            break;
 
@@ -2345,7 +2520,7 @@ int kblex()
            while ( nextchar == ' ' ) yyspot[-1] = nextchar = kb_input_new();
            if ( nextchar == ',' )
            { *yyspot = 0;
-             tok = BACKQUOTE_COMMA_;
+             tok = BACKQUOTE_COMMA_TOK;
              goto kblex_exit;
            }
            yyspot[-1] = 0;
@@ -2368,18 +2543,26 @@ int kblex()
            }
            if ( strcmp(yytext,"#include") == 0 )
            { 
-             while ( nextchar != '"' ) nextchar = kb_input_new();
+             while ( (nextchar != '"' && nextchar != 0x94) && nextchar > 0 && nextchar != '\n' ) 
+                nextchar = kb_input_new();
+             if ( (nextchar != '"' && nextchar != 0x94) )
+             { kb_error(6377,"Need double-quoted filename after #include.\n",UNRECOVERABLE);
+             }
              yyspot = yytext;
              do
                *(yyspot++) = nextchar = kb_input_new();
-             while ( nextchar != '"' );
+             while ( (nextchar != '"' && nextchar != 0x94) && nextchar > 0 && nextchar != '\n');
+             if ( (nextchar != '"' && nextchar != 0x94) )
+             { kb_error(6378,"Unclosed quote after #include.\n",UNRECOVERABLE);
+             }
              yyspot[-1] = 0;
              push_commandfd(NULL,yytext);
              state = L_LINESTART;
              yyspot = yytext;
              break;
-           }
-           kb_error(3681,"Illegal # directive.\n",RECOVERABLE);
+           }         
+		   sprintf(errmsg,"Illegal # directive, line %d.\n",line_no);
+		   kb_error(3681,errmsg,RECOVERABLE);
            break;
 
         case L_ZERO:
@@ -2394,7 +2577,7 @@ int kblex()
              yyspot[-1] = 0;
              yylval.i = 0;
              verb_flag = 0;
-             tok = INTEGER_;
+             tok = INTEGER_TOK;
              goto kblex_exit;
            }
            break;
@@ -2408,7 +2591,7 @@ int kblex()
            sscanf(yytext+2,"%x",&yylval.i);
            yylval.r = (REAL)yylval.i;
            verb_flag = 0;
-           tok = INTEGER_;
+           tok = INTEGER_TOK;
            goto kblex_exit;
 
         case L_WHITESPACE:
@@ -2430,7 +2613,7 @@ int kblex()
            kb_unput(nextchar);
            if ( !isspace(nextchar) && (yytext[0] == '-') )
            { if ( datafile_flag && uminus_flag && (parens == 0) )
-             { tok = UMINUS_;
+             { tok = UMINUS_TOK;
                goto kblex_exit;
              }
            }
@@ -2473,6 +2656,10 @@ int kblex()
            if ( nextchar == '.' )
            { state = L_DIGITS_DOT;
              break;
+           }           
+           if ( toupper(nextchar) == 'X' )
+           { state = L_HEXNUMBER;
+             break;
            }
            if ( (toupper(nextchar) == 'E') || (toupper(nextchar) == 'D') )
            { state = L_DIGITS_E;
@@ -2482,18 +2669,18 @@ int kblex()
            { state = L_LEAD_INTEGER_AT;
              break;
            }
-           /* have LEAD_INTEGER_ */
+           /* have LEAD_INTEGER_TOK*/
            kb_unput(nextchar);
            yyspot[-1] = 0;
            yylval.r = atof(yytext);
            yylval.i = atoi(yytext);
            verb_flag = 0;
            if ( lists_flag==LISTS_FULL ) 
-           { tok = LEAD_INTEGER_;
+           { tok = LEAD_INTEGER_TOK;
              goto kblex_exit;
            }
            else if ( uminus_flag || yytext[0] != '-' )
-           { tok = (fabs(yylval.r) > MAXINT) ? REAL_ : INTEGER_;
+           { tok = (fabs(yylval.r) > MAXINT) ? REAL_TOK: INTEGER_TOK;
              goto kblex_exit;
            }
            else 
@@ -2519,7 +2706,8 @@ int kblex()
            if ( nextchar == '@' )
            { state = L_INTEGER_AT;
              break;
-           }
+           } 
+
            if ( toupper(nextchar) == 'B' )
            { char *c;
              yylval.i = 0;
@@ -2528,18 +2716,18 @@ int kblex()
              if ( c == yyspot-1 )
              { yylval.r = (REAL)yylval.i;
                verb_flag = 0;
-               tok = INTEGER_;
+               tok = INTEGER_TOK;
                goto kblex_exit;
              }
              /* else fall through to ordinary integer */
            }
-           /* have INTEGER_ */
+           /* have INTEGER_TOK*/
            kb_unput(nextchar);
            yyspot[-1] = 0;
            yylval.r = atof(yytext);
            yylval.i = atoi(yytext);
            verb_flag = 0;
-           tok = (fabs(yylval.r) > MAXINT) ? REAL_ : INTEGER_;
+           tok = (fabs(yylval.r) > MAXINT) ? REAL_TOK: INTEGER_TOK;
            goto kblex_exit;
 
         case L_DIGITS_DOT:
@@ -2551,7 +2739,7 @@ int kblex()
              break;
            if ( isalpha(nextchar) )
            { *yyspot = 0;
-             tok = VERSIONTOKEN_;
+             tok = VERSIONTOKEN_TOK;
              goto kblex_exit;
            }
            /* have complete REAL */
@@ -2559,7 +2747,7 @@ int kblex()
            yyspot[-1] = 0;
            yylval.r = atof(yytext);
            verb_flag = 0;
-           tok = REAL_;
+           tok = REAL_TOK;
            goto kblex_exit;
 
         case L_DOT:
@@ -2582,9 +2770,11 @@ int kblex()
            yylval.i = atoi(yytext);
            yylval.qnum = atoi(strchr(yytext,'@')+1);
            if ( yylval.i == 0 )
-              kb_error(3554,"Missing task number.",DATAFILE_ERROR);
+           { sprintf(errmsg, "Missing task number, line %d.",line_no);
+		     kb_error(3554,errmsg,DATAFILE_ERROR);
+		   }
            verb_flag = 0;
-           tok = LEAD_INTEGER_AT_;
+           tok = LEAD_INTEGER_AT_TOK;
            goto kblex_exit;
 
         case L_INTEGER_AT:
@@ -2596,9 +2786,12 @@ int kblex()
            yylval.i = atoi(yytext);
            yylval.qnum = atoi(strchr(yytext,'@')+1);
            if ( yylval.i == 0 )
-              kb_error(3553,"Missing task number.",DATAFILE_ERROR);
+           {
+		     sprintf(errmsg,"Missing task number. Line %d",line_no);
+		     kb_error(3553,errmsg,DATAFILE_ERROR);
+		   }
            verb_flag = 0;
-           tok = INTEGER_AT_;
+           tok = INTEGER_AT_TOK;
            goto kblex_exit;
 
         case L_SLASH:
@@ -2633,9 +2826,9 @@ int kblex()
               break;
             
             case '/': state = L_LINECOMMENT; break;
-            case '=': *yyspot = 0; yylval.i = DIVASSIGN_; 
+            case '=': *yyspot = 0; yylval.i = DIVASSIGN_OP; 
                        verb_flag = 0;
-                       tok=ASSIGNOP_;
+                       tok=ASSIGNOP_TOK;
                        goto kblex_exit;
                        
             default: kb_unput(nextchar); 
@@ -2650,9 +2843,9 @@ int kblex()
           if ( isdigit(nextchar) || nextchar == '+' || nextchar == '-' )
           { state = L_DIGITS_E_DIGITS;
             break; 
-          }
-          kb_error(3664,"Missing exponent for scientific notation.\n",
-             RECOVERABLE);
+          }       
+		  sprintf(errmsg,"Missing exponent for scientific notation. Line %d\n",line_no);
+          kb_error(3664, errmsg,  RECOVERABLE);
           break;
 
         case L_DIGITS_E_DIGITS:
@@ -2663,7 +2856,7 @@ int kblex()
           yyspot[-1] = 0;
           yylval.r = atof(yytext);
           verb_flag = 0;
-          tok = REAL_;
+          tok = REAL_TOK;
           goto kblex_exit;
 
         case L_ALPHANUM:
@@ -2672,7 +2865,7 @@ int kblex()
           /* have token */
           kb_unput(nextchar);
           yyspot[-1] = 0;
-          strncpy(yylval.lexeme,yytext,31);
+          strncpy(yylval.lexeme,yytext,LEXEME_SIZE);
           retval = macro();
           if ( retval == WAS_MACRO_DEF ) 
           { /* macro() ate up rest of line */
@@ -2693,7 +2886,7 @@ int kblex()
         case L_COLON:
           if ( nextchar == '=' )
           { verb_flag = 2; yyspot[-1] = 0; 
-            tok = ASSIGN_;
+            tok = ASSIGN_TOK;
             goto kblex_exit;
           }
           if ( nextchar == ':' )
@@ -2714,30 +2907,32 @@ int kblex()
         case L_COLONCOLON:
           if ( nextchar == '=' )
           { verb_flag = 2; yyspot[-1] = 0; 
-            tok = PERM_ASSIGN_;
+            tok = PERM_ASSIGN_TOK;
             goto kblex_exit;
           }
           if ( nextchar == ':' )
           { state = L_COLONCOLONCOLON;
             break;
-          }
-          kb_error(3568,"Illegal token '::'\n",RECOVERABLE);
+          }          
+		  sprintf(errmsg,"Illegal token '::'  Line %d\n",line_no);
+		  kb_error(3568,errmsg,RECOVERABLE);
           break;
 
         case L_COLONCOLONCOLON:
           if ( nextchar == '=' )
           { verb_flag = 2; yyspot[-1] = 0; 
-            tok = REDEFINE_;
+            tok = REDEFINE_TOK;
             goto kblex_exit;
-          }
-          kb_error(3569,"Illegal token ':::'\n",RECOVERABLE);
+          }          
+		  sprintf(errmsg,"Illegal token ':::'  Line %d\n",line_no);
+		  kb_error(3569,errmsg,RECOVERABLE);
           break;
 
         case L_SEMICOLON:
           if ( nextchar == '=' )
           { verb_flag = 2; 
             kb_error(2868,"You mistyped ';=' for ':='?\n",WARNING);
-            tok= ASSIGN_;
+            tok= ASSIGN_TOK;
             goto kblex_exit;
           }
           kb_unput(nextchar);
@@ -2750,8 +2945,14 @@ int kblex()
           verb_flag = 0;
           if ( nextchar == '=' )
           { verb_flag = 0; *yyspot = 0;
-            yylval.i = PLUSASSIGN_;
-            tok = ASSIGNOP_;
+            yylval.i = PLUSASSIGN_OP;
+            tok = ASSIGNOP_TOK;
+            goto kblex_exit;
+          }
+          if ( nextchar == '+' )
+          { verb_flag = 0; *yyspot = 0;
+            yylval.i = PLUSPLUS_OP;
+            tok = INCREMENT_TOK;
             goto kblex_exit;
           }
           kb_unput(nextchar);
@@ -2762,9 +2963,15 @@ int kblex()
         case L_MINUS:
           verb_flag = 0;
           if ( nextchar == '=' )
-          { verb_flag = 0; yylval.i = SUBASSIGN_; 
+          { verb_flag = 0; yylval.i = SUBASSIGN_OP; 
             *yyspot = 0;
-            tok= ASSIGNOP_;
+            tok= ASSIGNOP_TOK;
+            goto kblex_exit;
+          }
+          if ( nextchar == '-' )
+          { verb_flag = 0; *yyspot = 0;
+            yylval.i = MINUSMINUS_OP;
+            tok = INCREMENT_TOK;
             goto kblex_exit;
           }
           verb_flag = 0; 
@@ -2776,8 +2983,8 @@ int kblex()
           verb_flag = 0;
           if ( nextchar == '=' )
           { verb_flag = 0; *yyspot = 0;
-            yylval.i = MULTASSIGN_;
-            tok = ASSIGNOP_;
+            yylval.i = MULTASSIGN_OP;
+            tok = ASSIGNOP_TOK;
             goto kblex_exit;
           }
           if ( nextchar == '*' )
@@ -2794,32 +3001,33 @@ int kblex()
            verb_flag = 0;
            if ( nextchar == '=' )
            { *yyspot = 0;
-             tok = NE_;
+             tok = NE_TOK;
              goto kblex_exit;
            }
            kb_unput(nextchar);
            yyspot[-1] = 0;
-           tok = NOT_;
+           tok = NOT_TOK;
            goto kblex_exit;
 
         case L_PIPE:
            if ( nextchar == '|' )
            { *yyspot = 0;
-             tok = OR_;
+             tok = OR_TOK;
              goto kblex_exit;
            }
            kb_unput(nextchar);
            yyspot[-1] = 0;
-           tok = PIPE_; 
+           tok = PIPE_TOK; 
            goto kblex_exit;
 
         case L_AND:
            if ( nextchar == '&' )
            { *yyspot = 0;
-             tok = AND_;
+             tok = AND_TOK;
              goto kblex_exit;
-           }
-           kb_error(3566,"Illegal token '&'\n",RECOVERABLE);
+           }         
+		   sprintf(errmsg,"Illegal token '&'  Line %d\n",line_no);
+		   kb_error(3566,errmsg,RECOVERABLE);
           break;
 
         case L_LINECOMMENT:
@@ -2843,4 +3051,5 @@ int kblex()
   PROF_FINISH(kblex);
  
   return tok;
-}
+  
+} // end kblex()

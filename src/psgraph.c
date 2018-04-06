@@ -25,6 +25,7 @@
 static FILE *fd;
 int gridflag;
 int ps_colorflag;
+int ps_cmykflag;
 int crossingflag;
 char ps_file_name[1000];
 int ps_widthattr;
@@ -87,7 +88,7 @@ void ps_init()
   }
   if ( strlen(ps_file_name) == 0 )
   {
-     prompt("Enter file name (.ps will be added): ",ps_file_name,sizeof(ps_file_name));
+     prompt("Enter file name (.ps will be added if no .ps or .eps): ",ps_file_name,sizeof(ps_file_name));
   }
   if ( (strcmp(ps_file_name+strlen(ps_file_name)-3,".ps")!=0) && 
          (strcmp(ps_file_name+strlen(ps_file_name)-4,".eps")!=0) )
@@ -117,15 +118,54 @@ void ps_init()
     xhi = (int)(xsize*scale);
     yhi = (int)(ysize*scale);
   }
-  else /* as defined by surface */
-  { xlo = (int)floor((bbox_minx - extra - minclipx)*scale); 
+  else /* as defined by surface, but clipped by window */
+  { int i;
+    REAL bb_minx = bbox_minx; // local copy of bounding box
+    REAL bb_maxx = bbox_maxx;
+    REAL bb_miny = bbox_miny;
+    REAL bb_maxy = bbox_maxy;
+
+    // Expand bounding box to contain text.
+    for ( i = 0 ; i < MAXTEXTS ; i++ )
+    { 
+      if ( text_chunks[i].text )
+      { REAL line_ht = 1.3*text_chunks[i].vsize*2.8;  // 1.3 fudge factor for helvetica vs glut font
+        REAL char_wd = 1.3*text_chunks[i].vsize*1.4; 
+        REAL xleft = -1.4+2.8*text_chunks[i].start_x;
+        REAL xright = xleft;
+        REAL ybottom = -1.4+2.8*text_chunks[i].start_y - line_ht/3;
+        REAL ytop = ybottom + line_ht;
+
+        char *c;
+        for ( c = text_chunks[i].text ; *c ; c++ )
+        { if ( *c == '\n' )
+          { if ( xright > bb_minx ) bb_maxx = xright;
+            xright = xleft;
+            ybottom -= line_ht;
+          }
+          else 
+            xright += char_wd;
+        }
+     
+        if ( xleft < bb_minx ) bb_minx = xleft;
+        if ( xright > bb_maxx ) bb_maxx = xright;
+        if ( ybottom < bb_miny ) bb_miny = ybottom;
+        if ( ytop > bb_maxy ) bb_maxy = ytop;
+      }
+    }
+
+    // convert to points
+    xlo = (int)floor((bb_minx - extra - minclipx)*scale); 
+    xhi = (int)ceil((bb_maxx + extra - minclipx)*scale); 
+    ylo = (int)floor((bb_miny - extra - minclipy)*scale); 
+    yhi = (int)ceil((bb_maxy + extra - minclipy )*scale); 
+
+    // clip to window
     if ( xlo < 0 ) xlo = 0;
-    xhi = (int)ceil((bbox_maxx + extra - minclipx)*scale); 
     if ( xhi > xsize*scale ) xhi = (int)(xsize*scale);
-    ylo = (int)floor((bbox_miny - extra - minclipy)*scale); 
-    if ( ylo < 0 ) ylo = 0;
-    yhi = (int)ceil((bbox_maxy + extra - minclipy )*scale); 
+    if ( ylo < 0 ) ylo = 0; 
     if ( yhi > ysize*scale ) yhi = (int)(ysize*scale);
+
   }
   fprintf(fd,"%%%%BoundingBox: %d %d %d %d\n",xlo,ylo,xhi,yhi);
   fprintf(fd,"%%%%Title: (%s)\n",ps_file_name);
@@ -136,7 +176,7 @@ void ps_init()
   fprintf(fd,"%% Image is in %g\" x %g\" box aligned lower left on paper.\n",
       (DOUBLE)(xhi-xlo)/72.,(DOUBLE)(yhi-ylo)/72.);
   fputs("% Change relsize to alter relative size of labels and linewidths.\n",fd);
-  fprintf(fd,"/relsize %f def\n",ps_labelsize);
+  fprintf(fd,"/relsize %f def\n",(DOUBLE)ps_labelsize);
   fprintf(fd,"%f %f scale\n",(DOUBLE)scale,(DOUBLE)scale);
   fprintf(fd,"%f %f translate\n",(DOUBLE)(-minclipx),(DOUBLE)(-minclipy));
   fprintf(fd,"newpath %f %f moveto %f %f lineto %f %f \n",
@@ -145,7 +185,16 @@ void ps_init()
   fprintf(fd,"   lineto  %f %f lineto closepath clip\n",
         (DOUBLE)minclipx,(DOUBLE)maxclipy);
   fputs("1 setlinecap  1 setlinejoin\n",fd);
-  if ( ps_colorflag )
+  if ( ps_colorflag && ps_cmykflag )
+    { fputs("/fa { newpath setcmykcolor  moveto lineto\n",fd);
+      fputs("            lineto closepath fill } def % filled facet without edges\n\n",fd);
+      fputs("/fb {setcmykcolor 6 copy newpath moveto lineto\n",fd);
+      fputs("            lineto closepath fill 6 2 roll 6 copy} def % filled facet with edges\n\n",fd);
+      fputs("/fc {setcmykcolor .001 relsize mul setlinewidth 6 2 roll 6 copy} def % outline only\n\n",fd);
+      fputs("/edge {relsize mul setlinewidth setcmykcolor newpath moveto lineto stroke} def\n",fd);
+      fputs("/arcedge {relsize mul setlinewidth setcmykcolor newpath moveto arc stroke} def\n",fd);
+    }
+  else if ( ps_colorflag )
     { fputs("/fa { newpath setrgbcolor  moveto lineto\n",fd);
       fputs("            lineto closepath fill } def % filled facet without edges\n\n",fd);
       fputs("/fb {setrgbcolor 6 copy newpath moveto lineto\n",fd);
@@ -168,11 +217,13 @@ void ps_init()
     fputs("/vorad .022 relsize mul def\n",fd);
     fputs("/arrowrad vorad def\n",fd); 
 
+    if ( ps_colorflag && ps_cmykflag )
+      fputs("/edge { relsize mul setlinewidth setcmykcolor 4 copy  newpath",fd);
     if ( ps_colorflag )
       fputs("/edge { relsize mul setlinewidth setrgbcolor 4 copy  newpath",fd);
     else
       fputs("/edge { relsize mul setlinewidth 0 setgray 4 copy  newpath",fd);
-     fputs(" moveto lineto stroke\n",fd);
+    fputs(" moveto lineto stroke\n",fd);
     fputs("        /y2 exch def /x2 exch def /y1 exch def /x1 exch def\n",fd);
     fputs("        /dy y2 y1 sub def  /dx x2 x1 sub def\n",fd);
     fputs("        /mag dx dx mul dy dy mul add sqrt def\n",fd);
@@ -219,29 +270,41 @@ void ps_init()
       fputs("    newpath -.019 -.01 moveto show grestore } def \n",fd);
     }
   }
-  fprintf(fd,"/ew {%7.5f edge} def  %% normal string edge width\n",
-    ps_stringwidth);
-  fprintf(fd,"/fw {%7.5f edge} def  %% fixed edge width\n",
-    ps_fixededgewidth);
-  fprintf(fd,"/tw {%7.5f edge} def  %% triple edge width\n",ps_tripleedgewidth);
-  fprintf(fd,"/ww {%7.5f edge} def  %% edges on walls\n",ps_conedgewidth);
-  fprintf(fd,"/bw {%7.5f edge} def  %% bare edge width\n",ps_bareedgewidth);
-  fprintf(fd,"/gw {%7.5f edge} def  %% grid edge width\n",ps_gridedgewidth);
+  fprintf(fd,"/ew {%8.6f edge} def  %% normal string edge width\n",
+    (DOUBLE)ps_stringwidth);
+  fprintf(fd,"/fw {%8.6f edge} def  %% fixed edge width\n",
+    (DOUBLE)ps_fixededgewidth);
+  fprintf(fd,"/tw {%8.6f edge} def  %% triple edge width\n",
+     (DOUBLE)ps_tripleedgewidth);
+  fprintf(fd,"/ww {%8.6f edge} def  %% edges on walls\n",
+     (DOUBLE)ps_conedgewidth);
+  fprintf(fd,"/bw {%8.6f edge} def  %% bare edge width\n",
+     (DOUBLE)ps_bareedgewidth);
+  fprintf(fd,"/gw {%8.6f edge} def  %% grid edge width\n",
+     (DOUBLE)ps_gridedgewidth);
   fprintf(fd,"/no {pop pop pop pop} def        %% no edge \n");
+  if ( ps_colorflag && ps_cmykflag )
+    fprintf(fd,"/noc {pop pop pop pop pop pop pop pop} def        %% no edge (pop colors also) \n");
+  else if ( ps_colorflag )
+    fprintf(fd,"/noc {pop pop pop pop pop pop pop} def        %% no edge (pop colors also) \n");
+  else 
+    fprintf(fd,"/noc {pop pop pop pop} def        %% no edge \n");
   if (crossingflag > 0) /* redefine edge and gw */
   {
-     if ( ps_colorflag )
-     fputs("/edge { 8 copy .002 add relsize mul setlinewidth 0 setlinecap 1 setgray pop pop pop\n",fd);
+     if ( ps_colorflag && ps_cmykflag )
+       fputs("/edge { 9 copy .002 add relsize mul setlinewidth 0 setlinecap 0 0 0 1 setcmykcolor pop pop pop pop\n",fd);
+     else if ( ps_colorflag )
+       fputs("/edge { 8 copy .002 add relsize mul setlinewidth 0 setlinecap 1 setgray pop pop pop\n",fd);
      else
-     fputs("/edge { 5 copy .002 add relsize mul setlinewidth 0 setlinecap 1 setgray\n",fd);
+       fputs("/edge { 5 copy .002 add relsize mul setlinewidth 0 setlinecap 1 setgray\n",fd);
      fputs("    newpath moveto lineto stroke setlinewidth 2 setlinecap\n",fd);
      if ( ps_colorflag )
-     fputs("    setrgbcolor newpath moveto lineto stroke} def\n",fd);
+       fputs("    setrgbcolor newpath moveto lineto stroke} def\n",fd);
      else
-     fputs("    0 setgray newpath moveto lineto stroke} def\n",fd);
+       fputs("    0 setgray newpath moveto lineto stroke} def\n",fd);
      fputs("/gw {0.002 edge} def\n",fd);
   }
-}
+} // end ps_init()
 
 /************************************************************
 *
@@ -250,8 +313,7 @@ void ps_init()
 *  Purpose: Graphs one edge, already transformed.
 */
 
-void ps_edge(t)
-struct tsort *t;
+void ps_edge(struct tsort *t)
 { int i;
 
   if ( t->color == CLEAR ) return;
@@ -270,8 +332,8 @@ struct tsort *t;
      { /* practically straight line */
        for ( i = 0 ; i < SDIM ; i++ )
           t->x[1][i] = t->x[2][i];
-       fprintf(fd,"  %7.4f %7.4f ",(DOUBLE)t->x[0][0],(DOUBLE)t->x[0][1]);
-       fprintf(fd,"  %7.4f %7.4f ",(DOUBLE)t->x[1][0],(DOUBLE)t->x[1][1]);
+       fprintf(fd,"  %7.5f %7.5f ",(DOUBLE)t->x[0][0],(DOUBLE)t->x[0][1]);
+       fprintf(fd,"  %7.5f %7.5f ",(DOUBLE)t->x[1][0],(DOUBLE)t->x[1][1]);
        t->flag &= ~EDGE_ARC;
      }
      else
@@ -282,13 +344,15 @@ struct tsort *t;
        angle1 = 180/M_PI*atan2(t->x[0][1]-center[1],t->x[0][0]-center[0]);
        angle2 = 180/M_PI*atan2(t->x[2][1]-center[1],t->x[2][0]-center[0]);
        if ( det > 0 )
-       { fprintf(fd," %7.4f %7.4f %7.4f %7.4f %7.4f %7.4f %7.4f ",
-         center[0],center[1],
-         radius,angle1,angle2,(DOUBLE)t->x[0][0],(DOUBLE)t->x[0][1]);
+       { fprintf(fd," %7.5f %7.5f %7.5f %7.5f %7.5f %7.5f %7.5f ",
+         (DOUBLE)center[0],(DOUBLE)center[1],
+         (DOUBLE)radius,(DOUBLE)angle1,(DOUBLE)angle2,
+         (DOUBLE)t->x[0][0],(DOUBLE)t->x[0][1]);
        } else
-       { fprintf(fd," %7.4f %7.4f %7.4f %7.4f %7.4f %7.4f %7.4f ",
-           center[0],center[1],
-         radius,angle2,angle1,(DOUBLE)t->x[2][0],(DOUBLE)t->x[2][1]);
+       { fprintf(fd," %7.5f %7.5f %7.5f %7.5f %7.5f %7.5f %7.5f ",
+           (DOUBLE)center[0],(DOUBLE)center[1],
+           (DOUBLE)radius,(DOUBLE)angle2,(DOUBLE)angle1,
+           (DOUBLE)t->x[2][0],(DOUBLE)t->x[2][1]);
        }
      }
   }
@@ -299,34 +363,39 @@ struct tsort *t;
 */
   else
   {
-    fprintf(fd,"  %7.4f %7.4f ",(DOUBLE)t->x[0][0],(DOUBLE)t->x[0][1]);
-    fprintf(fd,"  %7.4f %7.4f ",(DOUBLE)t->x[1][0],(DOUBLE)t->x[1][1]);
+    fprintf(fd,"  %7.5f %7.5f ",(DOUBLE)t->x[0][0],(DOUBLE)t->x[0][1]);
+    fprintf(fd,"  %7.5f %7.5f ",(DOUBLE)t->x[1][0],(DOUBLE)t->x[1][1]);
   }
   /* orientation for arrow label */
   if ( labelflag && (t->etype[0] & LABEL_REVERSED) )
      fprintf(fd," 4 2 roll ");
   /* color, if wanted */
   if ( ps_colorflag > 0 )
-     for ( i = 0 ; i < 3 ; i++ )
+  { if ( ps_cmykflag )
+      for ( i = 0 ; i < 4 ; i++ )
+        fprintf(fd," %5.3f",(DOUBLE)cmyk_colors[t->color][i]);
+    else     
+      for ( i = 0 ; i < 3 ; i++ )
         fprintf(fd," %5.3f",(DOUBLE)rgb_colors[t->color][i]);
+  }
   /* width of edge */
   if ( t->flag & EDGE_ARC )
   { if ( ps_widthattr >= 0 ) 
-      fprintf(fd," %5.3f arcedge ",*EREAL(t->f_id,ps_widthattr));
-    else fprintf(fd," %5.3f arcedge\n",ps_stringwidth);
+      fprintf(fd," %8.6f arcedge ",(DOUBLE)*EREAL(t->f_id,ps_widthattr));
+    else fprintf(fd," %8.6f arcedge\n",(DOUBLE)ps_stringwidth);
   } 
   else
   {
-  if ( ps_widthattr >= 0 ) 
-    fprintf(fd," %5.3f edge ",*EREAL(t->f_id,ps_widthattr));
-  else if ( web.representation == STRING ) fprintf(fd," ew\n");
-  else if ( t->etype[0] & BARE_EDGE ) fprintf(fd," bw\n");
-  else if ( t->etype[0] & FIXED_EDGE ) fprintf(fd," fw\n");
-  else if ( t->etype[0] & CONSTRAINT_EDGE ) fprintf(fd," ww\n");
-  else if ( t->etype[0] & BOUNDARY_EDGE ) fprintf(fd," ww\n");
-  else if ( t->etype[0] & SINGLE_EDGE ) fprintf(fd," ww\n");
-  else if ( t->etype[0] & TRIPLE_EDGE ) fprintf(fd," tw\n");
-  else fprintf(fd," gw\n"); /* regular grid interior edge */
+    if ( ps_widthattr >= 0 ) 
+      fprintf(fd," %8.6f edge \n",(DOUBLE)*EREAL(t->f_id,ps_widthattr));
+    else if ( web.representation == STRING ) fprintf(fd," ew\n");
+    else if ( t->etype[0] & BARE_EDGE ) fprintf(fd," bw\n");
+    else if ( t->etype[0] & FIXED_EDGE ) fprintf(fd," fw\n");
+    else if ( t->etype[0] & CONSTRAINT_EDGE ) fprintf(fd," ww\n");
+    else if ( t->etype[0] & BOUNDARY_EDGE ) fprintf(fd," ww\n");
+    else if ( t->etype[0] & SINGLE_EDGE ) fprintf(fd," ww\n");
+    else if ( t->etype[0] & TRIPLE_EDGE ) fprintf(fd," tw\n");
+    else fprintf(fd," gw\n"); /* regular grid interior edge */
   }
 
   if ( labelflag>0 )
@@ -352,22 +421,22 @@ struct tsort *t;
 
      if ( (t->flag & LABEL_TAIL) && (strlen(tv) > 0) )
        fprintf(fd," (%s) %f %f vertex%1d\n",tv,
-        (DOUBLE)t->x[0][0],(DOUBLE)t->x[0][1],strlen(tv));
+        (DOUBLE)t->x[0][0],(DOUBLE)t->x[0][1],(int)strlen(tv));
      if ( (t->flag & LABEL_HEAD) && (strlen(hv) > 0) )
        fprintf(fd," (%s) %f %f vertex%1d\n",hv,
-        (DOUBLE)t->x[1][0],(DOUBLE)t->x[1][1],strlen(hv));
+        (DOUBLE)t->x[1][0],(DOUBLE)t->x[1][1],(int)strlen(hv));
      if ( (t->flag & LABEL_EDGE) && (strlen(en) > 0) )
      { if ( inverted(t->f_id) )
        fprintf(fd," (%s) %f %f edgenum%1d\n",en,
         (DOUBLE)((3*t->x[0][0]+2*t->x[1][0])/5),
-        (DOUBLE)(3*t->x[0][1]+2*t->x[1][1])/5,strlen(en));
+        (DOUBLE)(3*t->x[0][1]+2*t->x[1][1])/5,(int)strlen(en));
        else 
        fprintf(fd," (%s) %f %f edgenum%1d\n",en,
         (DOUBLE)((2*t->x[0][0]+3*t->x[1][0])/5),
-        (DOUBLE)(2*t->x[0][1]+3*t->x[1][1])/5,strlen(en));
+        (DOUBLE)(2*t->x[0][1]+3*t->x[1][1])/5,(int)strlen(en));
      }
   }
-}
+} // end ps_edge()
 
 
 /***************************************************************************
@@ -377,8 +446,7 @@ struct tsort *t;
 *  Purpose: Graphs one facet, already transformed.
 */
 
-void ps_facet(t)
-struct tsort *t;
+void ps_facet(struct tsort *t)
 { int i,j;
   char line[200];
   char *ptr = line;
@@ -389,12 +457,12 @@ struct tsort *t;
      { REAL gray;
         REAL denom;
         denom = sqrt(dotf(t->normal,t->normal,3));
-        if ( denom == 0.0 ) return;
-        sprintf(ptr," %7.4f %7.4f",(DOUBLE)t->x[0][0],(DOUBLE)t->x[0][1]); 
+        if ( denom == 0.0 ) goto do_the_edges;
+        sprintf(ptr," %7.5f %7.5f",(DOUBLE)t->x[0][0],(DOUBLE)t->x[0][1]); 
         ptr+=strlen(ptr);
-        sprintf(ptr," %7.4f %7.4f",(DOUBLE)t->x[1][0],(DOUBLE)t->x[1][1]); 
+        sprintf(ptr," %7.5f %7.5f",(DOUBLE)t->x[1][0],(DOUBLE)t->x[1][1]); 
         ptr+=strlen(ptr);
-        sprintf(ptr," %7.4f %7.4f",(DOUBLE)t->x[2][0],(DOUBLE)t->x[2][1]); 
+        sprintf(ptr," %7.5f %7.5f",(DOUBLE)t->x[2][0],(DOUBLE)t->x[2][1]); 
         ptr+=strlen(ptr);
         if ( shading_flag )
           gray = gray_level(t->normal);
@@ -402,25 +470,42 @@ struct tsort *t;
         if ( ps_colorflag > 0 )
         { int c = t->color;
           if ( facet_rgb_color_attr > 0 )
-            sprintf(ptr," %5.3f %5.3f %5.3f ",((c>>24)&0xFF)/255.*gray,
-                  ((c>>16)&0xFF)/255.*gray, ((c>>8)&0xFF)/255.*gray);
+            sprintf(ptr," %5.3f %5.3f %5.3f ",
+               (DOUBLE)(((c>>24)&0xFF)/255.*gray),
+               (DOUBLE)(((c>>16)&0xFF)/255.*gray), 
+               (DOUBLE)(((c>>8)&0xFF)/255.*gray));
           else
-          for ( i = 0 ; i < 3 ; i++ )
-          { sprintf(ptr," %5.3f",
-              (DOUBLE)(rgb_colors[t->color>=0?t->color:0][i]*gray)); 
-            ptr+=strlen(ptr);
+          { if ( ps_cmykflag )
+            { 
+              REAL c,m,y,k; // tricky gray conversion
+              c = 1.0 - rgb_colors[t->color>=0?t->color:0][0]*gray;
+              m = 1.0 - rgb_colors[t->color>=0?t->color:0][1]*gray;
+              y = 1.0 - rgb_colors[t->color>=0?t->color:0][2]*gray;
+              k = (c < m) ? c : m;
+              k = (k < y) ? k : y;
+              sprintf(ptr," %5.3f %5.3f %5.3f %5.3f ",(DOUBLE)(c-k),
+                (DOUBLE)(m-k),(DOUBLE)(y-k),(DOUBLE)(k));
+              ptr+=strlen(ptr);
+            }
+            else
+            { for ( i = 0 ; i < 3 ; i++ )
+              { sprintf(ptr," %5.3f",
+                  (DOUBLE)(rgb_colors[t->color>=0?t->color:0][i]*gray)); 
+                ptr+=strlen(ptr);
+              }
+            }
           }
         }
         else
           { sprintf(ptr,"  %f ",(DOUBLE)gray); ptr += strlen(ptr); }
      }
-    if ( web.hide_flag && (t->color != CLEAR) && (t->color != UNSHOWN) )
+    if ( (t->color != CLEAR) && (t->color != UNSHOWN) )
     { strcat(ptr," fb "); do_flag = 1; }
     else 
         strcat(ptr," fc ");
 
     /* designated edges */
-
+do_the_edges:
     for ( i = 0 ; i < FACET_VERTS ; i++ )
       if ( (t->ecolor[i] == CLEAR) || 
       (((gridflag<=0) || (t->color==UNSHOWN)) && 
@@ -439,21 +524,30 @@ struct tsort *t;
           if ( edge_rgb_color_attr > 0 )
             sprintf(ptr," %5.3f %5.3f %5.3f ",((c>>24)&0xFF)/255.,
                   ((c>>16)&0xFF)/255., ((c>>8)&0xFF)/255.);
-          else for ( j = 0 ; j < 3 ; j++ )
-           { sprintf(ptr," %5.3f",(DOUBLE)rgb_colors[c][j]); 
-             ptr += strlen(ptr);
-           }
+          else 
+          { if ( ps_cmykflag )
+            { for ( j = 0 ; j < 4 ; j++ )
+              { sprintf(ptr," %5.3f",(DOUBLE)cmyk_colors[c][j]); 
+                ptr += strlen(ptr);
+              }
+            } else
+            { for ( j = 0 ; j < 3 ; j++ )
+              { sprintf(ptr," %5.3f",(DOUBLE)rgb_colors[c][j]); 
+                ptr += strlen(ptr);
+              }
+            }
+          }
          }
          /* width of edge, in descending order of thickness */
          ii = (i==2)?0:(i+1);
          if ( (t->x[ii][0]-t->x[i][0])*(t->x[ii][0]-t->x[i][0]) + 
               (t->x[ii][1]-t->x[i][1])*(t->x[ii][1]-t->x[i][1])  < 1e-10 )
-           strcat(line," no");
+           strcat(line," noc");
          else if ( (ps_widthattr >= 0) && valid_id(t->f_id) ) 
          { facetedge_id fe = get_facet_fe(t->f_id);
            for ( j = 0 ; j < i ; j++ ) fe = get_next_edge(fe);
            sprintf(line+strlen(line)," %7.5f edge ",
-                *EREAL(get_fe_edge(fe),ps_widthattr));
+                (DOUBLE)*EREAL(get_fe_edge(fe),ps_widthattr));
          }
          else if ( t->etype[i] & BARE_EDGE ) strcat(line," bw");
          else if ( t->etype[i] & FIXED_EDGE ) strcat(line," fw");
@@ -488,6 +582,11 @@ if ( edgeredrawflag )
              sprintf(line,"%10.6f %10.6f %10.6f %10.6f  %5.3f %5.3f %5.3f ",
               t->x[i][0],t->x[i][1],t->x[i][0]+ep->x[0],t->x[i][1]+ep->x[1],
               ((c>>24)&0xFF)/255., ((c>>16)&0xFF)/255., ((c>>8)&0xFF)/255.);
+           else if ( ps_cmykflag )
+             sprintf(line,"%10.6f %10.6f %10.6f %10.6f  %5.3f %5.3f %5.3f %5.3f ",
+              t->x[i][0],t->x[i][1],t->x[i][0]+ep->x[0],t->x[i][1]+ep->x[1],
+              (DOUBLE)cmyk_colors[c][0],(DOUBLE)cmyk_colors[c][1],
+              (DOUBLE)cmyk_colors[c][2],(DOUBLE)cmyk_colors[c][3]);
            else
              sprintf(line,"%10.6f %10.6f %10.6f %10.6f  %5.3f %5.3f %5.3f ",
               t->x[i][0],t->x[i][1],t->x[i][0]+ep->x[0],t->x[i][1]+ep->x[1],
@@ -610,7 +709,7 @@ if ( edgeredrawflag )
        fprintf(fd," (%c%s) %f %f facenum%d\n",
           (t->flag&FLIPPED_FACET)?'+':'-',fn,
          (DOUBLE)(t->x[0][0]+t->x[1][0]+t->x[2][0])/3,
-         (DOUBLE)(t->x[0][1]+t->x[1][1]+t->x[2][1])/3,strlen(fn));
+         (DOUBLE)(t->x[0][1]+t->x[1][1]+t->x[2][1])/3,(int)strlen(fn));
      fe = get_facet_fe(t->f_id);
      if ( valid_id(fe) )
      for ( i = 0 ; i < FACET_EDGES ; i++ , fe = get_next_edge(fe) )
@@ -648,10 +747,10 @@ if ( edgeredrawflag )
 
         if ( tv && (strlen(tv) > 0) )
         fprintf(fd,"(%s) %f %f vertex%1d\n",tv,(DOUBLE)t->x[ii][0],
-                (DOUBLE)t->x[ii][1],strlen(tv));
+                (DOUBLE)t->x[ii][1],(int)strlen(tv));
         if ( hv && (strlen(hv) > 0) )
         fprintf(fd,"(%s) %f %f vertex%1d\n",hv,(DOUBLE)t->x[jj][0],
-                (DOUBLE)t->x[jj][1],strlen(hv));
+                (DOUBLE)t->x[jj][1],(int)strlen(hv));
 
         a = .35;
         if ( en && (strlen(en) > 0) )
@@ -659,16 +758,24 @@ if ( edgeredrawflag )
           if ( inverted(e_id) )
            fprintf(fd," (%s) %f %f edgenum%1d\n",en,
             (DOUBLE)((1-a)*t->x[ii][0]+a*t->x[jj][0]),
-            (DOUBLE)((1-a)*t->x[ii][1]+a*t->x[jj][1]),strlen(en));
+            (DOUBLE)((1-a)*t->x[ii][1]+a*t->x[jj][1]),(int)strlen(en));
           else
            fprintf(fd," (%s) %f %f edgenum%1d\n",en,
             (DOUBLE)(a*t->x[ii][0]+(1-a)*t->x[jj][0]),
-            (DOUBLE)(a*t->x[ii][1]+(1-a)*t->x[jj][1]),strlen(en));
+            (DOUBLE)(a*t->x[ii][1]+(1-a)*t->x[jj][1]),(int)strlen(en));
         }
 
      }
   }
-}
+} // end ps_facet()
+
+/*********************************************************************
+* 
+* Function: ps_text()
+*
+* Purpose: Write the display text strings.
+*/
+
 
 /*************************************************************
 *
@@ -680,24 +787,41 @@ if ( edgeredrawflag )
 void ps_finish()
 { int i;
 
+ 
   /* do text */
-  fputs("\n/Helvetica findfont .10 scalefont setfont\n",fd);
-  fputs("0 setgray\n",fd);
   for ( i = 0 ; i < MAXTEXTS ; i++ )
   {
-    REAL xspot = -1.4+2.8*text_chunks[i].start_x;
-    REAL yspot = -1.4+2.8*text_chunks[i].start_y;
     if ( text_chunks[i].text )
     { char *c;
-      fprintf(fd,"%f %f moveto (",xspot,yspot);
+      REAL xspot = -1.4+2.8*text_chunks[i].start_x;
+      REAL yspot = -1.4+2.8*text_chunks[i].start_y;
+      REAL line_ht = 1.3*text_chunks[i].vsize*2.8; // 1.3 fudge factor for helvetica vs glut font
+
+      fprintf(fd,"\n/Helvetica findfont %f scalefont setfont\n",line_ht);
+      fputs("0 setgray\n",fd);
+      fprintf(fd,"%f %f moveto (",(DOUBLE)xspot,(DOUBLE)yspot);
       for ( c = text_chunks[i].text ; *c ; c++ )
-      { if ( *c == '\n' )
-        { fprintf(fd,") show\n");
-          yspot -= .10;
-          fprintf(fd,"%f %f moveto (",xspot,yspot);
+      { switch ( *c )
+        { case '\n':
+            fprintf(fd,") show\n");
+            yspot -= line_ht;
+            fprintf(fd,"%f %f moveto (",(DOUBLE)xspot,(DOUBLE)yspot);
+            break;
+          case '\t':
+            fprintf(fd,"\\t");
+            break;
+          case '\\': 
+            fprintf(fd,"\\\\");
+            break;
+          case '(':
+            fprintf(fd,"\\(");
+            break;
+          case ')':
+            fprintf(fd,"\\)");
+            break;
+          default: 
+            fprintf(fd,"%c",*c);
         }
-        else 
-          fprintf(fd,"%c",*c);
       }
       fprintf(fd,") show\n");
     }
@@ -709,4 +833,4 @@ void ps_finish()
   ps_file_name[0] = 0;
   temp_free((char*)edgeredrawhead);
   temp_free((char*)edgeredrawlist);
-}
+} // end ps_finish()

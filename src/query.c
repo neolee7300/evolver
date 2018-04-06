@@ -33,8 +33,7 @@ int commandverb;
 * purpose:  Appends command to history list, queue fashion.
 */
 
-void new_history ARGS1((text),
-char *text)
+void new_history(char *text)
 { size_t length;
   int k;
 
@@ -59,7 +58,7 @@ char *text)
   history_offsets[0] = 0;
   if ( history_count < MAXHISTORY-1 ) history_count++;
   history_number++;
-}
+} // end new_history()
 
 /**************************************************************************
 *  
@@ -69,8 +68,7 @@ char *text)
 * return:   retval from command()
 */
 
-int old_history ARGS1((text),
-char *text)
+int old_history(char *text)
 { char *h;
   int k;
   int hnum;
@@ -111,7 +109,7 @@ do_old:
   outstring(h);outstring("\n");
   retval = command(h,ADD_TO_HISTORY);  /* reinserts fulltext copy in history list */
   return retval;
-}
+} // end old_history()
 
 /**************************************************************************
 *  
@@ -120,10 +118,8 @@ do_old:
 * purpose:  catenates line to full text of command
 */
 
-void catfulltext ARGS1((stuff),
-char *stuff)
+void catfulltext(char *stuff)
 {
-
   if ( fulltextsize > MAXCMDSIZE-3 ) return; /* too long */
   if ( fulltextsize > 0 ) 
      { strcat(fulltext,"  "); /* indentation */
@@ -134,7 +130,7 @@ char *stuff)
   if ( fulltext[fulltextsize-1] != '\n' ) fulltext[fulltextsize++] = '\n';
   fulltext[fulltextsize] = '\0';
 
-}
+} // end catfulltext()
 
 /**************************************************************************
 *  
@@ -146,9 +142,10 @@ char *stuff)
 *          0 else
 */
 
-int command ARGS2((text,mode),
-char *text,
-int mode) /* NO_HISTORY or ADD_TO_HISTORY */
+int command(
+  char *text,
+  int mode /* NO_HISTORY or ADD_TO_HISTORY */
+)
 {
   struct expnode qnode;  /* for query expression */
   int retval = 0;
@@ -164,7 +161,7 @@ int mode) /* NO_HISTORY or ADD_TO_HISTORY */
   old_list = list; old_listtop = listtop; /* for nested parsing */
   listmax = 30;
   list = (struct treenode *)mycalloc(listmax,sizeof(struct treenode));
-  list[1].type = SETUP_FRAME_;
+  list[1].type = SETUP_FRAME_NODE;
   listtop = 2;
   loopdepth = 0;
   parse_error_flag = 0;
@@ -192,7 +189,7 @@ int mode) /* NO_HISTORY or ADD_TO_HISTORY */
   old_global_count = web.global_count; /* for error recovery */
   old_perm_global_count = web.perm_global_count; /* for error recovery */
   /* local_nest_depth = 0; */
-  init_local_scope(0);
+  init_local_scope(0,0);
   fulltextsize = 0; 
   catfulltext(text);
 
@@ -213,11 +210,11 @@ int mode) /* NO_HISTORY or ADD_TO_HISTORY */
 
   qnode.start=list;
   qnode.root = list + listtop - 1;
-  if ( qnode.root->type == SETUP_FRAME_ ) /* empty command */
+  if ( qnode.root->type == SETUP_FRAME_NODE ) /* empty command */
   { retval = 0;
     goto command_exit;
   }
-  if ( qnode.root->type != CMDLIST_ )  /* expression or something */
+  if ( qnode.root->type != CMDLIST_NODE )  /* expression or something */
      kb_error(1589,"Illegal command.\n",COMMAND_ERROR);
   
 
@@ -226,7 +223,7 @@ int mode) /* NO_HISTORY or ADD_TO_HISTORY */
   if ( list[0].right ) list[0].right += listtop - 1;
 
   /* put DONE marker after root */
-  list[listtop++].type = FINISHED;
+  list[listtop++].type = FINISHED_NODE;
 
   /* figure stack usage */
   stack_usage(&qnode);
@@ -245,6 +242,8 @@ int mode) /* NO_HISTORY or ADD_TO_HISTORY */
   /* initialize current element to NULLID */
   aggregate_depth = 0; calc_quant_flag = 0;
   exit_flag = 0;
+  if ( subshell_depth == 0 ) 
+    eval_stack_trace_spot = 0;
   eval(&qnode,NULL,NULLID,NULL);
   retval = exit_flag ? END_COMMANDS : 1;
   exit_flag = 0;
@@ -271,7 +270,7 @@ command_exit:
     return 0; 
   }
 #endif
-}
+} // end command()
 
 /*************************************************************************
 *
@@ -281,8 +280,7 @@ command_exit:
 *
 */
 
-void stack_usage ARGS1((ex ),
-struct expnode *ex)
+void stack_usage(struct expnode *ex)
 { int usage = 0;
   struct treenode *node ;
 #ifdef _DEBUG
@@ -290,13 +288,13 @@ struct expnode *ex)
 #endif
   
   ex->stack_max = 0;
-  for ( node = ex->start+1 ; node->type != FINISHED ; node++ )
+  for ( node = ex->start+1 ; node->type != FINISHED_NODE ; node++ )
   { usage += node->stack_delta;
     if ( usage > ex->stack_max ) ex->stack_max = usage;
 #ifdef _DEBUG
     if ( (usage < 0) && (!didwarn) ) 
-    { sprintf(errmsg,"Internal error: stack usage negative, node type %d.\n",
-        node->type);
+    { sprintf(errmsg,"Internal error: stack usage negative, %d, node type %d.\n",
+        usage,node->type);
       sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
          file_names[node->file_no],node->line_no);
       kb_error(2670,errmsg,WARNING);
@@ -305,7 +303,7 @@ struct expnode *ex)
     node->stack_spot = usage;
 #endif
   }
-}
+} // end stack_usage()
 
 /***********************************************************************
 *
@@ -316,9 +314,10 @@ struct expnode *ex)
 *          ill-advised.   Recursively transverses tree pre-order.
 */
 
-void mark_element_loops(root,mark)
-struct treenode *root;
-int mark;  /* whether root in loop */
+void mark_element_loops(
+  struct treenode *root,
+  int mark /* whether root in loop */
+)
 { if ( mark ) 
     root->flags |= IN_ELEMENT_LOOP;
   else mark = root->flags & IN_ELEMENT_LOOP;
@@ -327,21 +326,19 @@ int mark;  /* whether root in loop */
     mark_element_loops(root+root->left,mark);
   if ( root->right )
     mark_element_loops(root+root->right,mark);
-}
+} // end mark_element_loops()
 
 /************************************************************************
 *
-* function: print_profiling()
+* function: commaize()
 *
-* purpose: Print profiling elapsed times.  Prints comma form of clock
-8          counts.
+* purpose: put commas in integers at end of string 
 */
 
-void commaize(s)   /* put commas in integers at end of string */
-char *s;
+void commaize(char *s)
 { int n,k,groups,j;
   
-  k = strlen(s);
+  k = (int)strlen(s);
   
   while ( k > 0 )
   {
@@ -361,22 +358,32 @@ char *s;
       }
     }
   }
-}
+} // end commaize()
   
+/************************************************************************
+*
+* function: print_profiling()
+*
+* purpose: Print profiling elapsed times.  Prints comma form of clock
+8          counts.
+*/
+
 void print_profiling()
 { 
   #ifdef PROF_EVALS
   int i,k;
   int do_flag = 0;
 
-  outstring("\nInclusive profiling counts: \n");
-  outstring("                      Name            CPU Cycles\n");
+  outstring("\nExclusive profiling counts (i.e. not including children): \n");
+  outstring("                                  Name               Calls            CPU Cycles\n");
   for ( i = 0 ; i < web.global_count ; i++ )
-  {
-    if ( globals(i)->flags & (FUNCTION_NAME|PROCEDURE_NAME|SUBROUTINE) )
-    { 
-      sprintf(msg,"  %30s     %15.f\n",globals(i)->name,
-          globals(i)->value.proc.elapsed_time);
+  { struct global *g = globals(i);
+    if ( g->flags & (FUNCTION_NAME|PROCEDURE_NAME|SUBROUTINE) )
+    { if (g->value.proc.elapsed_time < 0.0 || g->value.proc.elapsed_time > 1e14 )
+       sprintf(msg,"  %36s     %15d  -- interrupted timing --\n",g->name,
+        g->value.proc.call_count);
+      else sprintf(msg,"  %36s     %15d  %20.f\n",g->name,
+        g->value.proc.call_count,g->value.proc.elapsed_time);
       commaize(msg); 
       outstring(msg);
     }
@@ -397,20 +404,24 @@ void print_profiling()
   }
 
   for ( i = LOW_INST, do_flag = 0 ; i < meth_inst_count ; i++ )
-	  if ( METH_INSTANCE(i)->expr[0] )
+  { if ( METH_INSTANCE(i)->flags & Q_DELETED ) continue;
+	if ( METH_INSTANCE(i)->expr[0] )
 		  do_flag = 1;
+  }
+
   if ( do_flag )
   {
     outstring("\nMethod instance expressions:\n");
-    outstring("                     Method instance            CPU Cycles\n");
+    outstring("                     Method instance                CPU Cycles\n");
     for ( i = LOW_INST; i < meth_inst_count ; i++ )
     { REAL total_time = 0.0;
       struct method_instance *mi = METH_INSTANCE(i);
+      if ( mi->flags & Q_DELETED ) continue;
 	  for ( k = 0 ; k < MAXMEXPR ; k++ )
 		if ( mi->expr[k] )
 			total_time += mi->expr[k]->elapsed_time;
 		else break;
-      sprintf(msg,"  %40s %15.f\n",mi->name,total_time);
+      sprintf(msg,"  %40s     %15.f\n",mi->name,total_time);
 	  commaize(msg);
 	  outstring(msg);
     }
@@ -422,7 +433,7 @@ void print_profiling()
   if ( do_flag )
   { 
     outstring("\nBoundary expressions:\n");
-    outstring("                    Boundary  Formula Cycles   Energy Cycles  Content Cycles\n");
+    outstring("                    Boundary     Formula Cycles      Energy Cycles     Content Cycles\n");
     for ( i = 0 ; i < web.bdrymax ; i++ )
     { REAL coord_time = 0.0;
       REAL energy_time = 0.0;
@@ -439,7 +450,7 @@ void print_profiling()
 	    if ( b->convect[k] )
 			content_time += b->convect[k]->elapsed_time;
 	  }	
-      sprintf(msg,"%30s %15.f %15.f %15.f\n",b->name,coord_time,energy_time,content_time);
+      sprintf(msg,"%30s    %15.f    %15.f    %15.f\n",b->name,coord_time,energy_time,content_time);
 	  commaize(msg);
 	  outstring(msg);
     }
@@ -451,7 +462,7 @@ void print_profiling()
   if ( do_flag )
   {
     outstring("\nConstraint expressions\n");
-    outstring("                    Constraint  Formula Cycles   Energy Cycles  Content Cycles\n");
+    outstring("                    Constraint     Formula Cycles      Energy Cycles     Content Cycles\n");
     for ( i = 0 ; i < web.maxcon ; i++ )
     { struct constraint *con = get_constraint(i);
       REAL coord_time = 0.0;
@@ -468,7 +479,7 @@ void print_profiling()
 	    if ( con->convect[k] )
 			content_time += con->convect[k]->elapsed_time;
 	  }	
-      sprintf(msg,"%30s %15.f %15.f %15.f\n",con->name,coord_time,energy_time,content_time);
+      sprintf(msg,"%30s    %15.f    %15.f    %15.f\n",con->name,coord_time,energy_time,content_time);
 	  commaize(msg);
 	  outstring(msg);
     }
@@ -476,7 +487,7 @@ void print_profiling()
   #else
   outstring("Evaluation profiling not enabled; compile with PROF_EVALS.\n");
   #endif
-}
+} // end print_profiling()
 
 
 /************************************************************************
@@ -491,20 +502,19 @@ void reset_profiling()
   for ( i = 0 ; i < web.global_count ; i++ )
   {
     if ( globals(i)->flags & (FUNCTION_NAME|PROCEDURE_NAME|SUBROUTINE) )
-      globals(i)->value.proc.elapsed_time = 0.0;
-
+    { globals(i)->value.proc.elapsed_time = 0.0;
+      globals(i)->value.proc.call_count = 0;
+    }
   }
  
     for ( i = 0 ; i < NUMELEMENTS ; i++ )
     { show_expr_table[i].elapsed_time = 0.0;
     }
   
-
- 
-
     for ( i = LOW_INST; i < meth_inst_count ; i++ )
     { 
       struct method_instance *mi = METH_INSTANCE(i);
+      if ( mi->flags & Q_DELETED ) continue;
 	  for ( k = 0 ; k < MAXMEXPR ; k++ )
 		if ( mi->expr[k] )
 			mi->expr[k]->elapsed_time = 0.0;
@@ -538,7 +548,7 @@ void reset_profiling()
 	  }	
     }
   
-}
+} // end reset_profiling()
 
 /***************************************************************************
 *
@@ -604,11 +614,16 @@ void mark_recalc_params()
   for ( k = LOW_INST  ; k < meth_inst_count  ; k++ )
   { struct method_instance * mi = METH_INSTANCE(k); /* since some init may move things */
     struct gen_quant *q;
-    if ( mi->quant >= 0 ) q = GEN_QUANT(mi->quant);
-    else continue;
-    if ( !(q->flags & Q_ENERGY) ) continue;
-    for ( i = 0 ; i < MAXMEXPR ; i++ )
-      mark_recalc_expr(mi->expr[i]);
+    if ( mi->flags & Q_DELETED ) continue;
+    for ( j = 0 ; j < MMAXQUANTS ; j++ )
+    {
+      if ( mi->quants[j] == -1 ) 
+       continue;
+      q = GEN_QUANT(mi->quants[j]);
+      if ( !(q->flags & Q_ENERGY) ) continue;
+      for ( i = 0 ; i < MAXMEXPR ; i++ )
+        mark_recalc_expr(mi->expr[i]);
+    }
   }
  
 } /* end mark_recalc_params() */
@@ -622,8 +637,7 @@ void mark_recalc_params()
 *
 * return: how many new ones marked
 */
-int mark_recalc_expr(ex)
-struct expnode *ex;
+int mark_recalc_expr(struct expnode *ex)
 { int count = 0 ;
   struct treenode *node;
 
@@ -631,7 +645,7 @@ struct expnode *ex;
   if ( ex->start == NULL ) return 0;
 
   for ( node = ex->start ; node != ex->root ; node ++  )
-    if ( node->type == PUSHGLOBAL_ )
+    if ( node->type == PUSHGLOBAL_NODE )
     { struct global *g;
       if ( (node->op1.name_id &(~GLOBMASK))==LOCALVAR )
          continue; 

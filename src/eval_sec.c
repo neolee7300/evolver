@@ -13,8 +13,8 @@
 */
 
 /* NOTE: Compiling with full optimization in Visual Studio .NET beta 1
-   takes a very long time, like an hour.  Seems to be due to "global
-   optimization" option.  Set optimization to custom, just for speed,
+   takes a very long time, like an hour.  Seems to be due to 'global
+   optimization' option.  Set optimization to custom, just for speed,
    in file properties in project.
 */
 
@@ -27,7 +27,7 @@
                     for ( j = 0 ; j < pcount ; j++ ) stacktop->second[i][j] 
 
 /* to save a little code size */
-void zero_seconds ARGS((int, struct dstack *));
+void zero_seconds (int, struct dstack *);
 void zero_seconds (pcount, stacktop)
 int pcount;
 struct dstack *stacktop;
@@ -51,14 +51,15 @@ struct dstack *stacktop;
 *
 */
 
-void eval_second(ex,params,pcount,fval,partials,seconds,q_id)
-struct expnode *ex; /* expression tree */
-REAL *params;       /* vector of paramters */
-int  pcount;        /* number of variables */
-REAL *fval;         /* function value */
-REAL *partials;     /* values of partials */
-REAL **seconds;     /* second derivatives */
-element_id q_id;    /* reference element, if any */
+void eval_second(
+  struct expnode *ex, /* expression tree */
+  REAL *params,       /* vector of paramters */
+  int  pcount,        /* number of variables */
+  REAL *fval,         /* function value */
+  REAL *partials,     /* values of partials */
+  REAL **seconds,     /* second derivatives */
+  element_id q_id    /* reference element, if any */
+)
 {
   int n,m;   /* i, j missing since want them local for optimization */
   REAL x,y;
@@ -74,102 +75,101 @@ element_id q_id;    /* reference element, if any */
   stacktop->value = 0.0;  /* in case of empty expression */
   zero_seconds(pcount,stacktop);
 
-  if ( ex ) 
+  if ( ex )
    for ( node = ex->start+1 ; ; node++ )
    {
      switch ( node->type )
      {
      
-       case SETUP_FRAME_:
+       case SETUP_FRAME_NODE:
              break;
   
-       case EXPRLIST_:
+       case EXPRLIST_NODE:
              break;  /* leave expression on stack */
 
-      case FUNCTION_CALL_:
-      { struct thread_data *td = GET_THREAD_DATA;
-        REAL value;
-        int i,j;
+       case FUNCTION_CALL_NODE:
+       { struct thread_data *td = GET_THREAD_DATA;
+         REAL value;
+         int i,j;
         
-		/* push arguments on eval() stack */
-        for ( i = 0 ; i < node->op2.argcount ; i++ )
+         /* push arguments on eval() stack */
+         for ( i = 0 ; i < node->op2.argcount ; i++ )
           *(++(td->stack_top)) = stacktop[i-node->op2.argcount+1].value;
 
-        value = eval(&globals(node->op1.name_id)->value.proc,
+         value = eval(&globals(node->op1.name_id)->value.proc,
            NULL,NULLID,NULL);
-        td->stack_top -= node->op2.argcount; /* pop arguments */
-        (++stacktop)->value = value;
-        FIRST = 0.0;
-        SECOND = 0.0;
-        break;
-      }
+         td->stack_top -= node->op2.argcount; /* pop arguments */
+         (++stacktop)->value = value;
+         FIRST = 0.0;
+         SECOND = 0.0;
+         break;
+       }
 
-	  case FUNCTION_CALL_RETURN_:
+       case FUNCTION_CALL_RETURN_NODE:
         {
           /* nothing to do here since FUNCTION_CALL used eval() */
           break;
         }
 
 
-      case INDEXSET_: break; /* just accumulate index values */
+       case INDEXSET_NODE: break; /* just accumulate index values */
 
-      case ARRAY_HEAD_: break;  /* let indices accumulate */
+       case ARRAY_HEAD_NODE: break;  /* let indices accumulate */
 
-      case ARRAYEVAL:
-      { struct array *a = globals(node->op2.name_id)->attr.arrayptr; 
-        REAL value=0.0;
-        int i,j,offset;
-        void *lvalue;
-        for ( i = 0 ; i < a->dim ; i++ )
-        { int k = (int)stacktop[i+1-a->dim].value;
-          if ( k < 1 )
-          { sprintf(errmsg,"Array index %d of array %s is %d. Indexes start at 1.",
+       case ARRAYEVAL_NODE:
+       { struct array *a = globals(node->op2.name_id)->attr.arrayptr; 
+         REAL value=0.0;
+         int i,j,offset;
+         void *lvalue;
+         for ( i = 0 ; i < a->dim ; i++ )
+         { int k = (int)stacktop[i+1-a->dim].value;
+           if ( k < 1 )
+           { sprintf(errmsg,"Array index %d of array %s is %d. Indexes start at 1.",
                i+1,globals(node->op2.name_id)->name,k);
-            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                  file_names[node->file_no],node->line_no);
-            kb_error(2534,errmsg,RECOVERABLE);
-          }
-          if ( k > a->sizes[i] )
-          { sprintf(errmsg,"Array index %d of array %s is %d; exceeds bound of %d.",
+             kb_error(2534,errmsg,RECOVERABLE);
+           }
+           if ( k > a->sizes[i] )
+           { sprintf(errmsg,"Array index %d of array %s is %d; exceeds bound of %d.",
                i+1,globals(node->op2.name_id)->name,k,a->sizes[i]);
-            sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                  file_names[node->file_no],node->line_no);
-            kb_error(2535,errmsg,RECOVERABLE);
-          }
+             kb_error(2535,errmsg,RECOVERABLE);
+           }
+         }
+         for ( i = 1, offset = (int)stacktop[1-a->dim].value-1 ; i < a->dim ; i++ )
+         { offset *= a->sizes[i];
+           offset += (int)stacktop[i+1-a->dim].value-1;  /* 1-based indexing */
         }
-        for ( i = 1, offset = (int)stacktop[1-a->dim].value-1 ; i < a->dim ; i++ )
-        { offset *= a->sizes[i];
-          offset += (int)stacktop[i+1-a->dim].value-1;  /* 1-based indexing */
-        }
-        stacktop -= a->dim;
-        lvalue = ((char *)a) + a->datastart + offset*a->itemsize;
-        switch ( a->datatype )
-        { case REAL_TYPE: value = *(REAL*)(lvalue);    break;
-          case INTEGER_TYPE: value = *(int*)(lvalue);    break;
-          case UINT_TYPE: value = *(unsigned int*)(lvalue);    break;
-          case CHAR_TYPE: value = *(char*)(lvalue);    break;
-          case UCHAR_TYPE: value = *(unsigned char*)(lvalue);    break;
-          case SHORT_TYPE: value = *(short int*)(lvalue);    break;
-          case USHORT_TYPE: value = *(unsigned short int*)(lvalue);    break;
-          case LONG_TYPE: value = *(long*)(lvalue);    break;
-          case ULONG_TYPE: value = *(unsigned long*)(lvalue);    break;
-          case PTR_TYPE: value = (unsigned long)*(char**)(lvalue);    break;
-          case VERTEX_TYPE:
-          case EDGE_TYPE:
-          case FACET_TYPE:
-          case BODY_TYPE:
-          case FACETEDGE_TYPE:
-          case ELEMENTID_TYPE: value = (int)*(element_id*)(lvalue); break;
-          default: value = *(int*)(lvalue); break;
-        
-        }
-        (++stacktop)->value = value;
-        FIRST=0.0;
-        SECOND = 0.0;
-      }
-      break;
+          stacktop -= a->dim;
+         lvalue = ((char *)a) + a->datastart + offset*a->itemsize;
+         switch ( a->datatype )
+         { case REAL_TYPE: value = *(REAL*)(lvalue);    break;
+           case INTEGER_TYPE: value = *(int*)(lvalue);    break;
+           case UINT_TYPE: value = *(unsigned int*)(lvalue);    break;
+           case CHAR_TYPE: value = *(char*)(lvalue);    break;
+           case UCHAR_TYPE: value = *(unsigned char*)(lvalue);    break;
+           case SHORT_TYPE: value = *(short int*)(lvalue);    break;
+           case USHORT_TYPE: value = *(unsigned short int*)(lvalue);    break;
+           case LONG_TYPE: value = *(long*)(lvalue);    break;
+           case ULONG_TYPE: value = *(unsigned long*)(lvalue);    break;
+           case PTR_TYPE: value = (unsigned long)*(char**)(lvalue);    break;
+           case VERTEX_TYPE:
+           case EDGE_TYPE:
+           case FACET_TYPE:
+           case BODY_TYPE:
+           case FACETEDGE_TYPE:
+           case ELEMENTID_TYPE: value = (int)*(element_id*)(lvalue); break;
+           default: value = *(int*)(lvalue); break;        
+         }
+         (++stacktop)->value = value;
+         FIRST=0.0;
+         SECOND = 0.0;
+       }
+       break;
 
-      case BACKQUOTE_START_:
+       case BACKQUOTE_START_NODE:
         { struct expnode bqnode = *ex;
           bqnode.start = node;
           bqnode.root = node+node->op1.skipsize;
@@ -178,14 +178,19 @@ element_id q_id;    /* reference element, if any */
           node += node->op1.skipsize-1;
         }
         break;
-      case BACKQUOTE_END_ : break;  /* just a placeholder */
-      case ACOMMANDEXPR_: /* backquoted command at start of expression */
+
+       case BACKQUOTE_END_NODE: break;  /* just a placeholder */
+       case ACOMMANDEXPR_NODE: /* backquoted command at start of expression */
            break;
 
-       case SET_GLOBAL_:
+       case SET_GLOBAL_NODE:
          { struct global *g = globals(node->op1.name_id);
            int i,j;
            g->value.real = stacktop->value;
+           if ( g->attr.varstuff.on_assign_call )
+           { struct  global *gg = globals(g->attr.varstuff.on_assign_call);
+             eval(&gg->value.proc,NULL,NULLID,NULL);
+           }
            if ( g->attr.varstuff.gradhess == NULL )
               g->attr.varstuff.gradhess = (REAL*)mycalloc(MAXCOORD*(MAXCOORD+1), sizeof(REAL));
            for ( i = 0 ; i < pcount ; i++ )
@@ -197,63 +202,62 @@ element_id q_id;    /* reference element, if any */
            break;
          }
 
-       case REPLACECONST:
+       case REPLACECONST_NODE:
           zero_seconds(pcount,stacktop);
           stacktop->value = node->op1.real;
              break;
 
-       case COND_TEST_:
+       case COND_TEST_NODE:
           if ( (stacktop--)->value == 0. )
              { /* jump */
                node += node->op1.skipsize;
              }
           break;
 
-       case COND_EXPR_:
+       case COND_EXPR_NODE:
           /* did first command, so skip second */
           node += node->op1.skipsize;
           break;
 
-       case COND_ELSE_:
+       case COND_ELSE_NODE:
           break;
 
-       case MAXIMUM_:
+       case MAXIMUM_NODE:
              stacktop--;
              if  (stacktop[0].value < stacktop[1].value) 
                stacktop[0] = stacktop[1];
              break;
 
-       case MINIMUM_:
+       case MINIMUM_NODE:
              stacktop--;
              if (stacktop[0].value > stacktop[1].value) 
                stacktop[0] = stacktop[1];
              break;
 
-       case TOGGLEVALUE:
+       case TOGGLEVALUE_NODE:
           (++stacktop)->value = (REAL)get_toggle_value(node->op1.toggle_state);
           zero_seconds(pcount,stacktop);
           break;
 
-       case SIZEOF_:
+       case SIZEOF_ATTR_NODE:
           (++stacktop)->value = 
               (REAL)EXTRAS(node->op2.eltype)[node->op1.extranum].array_spec.datacount;
           zero_seconds(pcount,stacktop);
           break;
 
-       case PUSHCONST:
-       case PUSHPI:
-       case PUSHE:
+       case PUSHCONST_NODE:
+       case PUSHPI_NODE:
+       case PUSHE_NODE:
           (++stacktop)->value = node->op1.real;
           zero_seconds(pcount,stacktop);
              break;
 
-       case PUSHG:
+       case PUSHG_NODE:
           (++stacktop)->value = web.gravflag ? web.grav_const : 0.0;
           zero_seconds(pcount,stacktop);
              break;
 
-       case PUSHGLOBAL_:
-       case PUSHADJUSTABLE:
+       case PUSHGLOBAL_NODE:
              { struct global *g = globals(node->op1.name_id);
                int i,j;
                if ( g->flags & FILE_VALUES )
@@ -274,7 +278,7 @@ element_id q_id;    /* reference element, if any */
              }
              break;
 
-       case PUSHPARAM:
+       case PUSHPARAM_NODE:
         { int i,j;
           (++stacktop)->value = params[node->op1.coordnum];
           for ( i = 0 ; i < pcount ; i++ )
@@ -285,46 +289,46 @@ element_id q_id;    /* reference element, if any */
           break;
         }
 
-     case PARAM_:
-      { int i,j;
-        if ( node->op1.localnum ) 
+       case PARAM_NODE:
+       { int i,j;
+         if ( node->op1.localnum ) 
            id = *(element_id*)get_localp(node->op1.localnum);
-        else id = q_id;
-        (++stacktop)->value = get_param(id)[node->op2.coordnum];
-        for ( i = 0 ; i < SDIM ; i++ )
+         else id = q_id;
+         (++stacktop)->value = get_param(id)[node->op2.coordnum];
+         for ( i = 0 ; i < SDIM ; i++ )
              if ( i == node->op2.coordnum )
                 stacktop->deriv[i] = 1.0;
              else stacktop->deriv[i] = 0.0;
-        SECOND = 0;
-        break;
-      }
+         SECOND = 0;
+         break;
+       }
 
-      case PUSHQPRESSURE_:
+       case PUSHQPRESSURE_NODE:
            (++stacktop)->value = GEN_QUANT(node->op1.quant_id)->pressure;
            zero_seconds(pcount,stacktop);
            break;
 
-       case PUSHQTARGET_:
+       case PUSHQTARGET_NODE:
            (++stacktop)->value = GEN_QUANT(node->op1.quant_id)->target;
            zero_seconds(pcount,stacktop);
            break;
 
-       case PUSHQMODULUS_:
+       case PUSHQMODULUS_NODE:
            (++stacktop)->value = GEN_QUANT(node->op1.quant_id)->modulus;
            zero_seconds(pcount,stacktop);
            break;
 
-       case PUSHQTOLERANCE_:
+       case PUSHQTOLERANCE_NODE:
            (++stacktop)->value = GEN_QUANT(node->op1.quant_id)->tolerance;
            zero_seconds(pcount,stacktop);
            break;
 
-       case PUSHMMODULUS_:
+       case PUSHMMODULUS_NODE:
            (++stacktop)->value = METH_INSTANCE(node->op1.meth_id)->modulus;
            zero_seconds(pcount,stacktop);
            break;
 
-       case PUSHQVALUE_:
+       case PUSHQVALUE_NODE:
          { struct gen_quant *q = GEN_QUANT(node->op1.quant_id);
            if ((q->timestamp<graph_timestamp) || (q->timestamp<web_timestamp))
                       calc_quants(q->flags&(Q_INFO|Q_ENERGY|Q_FIXED));
@@ -333,7 +337,7 @@ element_id q_id;    /* reference element, if any */
          }
          break;
 
-       case PUSHMVALUE_:
+       case PUSHMVALUE_NODE:
          { struct method_instance *mi = METH_INSTANCE(node->op1.meth_id);
            int i,j;
            if ( mi->flags & Q_COMPOUND )
@@ -342,7 +346,7 @@ element_id q_id;    /* reference element, if any */
                { /* saving up second partials of quantity wrt methods */
                  (++stacktop)->value = mi->value;
                  FIRST = 0.0;
-                 stacktop->deriv[mi->quant_index] = 1.0;
+                 stacktop->deriv[mi->quants_index[0]] = 1.0;
                  SECOND = 0.0;
                }
                else /* old dense way */
@@ -380,29 +384,29 @@ element_id q_id;    /* reference element, if any */
          }
          break;
 
-       case PUSHQVOLCONST_:
+       case PUSHQVOLCONST_NODE:
            (++stacktop)->value = GEN_QUANT(node->op1.quant_id)->volconst;
            zero_seconds(pcount,stacktop);
            break;
 
 
-       case PUSH_NAMED_QUANTITY:
-       case PUSH_METHOD_INSTANCE_:
+       case PUSH_NAMED_QUANTITY_NODE:
+       case PUSH_METHOD_INSTANCE_NODE:
              (++stacktop)->value = (REAL)node->op1.quant_id;
              zero_seconds(pcount,stacktop);
              break;
 
 
-       case GET_INTERNAL_:
+       case GET_INTERNAL_NODE:
              (++stacktop)->value = get_internal_variable(node->op1.name_id);
              zero_seconds(pcount,stacktop);
              break;
 
-       case DYNAMIC_LOAD_FUNC_:
+       case DYNAMIC_LOAD_FUNC_NODE:
              (*node->op1.funcptr)(FUNC_SECOND,params,(struct dstack*)(++stacktop));
              break;
 
-       case USERFUNC:
+       case USERFUNC_NODE:
           { MAT2D(tmp,MAXCOORD,MAXCOORD);
             int i,j;
             stacktop++;
@@ -412,92 +416,155 @@ element_id q_id;    /* reference element, if any */
           }
           break;
 
-         case INDEXED_ELEMENT_:
-           { int ord = (int)((stacktop--)->value);
-             id = get_ordinal_id(node->op1.eltype,abs(ord)-1);
-             if ( !valid_id(id) ) 
-             { sprintf(errmsg,"%s index %d is not valid.\n",
-                   typenames[node->op1.eltype],ord);
-               sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+      case INDEXED_ELEMENT_NODE:
+         { element_id partid = *(element_id*)&((stacktop--)->value);
+           element_id id;
+           id = get_full_id(node->op1.eltype,partid);
+           if ( !valid_id(id) ) 
+           { sprintf(errmsg,"%s index %d is not valid.\n",
+                typenames[node->op1.eltype],
+                valid_id(partid) ? (int)(partid & OFFSETMASK)+1 : 0);
+             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                  file_names[node->file_no],node->line_no);
-               kb_error(1201,errmsg,RECOVERABLE);
-             }
-             if ( ord < 0 ) invert(id);
-             *(element_id*)get_localp(node->op2.localnum) = id;
-             break;
+             kb_error(1291,errmsg,RECOVERABLE);
            }
+           *(element_id*)get_localp(node->op2.localnum) = id;
+           break;
+         }
 
-       case QUALIFIED_ATTRIBUTE:
+              /* here are attributes for queries */
+      case COORD_NODE:
+      { REAL vect[MAXCOORD];
+        int i,j;
+        if ( node->op1.localnum ) 
+           id = *(element_id*)get_localp(node->op1.localnum);
+        else id = q_id;
+        switch ( id_type(id) )
+        { case VERTEX:
+             (++stacktop)->value = get_coord(id)[node->op2.coordnum];
+             break;
+          case EDGE:
+             get_edge_side(id,vect);
+             (++stacktop)->value = vect[node->op2.coordnum];
+             break;
+          case FACET:
+             get_facet_normal(id,vect);
+             (++stacktop)->value = vect[node->op2.coordnum];
+             break;
+         }
+         FIRST = 0.0;
+         SECOND = 0.0;
+        }
+        break;
+
+     case INDEXED_COORD_NODE:
+      { int k = (int)(stacktop->value) - 1;  /* 1 based indexing */
+        int i,j;
+        REAL vect[MAXCOORD];
+        if ( k < 0 || k >= SDIM )
+        { sprintf(errmsg,
+         "Invalid index %d for x in %s; must be between 1 and %d, inclusive.\n",
+            k+1,ex->name,SDIM);
+          sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                 file_names[node->file_no],node->line_no);
+          kb_error(2045,errmsg,RECOVERABLE );
+        }
+        if ( node->op1.localnum ) 
+           id = *(element_id*)get_localp(node->op1.localnum);
+        else id = q_id;
+        switch( id_type(id) )
+         { case VERTEX:
+             stacktop->value = get_coord(id)[k];
+             break;
+          case EDGE:
+             get_edge_side(id,vect);
+             stacktop->value = vect[k];
+             break;
+          case FACET:
+             get_facet_normal(id,vect);
+             stacktop->value = vect[k];
+             break;
+          default: 
+             sprintf(errmsg,"Can't have indexed x on %s, in %s.\n",
+               typenames[id_type(id)], ex->name);
+             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                 file_names[node->file_no],node->line_no);
+             kb_error(2074,errmsg,RECOVERABLE);
+         }
+         FIRST = 0.0;
+         SECOND = 0.0;
+       }
+       break;
+
+       case QUALIFIED_ATTRIBUTE_NODE:
            break; /* just a no-op in execution */
 
-/*need logical expressions for conditional expressions */
-
-       case GT_:
+       case GT_NODE:
              stacktop--;
              stacktop[0].value = (REAL)(stacktop[0].value > stacktop[1].value);
              zero_seconds(pcount,stacktop);
              break;
 
-       case LT_:
+       case LT_NODE:
              stacktop--;
              stacktop[0].value = (REAL)(stacktop[0].value < stacktop[1].value);
              zero_seconds(pcount,stacktop);
              break;
 
-       case LE_:
+       case LE_NODE:
              stacktop--;
              stacktop[0].value = (REAL)(stacktop[0].value <= stacktop[1].value);
              zero_seconds(pcount,stacktop);
              break;
 
-       case GE_:
+       case GE_NODE:
              stacktop--;
              stacktop[0].value = (REAL)(stacktop[0].value >= stacktop[1].value);
              zero_seconds(pcount,stacktop);
              break;
 
-       case NE_:
+       case NE_NODE:
              stacktop--;
              stacktop[0].value = (REAL)(stacktop[0].value != stacktop[1].value);
              zero_seconds(pcount,stacktop);
              break;
 
-       case EQ_:
+       case EQ_NODE:
              stacktop--;
              stacktop[0].value = (REAL)(stacktop[0].value == stacktop[1].value);
              zero_seconds(pcount,stacktop);
              break;
 
-     case AND_: /* short-circuit */
-	   if ( stacktop->value == 0.0 )
-	   { (++stacktop)->value = 0.0;
-             zero_seconds(pcount,stacktop);
-             node += node->op1.skipsize;
-	   } 
-           break;
+       case AND_NODE: /* short-circuit */
+          if ( stacktop->value == 0.0 )
+          { (++stacktop)->value = 0.0;
+            zero_seconds(pcount,stacktop);
+            node += node->op1.skipsize;
+          } 
+          break;
 
-     case CONJUNCTION_END: 
-	   /* short-circuiting results in second arg being answer */
-	   stacktop--;
-	   *stacktop = stacktop[1];
-           if ( stacktop->value != 0.0 ) 
+       case CONJUNCTION_END_NODE: 
+         /* short-circuiting results in second arg being answer */
+         stacktop--;
+         *stacktop = stacktop[1];
+         if ( stacktop->value != 0.0 ) 
              stacktop->value = 1.0;
-	   break;
+         break;
 
-     case OR_:  /* short-circuit */
-	   if ( stacktop->value != 0.0 )
-	   { (++stacktop)->value = 1.0;
-             zero_seconds(pcount,stacktop);
-             node += node->op1.skipsize;
-	   } 
-           break;
+       case OR_NODE:  /* short-circuit */
+         if ( stacktop->value != 0.0 )
+         { (++stacktop)->value = 1.0;
+           zero_seconds(pcount,stacktop);
+           node += node->op1.skipsize;
+         } 
+         break;
 
-       case NOT_:
+       case NOT_NODE:
              stacktop[0].value = (REAL)(!stacktop[0].value);
              zero_seconds(pcount,stacktop);
              break;
 
-       case PLUS:
+       case PLUS_NODE:
            { int i,j;
              stacktop--;
              stacktop[0].value += stacktop[1].value;
@@ -506,8 +573,8 @@ element_id q_id;    /* reference element, if any */
              break;
            }
           
-       case MINUS:
-       case EQUATE:
+       case MINUS_NODE:
+       case EQUATE_NODE:
            { int i,j;
              stacktop--;
              stacktop[0].value -= stacktop[1].value;
@@ -516,7 +583,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-       case TIMES:
+       case TIMES_NODE:
            { int i,j;
              stacktop--;
              SECOND = stacktop[0].second[i][j]*stacktop[1].value
@@ -529,7 +596,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-       case DIVIDE:
+       case DIVIDE_NODE:
            { int i,j;
              stacktop--;
              if ( stacktop[1].value == 0.0 )
@@ -553,7 +620,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-       case REALMOD:
+       case REALMOD_NODE:
            { int i,j;
              stacktop--;
              if ( stacktop[1].value == 0.0 )
@@ -569,7 +636,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-       case IMOD_:
+       case IMOD_NODE:
              stacktop--;
              if ( stacktop[1].value == 0.0 ) 
                { sprintf(errmsg,"Modulus base 0.\n");
@@ -583,7 +650,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-       case IDIV_:
+       case IDIV_NODE:
              stacktop--;
              if ( (int)stacktop[1].value == 0 ) 
                { sprintf(errmsg,"Division by zero.\n");
@@ -596,7 +663,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-       case INTPOW:
+       case INTPOW_NODE:
            if ( node->op1.intpow == 0 )
               { stacktop->value = 1.;
                  zero_seconds(pcount,stacktop);
@@ -630,7 +697,7 @@ element_id q_id;    /* reference element, if any */
              }
            break;
 
-       case POW:
+       case POW_NODE:
           stacktop--;
           x = stacktop[0].value;
           y = stacktop[1].value;
@@ -668,7 +735,7 @@ element_id q_id;    /* reference element, if any */
           break;
 
        /* This case causes a 2-min slowdown in VisualStudio.NET opt compile time*/
-       case ATAN2_:
+       case ATAN2_NODE:
         { REAL denom;
           int i,j;
           stacktop--;
@@ -686,7 +753,7 @@ element_id q_id;    /* reference element, if any */
           break;
         }
 
-       case SQR:
+       case SQR_NODE:
         { int i,j;
           SECOND = 2*(stacktop->deriv[i]*stacktop->deriv[j]
                               + stacktop->value*stacktop->second[i][j]);
@@ -695,10 +762,10 @@ element_id q_id;    /* reference element, if any */
           break;
         }
 
-       case SQRT:
+       case SQRT_NODE:
            { int i,j;
              if ( stacktop->value < 0.0 )
-             { sprintf(errmsg,"Square root of negative number.\n");
+             { sprintf(errmsg,"Square root of negative number %g.\n",stacktop->value);
                sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
                  file_names[node->file_no],node->line_no);
                kb_error(2567,errmsg,RECOVERABLE);
@@ -715,7 +782,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-     case CEIL_:
+       case CEIL_NODE:
         { int i,j;
           stacktop->value = ceil(stacktop->value);
           FIRST = 0;
@@ -723,7 +790,7 @@ element_id q_id;    /* reference element, if any */
           break;
         }
 
-     case FLOOR_:
+       case FLOOR_NODE:
         { int i,j;
           stacktop->value = floor(stacktop->value);
           FIRST = 0;
@@ -731,7 +798,7 @@ element_id q_id;    /* reference element, if any */
           break;
         }
 
-       case ABS:
+       case ABS_NODE:
              if ( stacktop->value < 0.0 )
              { int i,j;
                FIRST *= -1 ;
@@ -740,7 +807,7 @@ element_id q_id;    /* reference element, if any */
              }
              break;
 
-       case SIN:
+       case SIN_NODE:
            { int i,j;
              x = cos(stacktop->value); y = sin(stacktop->value);
              SECOND = -y*stacktop->deriv[i]*stacktop->deriv[j]
@@ -750,7 +817,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-       case COS:
+       case COS_NODE:
            { int i,j;
              x = cos(stacktop->value); y = sin(stacktop->value);
              SECOND = -x*stacktop->deriv[i]*stacktop->deriv[j]
@@ -760,7 +827,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-       case ATAN:
+       case ATAN_NODE:
            { int i,j;
              x = (1 + stacktop->value*stacktop->value);
              SECOND = -2*stacktop->value/x/x*stacktop->deriv[i]
@@ -770,7 +837,7 @@ element_id q_id;    /* reference element, if any */
              break ;
            }
 
-       case EXP:
+       case EXP_NODE:
            { int i,j;
              stacktop->value = exp(stacktop->value);
              SECOND = (stacktop->deriv[i]*stacktop->deriv[j] +
@@ -779,7 +846,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-       case LOG:
+       case LOG_NODE:
            { int i,j;
              if ( stacktop->value <= 0.0 )
              { sprintf(errmsg,"Log of nonpositive number.\n");
@@ -795,7 +862,7 @@ element_id q_id;    /* reference element, if any */
               break;
            }
 
-       case ASIN:
+       case ASIN_NODE:
            { int i,j;
              if ( fabs(stacktop->value) >= 1.0 )
              { sprintf(errmsg,"Asin argument magnitude greater than 1.\n");
@@ -812,7 +879,7 @@ element_id q_id;    /* reference element, if any */
                break ;
            }
 
-       case ACOS:
+       case ACOS_NODE:
            { int i,j;
              if ( fabs(stacktop->value) >= 1.0 )
              { sprintf(errmsg,"Acos argument magnitude greater than 1.\n");
@@ -829,7 +896,7 @@ element_id q_id;    /* reference element, if any */
                break;
            }
 
-       case TAN:
+       case TAN_NODE:
            { int i,j;
                stacktop->value = tan(stacktop->value);
                x = 1+stacktop->value*stacktop->value; /* sec^2 */
@@ -839,7 +906,7 @@ element_id q_id;    /* reference element, if any */
                 break;
            }
 
-       case SINH:
+       case SINH_NODE:
            { int i,j;
              y = exp(stacktop->value);
              x = (y+1/y)/2;
@@ -851,7 +918,7 @@ element_id q_id;    /* reference element, if any */
              break ;
            }
        
-       case COSH:
+       case COSH_NODE:
            { int i,j;
              y = exp(stacktop->value);
              x = (y-1/y)/2;
@@ -863,7 +930,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-       case TANH:
+       case TANH_NODE:
            { int i,j;
              y = exp(stacktop->value);
              x = (y-1/y)/2;
@@ -875,7 +942,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-       case ASINH:
+       case ASINH_NODE:
            { int i,j;
              y = 1/sqrt(1+stacktop->value*stacktop->value);
              x = -stacktop->value*y*y*y;
@@ -887,7 +954,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-       case ACOSH:
+       case ACOSH_NODE:
            { int i,j;
              if ( stacktop->value <= 1.0 )
              { sprintf(errmsg,"Acosh argument less than 1.\n");
@@ -905,7 +972,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-       case ATANH:
+       case ATANH_NODE:
            { int i,j;
              if ( fabs(stacktop->value)  >= 1 )
              { sprintf(errmsg,"Atanh argument magnitude greater than 1.\n");
@@ -923,7 +990,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-       case CHS:
+       case CHS_NODE:
            { int i,j;
              SECOND *= -1;
              FIRST = -stacktop->deriv[i];
@@ -931,7 +998,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
        
-       case INV:
+       case INV_NODE:
            { int i,j;
              if ( stacktop->value == 0.0 )
                { sprintf(errmsg,"Division by zero.\n");
@@ -946,7 +1013,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-       case ELLIPTICK:
+       case ELLIPTICK_NODE:
            { int i,j;
              x = stacktop->value;
              stacktop->value = ellipticK(x);
@@ -956,7 +1023,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-       case ELLIPTICE:
+       case ELLIPTICE_NODE:
            { int i,j;
              x = stacktop->value;
              stacktop->value = ellipticE(x);
@@ -966,7 +1033,7 @@ element_id q_id;    /* reference element, if any */
              break;
            }
  
-       case INCOMPLETE_ELLIPTICF:
+       case INCOMPLETE_ELLIPTICF_NODE:
             { REAL phi,m,val,dm,dphi,ddm,ddphi,dmdphi;
               int i,j;
               stacktop--;
@@ -985,7 +1052,7 @@ element_id q_id;    /* reference element, if any */
               break;
             }
  
-       case INCOMPLETE_ELLIPTICE:
+       case INCOMPLETE_ELLIPTICE_NODE:
             { REAL phi,m,val,dm,dphi,ddm,ddphi,dmdphi;
               int i,j;
               stacktop--;
@@ -1004,7 +1071,7 @@ element_id q_id;    /* reference element, if any */
               break;
             }
        /* attribute values */
-       case GET_SQ_MEAN_CURV_:
+       case GET_SQ_MEAN_CURV_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1012,7 +1079,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-       case GET_MEANCURV_:
+       case GET_MEANCURV_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1020,8 +1087,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-       case LENGTH_:
-       case GET_LENGTH_:
+       case GET_LENGTH_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1031,7 +1097,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-       case GET_DIHEDRAL_:
+       case GET_DIHEDRAL_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1042,8 +1108,8 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-       case VALENCE_:
-       case GET_VALENCE_:
+       case VALENCE_NODE:
+       case GET_VALENCE_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1065,7 +1131,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-       case GET_EDGE_:
+       case GET_EDGE_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1074,7 +1140,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-       case GET_FACET_:
+       case GET_FACET_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1083,8 +1149,8 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case AREA_:
-          case GET_AREA_:
+       case AREA_NODE:
+       case GET_AREA_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1093,7 +1159,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case GET_WRAP_:
+       case GET_WRAP_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1102,7 +1168,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case GET_PRESSURE_:
+       case GET_PRESSURE_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1118,16 +1184,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case GET_USERATTR_:
-             if ( node->op1.localnum ) 
-                id = *(element_id*)get_localp(node->op1.localnum);
-             else id = q_id;
-             ++stacktop;
-             stacktop->value = user_attribute(id);
-             zero_seconds(pcount,stacktop);
-             break;
-
-          case GET_QUANTITY_:
+       case GET_QUANTITY_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1136,7 +1193,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case GET_INSTANCE_:
+       case GET_INSTANCE_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1145,7 +1202,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case GET_PHASE_:
+       case GET_PHASE_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1162,8 +1219,8 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case DENSITY_:
-          case GET_DENSITY_:
+       case DENSITY_NODE:
+       case GET_DENSITY_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1180,21 +1237,8 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case GET_STAR_:
-             if ( node->op1.localnum ) 
-                id = *(element_id*)get_localp(node->op1.localnum);
-             else id = q_id;
-             ++stacktop;
-             switch ( id_type(id) ) 
-               { case VERTEX:    stacktop->value = get_vertex_star(id); break;
-                 case EDGE:    stacktop->value = get_edge_star(id); break;
-                 default:    stacktop->value = 0.0; break;
-               }
-             zero_seconds(pcount,stacktop);
-             break;
-
-          case VOLUME_:
-          case GET_VOLUME_:
+       case VOLUME_NODE:
+       case GET_VOLUME_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1203,7 +1247,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case GET_VOLCONST_:
+       case GET_VOLCONST_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1211,7 +1255,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case GET_TARGET_:
+       case GET_TARGET_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1219,28 +1263,28 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case GET_MPI_TASK_:
+       case GET_MPI_TASK_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
              (++stacktop)->value = id_task(id);
              break;
 
-          case ID_:
-          case GET_ID_:
-          case GET_OID_:
+       case ID_NODE:
+       case GET_ID_NODE:
+       case GET_OID_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
              ++stacktop;
-             if ( (node->type == GET_OID_) && inverted(id) )
+             if ( (node->type == GET_OID_NODE) && inverted(id) )
                   stacktop->value = -(REAL)(ordinal(id)+1);
              else    stacktop->value = (REAL)(ordinal(id)+1);
              zero_seconds(pcount,stacktop);
              break;
 
-          case ORIGINAL_:
-          case GET_ORIGINAL_:
+       case ORIGINAL_NODE:
+       case GET_ORIGINAL_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1249,7 +1293,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case GET_COLOR_:
+       case GET_COLOR_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1262,8 +1306,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-
-          case GET_FRONTCOLOR_:
+       case GET_FRONTCOLOR_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1276,7 +1319,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case GET_BACKCOLOR_:
+       case GET_BACKCOLOR_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1290,7 +1333,7 @@ element_id q_id;    /* reference element, if any */
              break;
 
 
-          case GET_FRONTBODY_:
+       case GET_FRONTBODY_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1303,7 +1346,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case GET_BACKBODY_:
+       case GET_BACKBODY_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1317,17 +1360,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case TAG_:
-          case GET_TAG_:
-             if ( node->op1.localnum ) 
-                id = *(element_id*)get_localp(node->op1.localnum);
-             else id = q_id;
-             ++stacktop;
-             stacktop->value = (REAL)get_tag(id);
-             zero_seconds(pcount,stacktop);
-             break;
-
-          case BARE_:
+       case GET_BARE_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1336,7 +1369,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case GET_MIDV_:
+       case GET_MIDV_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1345,8 +1378,8 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case FIXED_:
-          case GET_FIXED_:
+       case FIXED_NODE:
+       case GET_FIXED_NODE:
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1355,7 +1388,7 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case GET_EXTRA_ATTR_:
+       case GET_EXTRA_ATTR_NODE:
            { struct extra *ext;
              int spot,k;
              int i; 
@@ -1457,8 +1490,10 @@ element_id q_id;    /* reference element, if any */
              break;
            }
 
-          case ON_CONSTRAINT_:
-           { int testcon = (int)(stacktop--)->value;
+       case ON_CONSTRAINT_NODE:
+       case ON_CONSTRAINT_NAME_NODE:
+           { int testcon = (node->type == ON_CONSTRAINT_NODE) ? (int)((stacktop--)->value)
+                            : node->op3.connum;
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1480,9 +1515,11 @@ element_id q_id;    /* reference element, if any */
              zero_seconds(pcount,stacktop);
              break;
 
-          case HIT_CONSTRAINT_:
+       case HIT_CONSTRAINT_NODE:
+       case HIT_CONSTRAINT_NAME_NODE:
            { 
-             int testcon = (int)(stacktop--)->value;
+             int testcon = (node->type == ON_CONSTRAINT_NODE) ? (int)((stacktop--)->value)
+                            : node->op3.connum;
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1500,10 +1537,31 @@ element_id q_id;    /* reference element, if any */
            }
            zero_seconds(pcount,stacktop);
            break;
+ 
+      case CONSTRAINT_VALUE_NODE:
+      case CONSTRAINT_NAME_VALUE_NODE:
+      { int connum = (node->type == CONSTRAINT_VALUE_NODE) ? (int)((stacktop--)->value)
+                            : node->op3.connum;
+        if ( node->op1.localnum ) 
+           id = *(element_id*)get_localp(node->op1.localnum);
+        else id = q_id;
+        if ( id_type(id) != VERTEX )
+        { sprintf(errmsg,"Can only do constraint value for vertices.\n");
+          sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                 file_names[node->file_no],node->line_no);
+          kb_error(4273,errmsg,RECOVERABLE);
+        }
+        ++stacktop;
+        stacktop->value = eval(get_constraint(connum)->formula ,get_coord(id), id, NULL);
+        zero_seconds(pcount,stacktop);
+      }
+      break;
 
-          case ON_BOUNDARY_:
+       case ON_BOUNDARY_NODE:
+       case ON_BOUNDARY_NAME_NODE:
            { struct boundary *b=NULL;
-             int testb = (int)(stacktop--)->value;
+             int testb = (node->type == ON_BOUNDARY_NODE) ? (int)((stacktop--)->value)
+                            : node->op3.bdrynum;
              if ( node->op1.localnum ) 
                 id = *(element_id*)get_localp(node->op1.localnum);
              else id = q_id;
@@ -1525,7 +1583,7 @@ element_id q_id;    /* reference element, if any */
 
        /* whole-array syntax */
 
-   case ARRAYIDENT_: /* push datastart for array */
+       case ARRAYIDENT_NODE: /* push datastart for array */
         { struct global *glvalue = globals(node->op2.name_id);
           struct array *alvalue = glvalue->attr.arrayptr;
           if ( glvalue->flags & FIXED_SIZE_ARRAY )
@@ -1536,7 +1594,7 @@ element_id q_id;    /* reference element, if any */
           break;
         }
 
-    case ATTRIB_LVALUE_:  /* push datastart for attribute array */
+        case ATTRIB_LVALUE_NODE:  /* push datastart for attribute array */
         { element_id id;
           n = node->op2.name_id & GLOBMASK; /* attribute number */
           if ( node->op1.localnum )
@@ -1546,9 +1604,9 @@ element_id q_id;    /* reference element, if any */
         }
         break;
 
-    case ARRAY_VERTEX_NORMAL_:
-    case ARRAY_EDGE_VECTOR_:
-    case ARRAY_FACET_NORMAL_:
+       case ARRAY_VERTEX_NORMAL_NODE:
+       case ARRAY_EDGE_VECTOR_NODE:
+       case ARRAY_FACET_NORMAL_NODE:
         { element_id id;
           int i;
           REAL *datastart =  (REAL*)get_localp(node->op3.localnum);
@@ -1558,7 +1616,7 @@ element_id q_id;    /* reference element, if any */
               id = *(element_id*)get_localp(node->op1.localnum);
             else id = q_id;
             switch ( node->type )
-            { case ARRAY_VERTEX_NORMAL_:
+            { case ARRAY_VERTEX_NORMAL_NODE:
                { MAT2D(normal,MAXCOORD,MAXCOORD);
                  REAL mag;
                  int normcount;
@@ -1572,10 +1630,10 @@ element_id q_id;    /* reference element, if any */
               
                  break;
                 }
-              case ARRAY_EDGE_VECTOR_:
+              case ARRAY_EDGE_VECTOR_NODE:
                  get_edge_side(id,datastart);
                  break;
-              case ARRAY_FACET_NORMAL_:
+              case ARRAY_FACET_NORMAL_NODE:
                  get_facet_normal(id,datastart);
                  break;
             }
@@ -1585,12 +1643,13 @@ element_id q_id;    /* reference element, if any */
 
 
 
-    case ARRAY_LVALUE_INDEXED_:
+       case ARRAY_LVALUE_INDEXED_NODE:
         break;
-    case ARRAY_RVALUE_ :
+       case ARRAY_RVALUE_INDEXED_NODE:
+       case ARRAY_RVALUE_NODE:
         break;
         
-    case DOT_:  /* dot product */
+       case DOT_NODE:  /* dot product */
         { struct array *a,*b;
           int name1 = node->op2.name_id;
           int name2 = node->op3.name_id;
@@ -1610,8 +1669,8 @@ element_id q_id;    /* reference element, if any */
         }
  
  
-    case ARRAY_EVAL_:  /* rexpr: arraylvalue indexset */
-      { /* use info on stack to push value of array element.
+       case ARRAY_EVAL_NODE:  /* rexpr: arraylvalue indexset */
+       { /* use info on stack to push value of array element.
              stack: datastart index-values -> rexpr */
         struct array *a;
         REAL value=0.0;
@@ -1670,9 +1729,43 @@ element_id q_id;    /* reference element, if any */
         zero_seconds(pcount,stacktop);
 
         break;
-      }
+       }
 
-      /* end whole-array syntax */
+       /* end whole-array syntax */
+
+       case ELINDEX_NODE: /* id possibly with mpi task number */
+         /* creates typeless valid id */
+         { 
+           if ( stacktop->value == 0 )
+             id = NULLID;
+           else 
+           { if ( stacktop->value > 0.0 )
+             id = ((int)(stacktop->value)-1);
+             else 
+             { id = -((int)(stacktop->value)+1);         
+               invert(id); 
+             }
+             id |= VALIDMASK;
+           }
+#ifdef MPI_EVOLVER
+         { int task;
+           if ( node->right )
+              task = (int)((stacktop--)->value);
+           else task = this_task;
+           if ( task < 0 || task >= mpi_nprocs )
+           { sprintf(errmsg,
+                "Illegal task number %d.  Must be between 1 and %d.\n",task,mpi_nprocs);
+             sprintf(errmsg+strlen(errmsg),"(source file %s, line %d)\n",
+                 file_names[node->file_no],node->line_no);
+             kb_error(1914,errmsg,RECOVERABLE);
+           }
+           id |= (element_id)task << TASK_ID_SHIFT;
+         }
+#endif
+          
+           *(element_id *)&(stacktop->value) = id;
+           break;
+         }
 
           default:
              sprintf(errmsg,"Bad expression eval_second() node type: %s.",

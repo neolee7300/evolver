@@ -14,8 +14,8 @@
 #include "include.h"
 #include "f2c.h"
 
-int odrv_ ARGS(( integer *, integer *,integer *,REAL *, integer *,integer *,
-integer *,integer *, integer *, integer *));
+int odrv_( integer *, integer *,integer *,REAL *, integer *,integer *,
+integer *,integer *, integer *, integer *);
 
 /* *********************************************************************** */
 /*                                                                                     1/15/81 */
@@ -23,19 +23,6 @@ integer *,integer *, integer *, integer *));
 /*  Function:  ODRV -- DRIVER FOR SPARSE MATRIX REORDERING ROUTINES */
 /* *********************************************************************** */
 
-int odrv_(n, ia, ja, a, p, ip, nsp, isp, path, flag_)
-integer *n, *ia, *ja;
-doublereal *a;
-integer *p, *ip, *nsp, *isp, *path, *flag_;
-{
-  STATIC integer head, l;
-  STATIC logical dflag;
-  STATIC integer q, v;
-  STATIC integer max_, tmp;
-#ifdef NOPROTO
-  extern /* Subroutine */ int md_();
-  extern /* Subroutine */ int sro_();
-#endif
 
 /*  DESCRIPTION */
 
@@ -146,6 +133,28 @@ integer *p, *ip, *nsp, *isp, *path, *flag_;
 /*     DECLARATIONS. */
 
 /* ----------------------------------------------------------------------- */
+int odrv_(   
+  integer *n, 
+  integer *ia, 
+  integer *ja,
+  doublereal *a,
+  integer *p, 
+  integer *ip, 
+  integer *nsp, 
+  integer *isp, 
+  integer *path, 
+  integer *flag_
+)
+{
+
+  STATIC integer head, l;
+  STATIC logical dflag;
+  STATIC integer q, v;
+  STATIC integer max_, tmp;
+#ifdef NOPROTO
+  extern /* Subroutine */ int md_();
+  extern /* Subroutine */ int sro_();
+#endif
 
 /* ....    REAL  A(1) */
 /* ----INITIALIZE ERROR FLAG AND VALIDATE PATH SPECIFICATION */
@@ -224,23 +233,6 @@ L111:
 /*  Function: MD -- MINIMUM DEGREE ALGORITHM (BASED ON ELEMENT MODEL) */
 /* *********************************************************************** */
 
-int md_(n, ia, ja, max_, v, l, head, last, next, mark, flag_)
-
-integer *n, *ia, *ja, *max_, *v, *l, *head, *last, *next, *mark, *flag_;
-{
-     /* System generated locals */
-     integer i__1;
-     STATIC integer equiv_0[1];
-
-     /* Local variables */
-     STATIC integer dmin_, tail, k;
-#define ek (equiv_0)
-#define vk (equiv_0)
-     STATIC integer tag;
-#ifdef NOPROTO
-     extern /* Subroutine */ int mdi_();
-     extern /* Subroutine */ int mdm_(), mdp_(), mdu_();
-#endif
 
 
 /*  DESCRIPTION */
@@ -320,6 +312,34 @@ integer *n, *ia, *ja, *max_, *v, *l, *head, *last, *next, *mark, *flag_;
 
 /* -----------------------------------------------------------------------
  */
+
+int md_(
+  integer *n, 
+  integer *ia, 
+  integer *ja, 
+  integer *max_, 
+  integer *v, 
+  integer *l, 
+  integer *head, 
+  integer *last, 
+  integer *next, 
+  integer *mark, 
+  integer *flag_
+)
+{
+     /* System generated locals */
+     integer i__1;
+     STATIC integer equiv_0[1];
+
+     /* Local variables */
+     STATIC integer dmin_, tail, k;
+#define ek (equiv_0)
+#define vk (equiv_0)
+     STATIC integer tag;
+#ifdef NOPROTO
+     extern /* Subroutine */ int mdi_();
+     extern /* Subroutine */ int mdm_(), mdp_(), mdu_();
+#endif
 
 
 /* ----INITIALIZATION */
@@ -405,10 +425,20 @@ L4:
 /* *********************************************************************** */
 /*  MDI -- INITIALIZATION */
 /* *********************************************************************** */
-/* Subroutine */ int mdi_(n, ia, ja, max_, v, l, head, last, next, mark, tag, 
-          flag_)
-integer *n, *ia, *ja, *max_, *v, *l, *head, *last, *next, *mark, *tag, *flag_;
-
+int mdi_(
+  integer *n, 
+  integer *ia, 
+  integer *ja, 
+  integer *max_, 
+  integer *v, 
+  integer *l, 
+  integer *head, 
+  integer *last, 
+  integer *next, 
+  integer *mark, 
+  integer *tag, 
+  integer *flag_
+)
 {
      /* System generated locals */
      integer i__1, i__2;
@@ -503,8 +533,15 @@ L101:
 /* *********************************************************************** */
 /*  MDM -- FORM ELEMENT FROM UNELIMINATED NEIGHBORS OF VK */
 /* *********************************************************************** */
-/* Subroutine */ int mdm_(vk, tail, v, l, last, next, mark)
-integer *vk, *tail, *v, *l, *last, *next, *mark;
+int mdm_(
+  integer *vk, 
+  integer *tail, 
+  integer *v, 
+  integer *l, 
+  integer *last, 
+  integer *next, 
+  integer *mark
+)
 {
      /* System generated locals */
      integer i__1;
@@ -595,8 +632,17 @@ L5:
 /* *********************************************************************** */
 /*  MDP -- PURGE INACTIVE ELEMENTS AND DO MASS ELIMINATION */
 /* *********************************************************************** */
-/* Subroutine */ int mdp_(k, ek, tail, v, l, head, last, next, mark)
-integer *k, *ek, *tail, *v, *l, *head, *last, *next, *mark;
+int mdp_(
+  integer *k, 
+  integer *ek, 
+  integer *tail, 
+  integer *v, 
+  integer *l, 
+  integer *head, 
+  integer *last, 
+  integer *next, 
+  integer *mark
+)
 {
      /* System generated locals */
      integer i__1;
@@ -738,8 +784,16 @@ L12:
 /* *********************************************************************** */
 /*  MDU -- UPDATE DEGREES OF UNELIMINATED VERTICES IN EK */
 /* *********************************************************************** */
-/* Subroutine */ int mdu_(ek, dmin_, v, l, head, last, next, mark)
-integer *ek, *dmin_, *v, *l, *head, *last, *next, *mark;
+int mdu_(
+  integer *ek, 
+  integer *dmin_, 
+  integer *v, 
+  integer *l, 
+  integer *head, 
+  integer *last, 
+  integer *next, 
+  integer *mark
+)
 {
      /* System generated locals */
      integer i__1, i__2;
@@ -889,11 +943,16 @@ L11:
 /* *********************************************************************** */
 /*  SRO -- SYMMETRIC REORDERING OF SPARSE SYMMETRIC MATRIX */
 /* *********************************************************************** */
-/* Subroutine */ int sro_(n, ip, ia, ja, a, q, r, dflag)
-integer *n, *ip, *ia, *ja;
-doublereal *a;
-integer *q, *r;
-logical *dflag;
+int sro_(
+  integer *n, 
+  integer *ip, 
+  integer *ia, 
+  integer *ja,
+  doublereal *a,
+  integer *q, 
+  integer *r,
+  logical *dflag
+)
 {
      /* System generated locals */
      integer i__1, i__2;

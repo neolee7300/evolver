@@ -38,6 +38,8 @@ void body_fe_fixup(facet_id);
 extern int broken_pipe_flag; /* so output routines will know to quit */
 extern int match_id_flag; /* to make id match datafile number, option -i */
 extern char *cmdfilename; /* for saving command line read file */
+extern char cmdstring[]; // for -r option:
+extern int cmdstring_flag; // for -r option
 extern char *current_prompt; /* prompt string being displayed */
 extern int echo_flag; /* whether to echo stdin; for piped input */
 extern int auto_convert_flag; /* whether to automatically convert_to_quantities */
@@ -54,13 +56,17 @@ extern int markedgedrawflag; /* for single-drawing edges */
 extern int verbose_flag;  /* for lots of messages */
 extern char loadfilename[PATHSIZE]; /* for LOAD command */
 extern int addload_flag;  /* if doing ADDLOAD command */
+extern int replace_load_flag; /* if doing REPLACE_LOAD */
 extern jmp_buf loadjumpbuf;  /* for LOAD command */
 extern jmp_buf graphjumpbuf;  /* for errors during MS graphing */
 #ifdef PTHREADS
+extern pthread_t main_thread_id;
 extern pthread_t draw_thread_id; /* for graphics thread */
 #else
+extern unsigned int main_thread_id; 
 extern unsigned int draw_thread_id; /* for graphics thread */
 #endif
+extern int cpu_affinity_flag; /* for -A command line option */
 extern char *warning_messages;  /* for storing warning messages */
 extern int warning_messages_new; /* number of new warning messages since last looked */
 extern size_t warning_messages_max; /* allocated bytes for warning_messages */
@@ -90,10 +96,21 @@ extern int mpi_show_corona_flag; /* whether to display imported elements */
 extern int mpi_local_bodies_flag; 
 /* First mpi task is root */
 #define MASTER_TASK 0
+/* Whether in initialization state or tasks are waiting */
+extern int mpi_initialization_flag;
+
+/* Controlling whether a function should propagate its effect to other MPI tasks */
+#define MPI_PROPAGATE 1
+#define MPI_NO_PROPAGATE 0
 
 /* controlling edge and facet deletion options */
 extern int star_finagling; /* extra bad configuration detection */
 extern int force_deletion; /* even if it seems a bad idea */
+
+/* controls whether detorus command merges regardless of vertex parents */
+extern int detorus_sticky;
+extern REAL dt_eps; /* closeness criterion for merging vertices in detorus */
+#define DT_EPS_DEFAULT (1e-6)
 
 /************************************************************/
 /* Unified lists of imported elements for MPI version       */
@@ -139,14 +156,16 @@ extern REAL **optparam_congrads;  /* constraint gradients */
 #define GRAPH_BLOCK 0xCBCB
 
 /* for per-thread temp memory */
-extern int this_thread;
 #if defined(_WIN32)
+#define this_thread   GetCurrentThreadId()
 #define THREADBLOCK(blocktype) blocktype = \
     (draw_thread_id==GetCurrentThreadId()) ? GRAPH_BLOCK : TEMP_BLOCK
 #elif defined(PTHREADS)
+#define this_thread   pthread_self()
 #define THREADBLOCK(blocktype) blocktype = \
     (draw_thread_id==pthread_self()) ? GRAPH_BLOCK : TEMP_BLOCK
 #else
+#define this_thread 0
 #define THREADBLOCK(blocktype) blocktype = TEMP_BLOCK
 #endif
 
@@ -159,17 +178,20 @@ extern int zener_drag_flag; /* whether to do zener drag */
 #define ZENER_COEFF_NAME "zener_coeff"
 extern int backcull_flag;  /* 3D graphics backculling */
 extern int setting_backcull; 
+extern int rotate_lights_flag; /* whether lights rotate with object */
 
 /* slicing view */
 extern int slice_view_flag;
 extern int slice_coeff_global;
 extern REAL slice_coeff[MAXCOORD+2];
+extern int slice_coeff_set_flag;
 
 /* clipping view */
 extern int clip_view_flag;
 extern int clip_coeff_global;
 #define MAXCLIPS 10
 extern REAL clip_coeff[MAXCLIPS][MAXCOORD+2];
+extern int clip_coeff_set_flag;
 
 extern REAL **vgev;  /* vector vol grads, for approx curvature */
 extern REAL **vgef;  /* form vol grads, for approx curvature */
@@ -218,6 +240,7 @@ extern REAL factorial[20];
 extern int everything_quantities_flag;  /* for pure quantity version, after conversion */
 extern int show_all_quantities;  /* to display default quantities also */
 extern int random_seed;  /* seed for random number generators */
+extern int default_random_seed;  /* seed for random number generators from -s option */
 extern int option_q;  /* record command line option */
 extern int dont_resize_flag; /* set if datafile specified view matrix */
 extern int do_show_flag; /* for Mac kludge graphics command prompt */
@@ -227,6 +250,7 @@ extern char *evolver_version;  /* for version checking */
 extern char needed_version[30];
 
 extern REAL machine_eps;  /* smallest machine resolution at 1.0  */
+extern REAL root8machine_eps;  /* eighth root, for RF and RD in userfunc.c  */
 
 extern char *typenames[NUMELEMENTS];
 
@@ -238,7 +262,7 @@ extern char *typenames[NUMELEMENTS];
 #define DISCARDS_SOME 2
 
 /* element attr bits */
-#define ALL_ATTR     (ATTR)0xFFFFFFFF
+#define ALL_ATTR     (ATTR)0xFFFFFFFFFFFFFFFFLL
 #define ALLOCATED    (ATTR)0x0001
 #define NODISPLAY    (ATTR)0x0002
 #define NEWELEMENT   (ATTR)0x0004
@@ -277,8 +301,10 @@ extern char *typenames[NUMELEMENTS];
 #define ACTUALVOL     (ATTR)0x8000000
 #define REDUNDANT_BIT (ATTR)0x10000000
 #define NONCONTENT    (ATTR)0x20000000
-
-#define NO_ORIGINAL   (-1)
+#define CHECKMARKED   (ATTR)0x40000000
+#define NO_HESSIAN_NORMAL_ATTR (ATTR)0x80000000
+#define NO_TRANSFORM  (ATTR)0x100000000LL
+#define WANT_CENTEROFMASS  (ATTR)0x200000000LL
 
 /* modes for move_vertices() and hessian_move() */
 #define TEST_MOVE    0
@@ -292,6 +318,9 @@ extern char *dymem; /* dynamic memory region */
 extern int  dymemsize; /* size of dynamic memory region */
 extern struct constraint null_constraint; /* non-constraint placeholder */
 #define GETCONSTR(n) (web.constraints+(n))
+
+// For size of local arrays for hit constraints
+#define MAXCONHIT (MAXCOORD+1)
 
 /* compare_vertex_edge_attr results */
 #define INCOMPARABLE    0
@@ -309,6 +338,7 @@ extern int read_wrap_flag; /* set when reading wraps in datafile */
 extern int exit_after_error; /* auto exit flag */ 
 extern int exit_after_warning; /* auto exit flag */ 
 extern int break_after_warning; /* auto break flag */ 
+extern int break_on_warning; /* auto instant break flag */
 extern int last_error;  /* number of last error */
 extern int change_flag;  /* set during command that changes surface */
 extern int assigntype;  /* type of assignment operator */
@@ -326,9 +356,17 @@ struct vvvv { element_id id;  /* which element    */
               element_id v[3];    /* id's of vertices */
             };
 extern int check_count;      /* number of errors returned by run_checks() */
+extern int bad_next_prev_count;
+extern int inconsistent_bodies_count;
+extern int edge_loop_count;
+extern int edges_same_vertices_count;
+extern int facets_same_vertices_count;
+extern int bad_errors_count; // probably evolver bugs
+
 extern int gocount;          /* number of iterations left */ 
 extern int go_display_flag;     /* display each change */
 extern int box_flag;  /* whether or not to show outline box */
+extern int bounding_box_color; /* initially BLUE */
 extern int quiet_flag; /* whether to display normal output */
 extern int quiet_go_flag; /* whether to display normal g output */
 extern int quiet_load_flag; /* whether to display output while loading file */
@@ -343,6 +381,7 @@ extern int facet_rgb_color_attr; /* number of rgb color attribute */
 extern int facet_rgb_backcolor_attr; /* number of rgb color attribute */
 extern int edge_alpha_flag; /* whether edges have alpha channel */
 extern int facet_alpha_flag; /* whether facets have alpha channel */
+extern int opacity_attr; /* attribute number of opacity attribute */
 extern int facetback_alpha_flag; /* whether facetbacks have alpha channel */
 extern int background_color;  /* graphics background */
 extern int geomview_bug_flag; /* for geomview 1.6.1 picking bug */
@@ -352,6 +391,7 @@ extern int pickvnum,pickenum,pickfnum,pickbnum; /* geomview picks */
 extern int new_vertex_id,new_edge_id,new_facet_id,new_body_id; /* just created elements */
 extern int gv_vect_start; /* vector vertex start in vpicklist */
 extern int lazy_transforms_flag;  /* let graphics display handle symmetry */
+extern int some_no_transforms_flag; /* set when some element made no_transform */
 /* for piping geomview output */
 #define GEOM_TO_GEOMVIEW 0
 #define GEOM_NAMED_PIPE 1
@@ -371,6 +411,7 @@ extern long reset_timestamp;  /* when surface loaded */
 #define NOSETSTAMP 0
 #define SETSTAMP   1
 
+extern int force_edgeswap_flag; /* to override equiangulation warnings */
 extern int lmc_mc_attr;  /* vertex mean curvature attribute used by laplacian_mean_curvature */
 extern int lmc_mobility_attr;  /* edge/facet mobility attribute used by laplacian_mean_curvature */
 extern int quarter_turn_var; /* for quarter_turn symmetry */
@@ -380,6 +421,7 @@ extern char pix_file_name[150]; /* for P 2 */
 extern int labelflag; /* whether ps doing labels */
 extern int gridflag;  /* whether ps doing gridlines */
 extern int ps_colorflag; /* whether ps doing color */
+extern int ps_cmykflag; /* whether ps doing color in cmyk */
 extern int full_bounding_box_flag; /* for window bounding box */
 extern int crossingflag; /* whether ps doing crossings */
 
@@ -422,12 +464,25 @@ struct dstack { REAL value, deriv[2*MAXCOORD];
                 REAL second[2*MAXCOORD][2*MAXCOORD]; 
               };
 
+// For printing stack trace in case of error. Acts as circular
+// buffer in case of overflow, so you have the most recent
+// calls in case of error.
+#define TRACEMAX 100
+extern struct treenode *eval_stack_trace[TRACEMAX+2];
+extern int eval_stack_trace_spot;  // points to 
+#define PUSH_TRACE { if ( eval_stack_trace_spot >= TRACEMAX ) \
+            eval_stack_trace_spot = 0;                        \
+        eval_stack_trace[eval_stack_trace_spot++] = node;  }  
+#define POP_TRACE  { if ( eval_stack_trace_spot > 0 )         \
+          eval_stack_trace[eval_stack_trace_spot--] = NULL;             }               
+       
+
 /* for redefining single letter commands */
 extern struct expnode single_redefine[128];
 
 /* for dynamic load library functions */
 #define MAX_DLL 5
-typedef void (*dll_func_type) ARGS((int , REAL*, struct dstack *));
+typedef void (*dll_func_type) (int , REAL*, struct dstack *);
 struct dll { char *name;  /* library name */
              void *handle;     /* for dl functions */
            } ;
@@ -438,9 +493,9 @@ extern  struct dll dll_list[MAX_DLL];
 
 
 /* global variable list */
-#define GLOBAL_NAME_SIZE 31
+#define GLOBAL_NAME_SIZE 63
 struct global
-  { char name[GLOBAL_NAME_SIZE + 1];  /* 31 significant characters */
+  { char name[GLOBAL_NAME_SIZE + 1];  /* 63 significant characters */
     union { REAL real;
             char *string;
             struct expnode proc;
@@ -458,27 +513,30 @@ struct global
           } value;
     union {
       struct {
-          int argcount; /* function argument count */
-          struct locallist_t *locals;  /* local variable symbol table */
-          int  proc_timestamp; /* for ordering procedure defines */
-          char *proc_text; /* text of procedure definition */
+               int argcount; /* function argument count */
+               struct locallist_t *locals;  /* local variable symbol table */
+               int  proc_timestamp; /* for ordering procedure defines */
+               char *proc_text; /* text of procedure definition */
 #define ARGTYPENUM 8
-          unsigned char argtypes[ARGTYPENUM]; /* indices into type table */
-        } procstuff;
+               unsigned char argtypes[ARGTYPENUM]; /* indices into type table */
+             } procstuff;
       struct {
-          REAL delta; /* for optimizing parameter differencing */
-          REAL pscale; /* for optimizing parameter scale matching */
-          REAL *gradhess; /* for expressions in constraints etc. */
-       } varstuff;
-       struct array *arrayptr;
+               REAL delta; /* for optimizing parameter differencing */
+               REAL pscale; /* for optimizing parameter scale matching */
+               REAL *gradhess; /* for expressions in constraints etc. */
+               int  on_assign_call; /* procedure to call upon assignment */
+             } varstuff;
+      struct array *arrayptr;
     } attr;
     int  flags;     /* see defines below */
+    int  flags2;    /* more flag bits */
     int  type;      /* datatype for variables */
   };
 extern struct locallist_t *query_locals;
 #define LOCALSCOPEMAX 100
 extern struct locallist_t *local_scope_bases[LOCALSCOPEMAX]; /* for parsing */
 extern int local_nest_depth;  /* for local_scope_bases */
+extern int temp_array_number; // for uniquely naming temporary arrays
 
 /* for global identifier id */
 #define GLOBMASK   0x00FFFFFF
@@ -503,17 +561,17 @@ typedef unsigned int ident_t;
 #define dy_globals web.dy_globals_w
 #define globals(gid) ( \
     ((gid)&(~GLOBMASK))==EPHGLOBAL ?  \
-    (((struct global *)(dymem + dy_globals))+((gid)&GLOBMASK)) : \
+    (((struct global **)(dymem + dy_globals))[(gid)&GLOBMASK]) : \
     (((gid)&(~GLOBMASK))==LOCALVAR ?  \
     (&(localbase->list[(gid)&GLOBMASK].g)) : \
     (((gid)&(~GLOBMASK))==PERMGLOBAL ?  \
-    (dy_perm_globals+((gid)&GLOBMASK)) : \
-    (((struct global *)(dymem + dy_globals))+((gid)&GLOBMASK)) \
+    (dy_perm_globals[(gid)&GLOBMASK]) : \
+    (((struct global **)(dymem + dy_globals))[(gid)&GLOBMASK]) \
    )))
-extern struct global *Globals; /* handy for debugging */
+extern struct global **Globals; /* handy for debugging */
 #define dy_perm_globals web.dy_perm_globals_w
-#define perm_globals(gid) (dy_perm_globals+((gid)&GLOBMASK))
-extern struct global *perm_Globals; /* handy for debugging */
+#define perm_globals(gid) (dy_perm_globals[(gid)&GLOBMASK])
+extern struct global **perm_Globals; /* handy for debugging */
 #define dy_globalshash web.dy_globalshash_w
 #define globalshash ((int *)(dymem + dy_globalshash))
 extern int dy_global_hash_max;      /* allocated entries */
@@ -549,7 +607,6 @@ struct locallist_t {
     int totalsize;
     int scope_depth;
     int flags; /* see below */
-    ident_t iid; /* of procedure this list belongs to */
 };
 extern struct locallist_t *localbase;
 /* locallist_t flag bits */
@@ -619,6 +676,11 @@ extern REAL **ritzvecs;
 #define ALWAYS_RECALC   0x8000000
 #define FIXED_SIZE_ARRAY 0x10000000
 #define UNFIXED_SIZE_ARRAY 0x20000000
+#define DONT_RESIZE 0x40000000
+#define USED_ON_ASSIGN_CALL 0x80000000
+
+// Bits for flags2 of struct global
+#define NO_DUMP_BIT  0x00000001
 
 extern struct expnode torus_period_expr[MAXCOORD][MAXCOORD];
 extern struct expnode torus_display_period_expr[MAXCOORD][MAXCOORD];
@@ -633,6 +695,8 @@ extern struct expnode torus_display_period_expr[MAXCOORD][MAXCOORD];
 
 
 extern int torus_display_mode;  /* default, raw, connected, clipped */
+extern int former_torus_display_mode; /* used for loading torus after nontorus */
+
 /* modes */
 #define TORUS_DEFAULT_MODE 0
 #define TORUS_RAW_MODE      1
@@ -681,11 +745,13 @@ extern int boundary_expr_flag; /* so parser knows when parsing boundary */
 extern int reading_elements_flag; /* so parser knows attributes should not
      be accepted in expressions */
 extern FILE *outfd;     /* for normal output */
+extern FILE *erroutfd;     /* for error output */
 extern int check_increase_flag;  /* to detect blowups */
 extern int estimate_flag;    /* for toggling estimate of energy decrease */
 extern REAL estimated_change; /* stored result */
 extern int autorecalc_flag; /* for toggling autorecalc after variable assign  */
 extern int autopop_flag;     /* whether to do autopopping */
+extern int septum_flag; /* control whether septums put across pop tunnels, -1,0,or 1 */
 extern int immediate_autopop_flag; /* set if pop before motion */
 extern int autopop_quartic_flag; /* if autopop length = sqrt(sqrt(2*scale)) */
 extern int pop_disjoin_flag;  /* whether cones to be disjoined rather than merged */
@@ -700,6 +766,29 @@ extern int pop_to_face_flag;  /* control which way popping goes */
 #define POP_TO_TRIANGLE 4
 #define POP_TO_EDGE   5
 #define POP_TO_FACE   6
+
+#define CELLMAX 300
+#define ARCMAX  600
+struct cell { int start;     /* arc list start in arclist */
+                  int festart;  /* starting place in felist */
+                  int num;        /* number of arcs                */
+                  int fenum;     /* number of facetedges */
+                  REAL area;     /* external angle deficit     */
+                  body_id b_id; /* which body, if any */
+                } ;
+struct arc  { int start;     /* edge list start in felist */
+                  int num;        /* number of edges              */
+                  int valence;  /* number of arcs into head node */
+/*                int headtype; */  /* type of head node */
+                } ;
+
+struct cone_info {
+    int cells;
+    int arcs;
+    struct cell cell[CELLMAX];
+    struct arc arclist[ARCMAX];
+    facetedge_id *felist;  /* for cell-ordered list */
+};
 
 extern int autochop_flag;     /* whether to do autochopping */
 extern REAL autochop_length;  /* max edge length for autochop */
@@ -734,6 +823,8 @@ extern int nprocs;     /* number of parallel processors */
 extern int *v_procnum; /* processors for vertex, index by ord */
 extern int procs_requested; /* number of processes desired */
 extern REAL proc_total_area[MAXPROCS]; /* for individual processes */
+extern REAL proc_real_ret[MAXPROCS]; /* for individual processes to return a real value */
+extern int proc_int_ret[MAXPROCS]; /* for individual processes to return an integer value */
 extern int web_checksum; /* to see if web needs sending */
 extern int dymem_checksum; /* see if dymem needs sending */
 extern int comp_quant_vertex; /* during calc_quant_grad */
@@ -765,6 +856,27 @@ extern int _CrtCheckMemory(void);
 #else
 #define HEAPCHECK
 #endif
+
+/************************************************************************
+                    Memory allocation lists
+************************************************************************/
+
+/* Header structure for each block */
+struct memhead {  struct memhead *prev, *next; /* doubly linked list */
+                  size_t size;
+                  int type;   /* see below */
+#ifdef MEMSTRINGS
+                  char file[28];
+                  int line;
+#endif
+               };
+/* Memory block list heads */
+extern struct memhead *perm_block_head;
+extern struct memhead *temp_block_head;
+extern struct memhead *graph_block_head;
+extern struct memhead *eternal_block_head;
+/* end memory allocation lists */
+
 extern int tok;
 extern int unput_tok_count;  /* number of pushed-back tokens */
 extern int int_val;
@@ -797,7 +909,7 @@ extern char last_name[50]; /* name of last element generator */
 #define HISTBINS 21    /* bins in histogram (actually 1 less )*/
 
 /* symbol table stuff */
-#define SYMNAMESIZE 31
+#define SYMNAMESIZE GLOBAL_NAME_SIZE
 struct sym {
     char name[SYMNAMESIZE+1];
     int  type; /* element type, or see defines below */
@@ -811,18 +923,21 @@ struct sym {
 extern struct sym *elsym;  /* name of element during parsing */
 extern struct sym *yysym;  /* name of identifier from lex */
 extern struct sym symtable[];    /* symbol table */
-struct array { int dim; 
+
+struct array { int flags;
+               int dim;        /* number of indices */
                int datatype;   /* REAL_TYPE_, INTEGER_TYPE_, etc. */
                int itemsize;   /* bytes per item */
                int datacount;   /* total data elements */
                size_t datastart;  /* byte offset of start of data */
-               int sizes[MAXARRAYDIMS];    /* arbitrary length, followed by data */
+               int sizes[MAXARRAYDIMS];  /* in each dimension */
              };
-               
+// struct array flags
+#define ARRAY_TEMP  0x8000               
 /************************************************************************
 * structure for defining extra attributes
 */
-#define ATTR_NAME_SIZE 31
+#define ATTR_NAME_SIZE GLOBAL_NAME_SIZE
 struct extra { char name[ATTR_NAME_SIZE+1];
                int offset;  /* within allocated space */
                int type;    /* see below */
@@ -839,10 +954,13 @@ struct extra { char name[ATTR_NAME_SIZE+1];
             };
 
 /* flag bits */
-#define DUMP_ATTR     1
-#define FUNCTION_ATTR 2
-#define DIMENSIONED_ATTR 4
-#define RECALC_ATTR      8
+#define DUMP_ATTR        0x01
+#define FUNCTION_ATTR    0x02
+#define DIMENSIONED_ATTR 0x04
+#define RECALC_ATTR      0x08
+#define READ_ONLY_ATTR   0x10
+#define VIRTUAL_ATTR     0x20
+#define INTERNAL_ATTR    0x40
 
 /* useful for debugging */
 extern struct extra *Extras[NUMELEMENTS];
@@ -874,8 +992,9 @@ extern struct extra *Extras[NUMELEMENTS];
 #define QUANTITY_TYPE 21
 #define INSTANCE_TYPE 22
 #define PROCEDURE_TYPE 23
+#define ARRAY_TYPE  24
 
-#define NUMDATATYPES 24
+#define NUMDATATYPES 25
 /* the following are set in skeleton.c to match above defines */
 extern char *datatype_name[NUMDATATYPES];
 extern int datatype_size[NUMDATATYPES];
@@ -918,6 +1037,7 @@ extern int normal_curvature_flag; /* choice of curvature formula */
 extern int div_normal_curvature_flag; /* choice of curvature formula */
 extern int marked_edge_attr;
 #define MARKED_EDGE_ATTR_NAME "sqcurve_string_mark"
+extern int sqtor_marked_edge_attr; // for marking sq_torsion edges
 extern int circular_arc_flag; /* whether to draw edges as arcs */
 extern int spherical_arc_flag; /* whether to draw edges as spherical arcs */
 
@@ -928,7 +1048,7 @@ extern int spherical_arc_flag; /* whether to draw edges as spherical arcs */
 extern int self_similar_flag;
 
 #define STR_CUR_TOL_NAME "string_curve_tolerance"
-REAL string_curve_tolerance; /* quadratic string model smoothness, deg */
+extern REAL string_curve_tolerance; /* quadratic string model smoothness, deg */
 
 /* for restricting motion to be along normals */
 extern int normal_motion_flag;
@@ -944,11 +1064,24 @@ extern REAL **identmat;  /* handy identity matrix, set up in init_view */
 /* homothety target value, set when homothety toggled on */
 extern REAL homothety_target;
 
+#define MAXGRAPHWINDOWS 10
+#define WINTITLESIZE 120
+
+extern int K_altitude_flag; /* for K command mode */
 extern int scrollbuffersize; /* output console lines */
+extern char console_title[1000];  /* for command window title */
+extern int console_title_global; /* id number for console_title in symbol table */
+extern char graphics_title[1000];  /* for graphics window title */
+extern char graphics_title2[1000];  /* for graphics window title */
+extern char graphics_title3[1000];  /* for graphics window title */
+extern int graphics_title_global; /* id number for graphics_title in symbol table */
+extern int graphics_title2_global; /* id number for graphics_title2 in symbol table */
+extern int graphics_title3_global; /* id number for graphics_title3 in symbol table */
 extern char *msg;      /* for constructing user messages */
 extern int msgmax;     /* length allocated */
 #define ERRMSGSIZE 2000
 extern char errmsg[ERRMSGSIZE];  /* for error() routine */
+extern int suppress_erroutstring; /* to temporarily quiet erroutstring() */
 extern int  parse_error_flag;  /* set when parser hits error */
 extern int parse_errors;     /* for counting errors */
 extern int  recovery_flag;      /* set while recovering from parsing error */
@@ -988,7 +1121,6 @@ extern int query_coord;
 #define SET_CONSTRAINT 1304
 #define SET_COORD    1305
 #define SET_PARAM    1306
-#define SET_TAG      1307
 #define UNSET_Q_ATTR 1308
 #define UNSET_CONSTRAINT 1309
 #define SET_COLOR  1310
@@ -1053,6 +1185,10 @@ extern int raw_velocity_attr; /* for use by one-sided constraints */
 #define ONE_SIDED_LAGRANGE_ATTR_NAME "one_sided_lagrange"
 extern int one_sided_lagrange_attr;
 
+/* print_array modes */
+#define PRINT_PLAIN 1001
+#define PRINT_DUMP  1002
+
 /* vertex averaging modes */
 #define NOVOLKEEP 0
 #define VOLKEEP    1
@@ -1066,6 +1202,8 @@ extern int breakflag;      /* set by user interrupt */
 #define BREAKAFTERWARNING 4
 #define BREAKABORT 5
 extern int iterate_flag;  /* so handler knows when iteration in progress */
+extern int hessian_iterate_flag; /* so handler knows when hessian has
+                                    surface in bad state */
 extern int bare_edge_count;  /* edges without facets */
 
 struct oldcoord {  
@@ -1108,7 +1246,7 @@ extern int  ribiere_flag; /* to do Polak-Ribiere version */
 struct bodyface { facet_id f_id;
                   body_id  b_id;
                   WRAPTYPE wrap;  /* wraps of base vertex */
-                  int        wrapflag; /* whether wrap done */
+                  int      wrapflag; /* whether wrap done */
                 };
 /* wrapflag values */
 #define NOT_WRAPPED 0
@@ -1138,7 +1276,7 @@ extern struct tsort {
           int backstamp;                  /* for loop detection */
           struct tsort *prev;             /* for depth order linked list */
           struct tsort *next;             /* for depth order linked list */
-          int spot;                       /* spot in draw list */
+          size_t spot;                       /* spot in draw list */
 #ifdef TOPSORT
           int sons;                       /* for topological sort */
           struct tlink *linkhead;
@@ -1151,6 +1289,7 @@ extern struct tsort {
 #define VISIBLE       0x4000
 #define ARC_EDGE      0x8000
 #define SPHERE_EDGE  0x10000
+#define VISIBILITY_LIVE  0x20000
 
 extern int graph_capabilities;  /* bits to describe what current graphics 
                                    device can do */
@@ -1170,6 +1309,7 @@ struct graphdata { REAL  x[MAXCOORD+1];  /* homogeneous coordinates */
                    REAL  norm[MAXCOORD]; /* unit normal */
                    int   color;          /* colormap index */
                    int   backcolor;      /* for back of facet */
+                   REAL  opacity;        /* if opacity feature used */
                    int   ecolor;         /* edge color */
                    short etype;          /* edge type */
                    element_id id;        /* which element being graphed */
@@ -1192,13 +1332,15 @@ struct graphdata { REAL  x[MAXCOORD+1];  /* homogeneous coordinates */
 #define  CONSTRAINT_EDGE 0x20
 #define  BARE_EDGE      0x40
 #define  SPLITTING_EDGE 0x80
-#define  EBITS          0xFF
+#define  EBITS          0x2FF
 
-#define  LABEL_EDGE     0x100
-#define  LABEL_HEAD     0x200
-#define  LABEL_TAIL     0x400
-#define  LABEL_FACET    0x800
-#define  LABEL_REVERSED 0x1000
+#define  LABEL_EDGE     0x400
+#define  LABEL_HEAD     0x800
+#define  LABEL_TAIL     0x1000
+#define  LABEL_FACET    0x2000
+#define  LABEL_REVERSED 0x4000
+
+#define  COLORS_SWAPPED 0x8000
 
 /* for extracting color bits from int color */
 #define GET_RED_BITS(c)  (((unsigned int)(c)>>24) & 0xFF)
@@ -1209,6 +1351,7 @@ struct graphdata { REAL  x[MAXCOORD+1];  /* homogeneous coordinates */
 typedef REAL  IColor[4];  /* r,g,b,a;  not same as OOGL ColorA */
 #define IRIS_COLOR_MAX 16
 extern IColor rgb_colors[IRIS_COLOR_MAX];
+extern IColor cmyk_colors[IRIS_COLOR_MAX];
 extern REAL facet_alpha;  /* global transparency */
 
 /* homogeneous coordinate dimensions */
@@ -1216,16 +1359,16 @@ extern int HOMDIM;
 
 /* function pointers for invoking device-specific graphics */
 /* first four are for random-order plotting and are fed raw data */
-extern void (*graph_start) ARGS((void));  /* called at start of graphing */
-extern void (*graph_edge ) ARGS((struct graphdata *,edge_id));  /* called to graph one triangle */
-extern void (*graph_facet) ARGS((struct graphdata *,facet_id));  /* called to graph one triangle */
-extern void (*graph_end) ARGS((void));     /* called at end of graphics */
+extern void (*graph_start) (void);  /* called at start of graphing */
+extern void (*graph_edge ) (struct graphdata *,edge_id);  /* called to graph one triangle */
+extern void (*graph_facet) (struct graphdata *,facet_id);  /* called to graph one triangle */
+extern void (*graph_end) (void);     /* called at end of graphics */
 /* second four are for painter algorithm output, are fed digested data */
-extern void (*display_edge ) ARGS((struct tsort *));  /* hardware edge  display */
-extern void (*display_facet) ARGS((struct tsort *));  /* hardware facet display */
-extern void (*init_graphics) ARGS((void));  /* hardware initialization */
-extern void (*finish_graphics) ARGS((void));  /* hardware end of picture */
-extern void (*close_graphics) ARGS((void));  /* close graphics window */
+extern void (*display_edge ) (struct tsort *);  /* hardware edge  display */
+extern void (*display_facet) (struct tsort *);  /* hardware facet display */
+extern void (*init_graphics) (void);  /* hardware initialization */
+extern void (*finish_graphics) (void);  /* hardware end of picture */
+extern void (*close_graphics) (void);  /* close graphics window */
 
 /* edge thicknesses for painter algorithm */
 /* in order BARE_EDGE, FIXED_EDGE, CONSTRAINT_EDGE, BOUNDARY_EDGE,
@@ -1504,6 +1647,12 @@ struct linsys { int flags;  /* status bits, see below */
                 REAL **low_rank_vectors; /* the vectors V themselves, rowwise */
                 REAL **low_rank_form; /* F */
                 REAL **low_rank_inverse_form; /* (I + F V A^-1 V)^-1 */
+#ifdef MKL
+                /* Internal solver memory pointer pt, */
+                void *pt[64];
+                /* Pardiso control parameters. */
+                MKL_INT iparm[64];
+#endif
 #ifdef MPI_EVOLVER
    /* stuff used in MPI distributed linear systems */
    int *send_counts; /* counts for general MPI scatter/gather */
@@ -1599,6 +1748,20 @@ extern int ysmp_flag;  /* set if doing Yale Sparse Matrix version */
 #define MINDEG_FACTORING 0
 #define YSMP_FACTORING 1
 #define METIS_FACTORING 2
+#define MKL_FACTORING  3
+
+// MKL matrix types, real types only
+#define MKL_STRUCT_SYM  1
+#define MKL_POS_DEF     2
+#define MKL_INDEF     (-2)
+#define MKL_UNSYM      11
+
+#if defined(MKL) && (defined(LONGDOUBLE) || defined(FLOAT128))
+   MKL requires REAL = double.
+#endif
+
+// For Metis partitioning mode
+#define METIS_READJUST  23
 
 /* for mindeg control */
 extern int mindeg_debug_level;
@@ -1606,34 +1769,34 @@ extern int mindeg_margin;
 extern int mindeg_min_region_size;
 
 /* multiply vector by original sparse matrix */
-extern void (*sp_mul_func)ARGS((struct linsys *, REAL*,REAL*));
+extern void (*sp_mul_func)(struct linsys *, REAL*,REAL*);
 
 /* convert raw Hessian data to standard sparse format */
-extern void (*sp_AIJ_setup_func)ARGS((int,struct linsys*));
+extern void (*sp_AIJ_setup_func)(int,struct linsys*);
 
 /* set up  matrices needed for handling constraints */
-extern void (*sp_constraint_setup_func)ARGS((int, struct linsys *));
+extern void (*sp_constraint_setup_func)(int, struct linsys *);
 
 /* set up projection to constraints using hessian metric */
-extern void (*sp_hess_project_setup_func)ARGS((struct linsys *)) ;
+extern void (*sp_hess_project_setup_func)(struct linsys *);
 
 /* factor matrix */
-extern void (*sp_factor_func)ARGS((struct linsys *)) ;
+extern void (*sp_factor_func)(struct linsys *, int);
 
 /* Matrix inner product using hessian inverse */
-extern void (*sp_CHinvC_func)ARGS((struct linsys *)) ;
+extern void (*sp_CHinvC_func)(struct linsys *);
 
 /* return a vector in kernel, supposing nullity > 0 */
-extern int (*sp_kernel_func)ARGS((struct linsys *,REAL *)) ;
+extern int (*sp_kernel_func)(struct linsys *,REAL *);
 
 /* solve given rhs */
-extern void (*sp_solve_func)ARGS((struct linsys *,REAL *,REAL *)) ;
+extern void (*sp_solve_func)(struct linsys *,REAL *,REAL *, int);
 
 /* solve multiple given rhs */
-extern void (*sp_solve_multi_func)ARGS((struct linsys*,REAL**,REAL**,int));
+extern void (*sp_solve_multi_func)(struct linsys*,REAL**,REAL**,int, int);
 
 /* optional ordering of vertices */
-extern void (*sp_ordering_func)ARGS((struct linsys *)) ;
+extern void (*sp_ordering_func)(struct linsys *);
 
 
 /* to suppress a proliferation of warnings */
@@ -1808,7 +1971,7 @@ struct text_s {
    char *text; /* null-terminated string */
    int  alloc; /* size of text allocation */
    REAL  start_x,start_y; /* starting position in 0-1 window coords */
-   REAL vsize;  /* vertical size, pixels?? */
+   REAL vsize;  /* vertical size, 0-1 window coords */
 };
 extern struct text_s text_chunks[MAXTEXTS];
 extern int display_text_count;
@@ -1862,6 +2025,7 @@ extern int rotorder;
 extern int transform_count;
 extern REAL ***view_transforms;
 extern int view_transforms_global; /* global var number */
+extern int view_transform_generators_global; /* global var number */
 extern int *view_transform_det; /* to see if normals need flipping */
 extern int transforms_flag; /* whether to show transforms */
 extern int transform_gen_count;
@@ -1872,18 +2036,26 @@ extern char transform_expr[100];  /* save it */
 extern int transform_depth;  /* tree depth in transform generation */
 extern int *transform_colors;
 extern int view_transform_swap_colors_global; /* global var number */
+extern int transform_gen_swap_colors_global; /* global var number */
 extern int *transform_parity;
 extern int *transform_gen_swap;
 #define SAME_COLOR  0
 #define SWAP_COLORS 1 
 extern int transform_colors_flag;
+extern int view_transforms_unique_point_global; /* global id number of vector */
+extern int view_transforms_unique_point_flag; /* whether to use unique point */
+extern REAL *view_transforms_unique_point; /* coordinates of unique point */
 
+// Special integer color values; not using -1 since that can be mistaken
+// in rgb_color mode for white.  These below use unusual values for the
+// transparency field.    Problem on big-endian systems?
+// Oops, have to revert back to -1 for historical compatibility.
 /* color for transparent facets */
 #define CLEAR (-1)
 /* color for unshown facet */
-#define UNSHOWN (-2)
+#define UNSHOWN (-3)
 /* color for saying color is not set */
-#define NOT_A_COLOR (-3)
+#define NOT_A_COLOR (-4)
 
 /* from borlandc/graphics.h */
 #if      !defined(__COLORS)
@@ -1943,6 +2115,7 @@ extern int pmax[MAXPROCS];    /* available per calculator */
 #define LONG_TIMEOUT 100000
 #ifdef WIN32
 extern void * graphmutex;
+extern void * transforms_mutex;
 extern void * mem_mutex;
 extern unsigned int locking_thread; /* so we can tell who has it */
 /* Note ENTER_GRAPH_MUTEX and LEAVE_GRAPH_MUTEX form a {} block! */
@@ -1963,11 +2136,18 @@ extern unsigned int locking_thread; /* so we can tell who has it */
 #define ABORT_GRAPH_MUTEX  \
     if ( GetCurrentThreadId() == locking_thread )\
      {locking_thread = 0; ReleaseMutex(graphmutex); } else {}
+extern DWORD_PTR graphics_affinity_mask;
+
+/* Note: also have to initialize mutexes in tmain.c */
+#define ENTER_TRANSFORMS_MUTEX { MsgWaitForMultipleObjects(1,&transforms_mutex,0,100000,0); }
+#define LEAVE_TRANSFORMS_MUTEX  { ReleaseMutex(transforms_mutex);  }
+
 #define ENTER_MEM_MUTEX { MsgWaitForMultipleObjects(1,&mem_mutex,0,100000,0); }
 #define LEAVE_MEM_MUTEX  { ReleaseMutex(mem_mutex);  }
 
 #elif defined(PTHREADS)
 extern pthread_mutex_t graphmutex;
+extern pthread_mutex_t transforms_mutex;
 extern pthread_t locking_thread; /* so we can tell who has it */
 #define ENTER_GRAPH_MUTEX {int did_graphlock_here;\
     if ( locking_thread != pthread_self() ) \
@@ -1984,6 +2164,8 @@ extern pthread_t locking_thread; /* so we can tell who has it */
         {locking_thread=0;pthread_mutex_unlock(&graphmutex);}  else {}
 #define ENTER_GRAPH_MUTEX_PR  printf("Lock %s:%d\n",__FILE__,__LINE__);pthread_mutex_lock(&graphmutex);
 #define LEAVE_GRAPH_MUTEX_PR printf("Unlock %s:%d\n",__FILE__,__LINE__); pthread_mutex_unlock(&graphmutex); 
+#define ENTER_TRANSFORMS_MUTEX  pthread_mutex_lock(&transforms_mutex);
+#define LEAVE_TRANSFORMS_MUTEX  pthread_mutex_unlock(&transforms_mutex); 
 extern pthread_mutex_t mem_mutex;
 #define ENTER_MEM_MUTEX  pthread_mutex_lock(&mem_mutex);
 #define LEAVE_MEM_MUTEX  pthread_mutex_unlock(&mem_mutex); 
@@ -1994,6 +2176,8 @@ extern pthread_mutex_t mem_mutex;
 #define LEAVE_MEM_MUTEX  {}
 #define TRY_GRAPH_MUTEX(timeout)  1
 #define ABORT_GRAPH_MUTEX {} 
+#define ENTER_TRANSFORMS_MUTEX {}
+#define LEAVE_TRANSFORMS_MUTEX {}
 #endif
 
 /* Multithreading with worker threads */
@@ -2021,6 +2205,13 @@ extern int element_unlocks;
 #define TH_MULTI_QUANT_HESS    7
 #define TH_FIX_GRADS           8
 #define TH_MOVE_VERTICES       9
+#define TH_CALC_FACET_VOLUME   10
+#define TH_CALC_EDGE_CON_VOLUME 11
+#define TH_EQUIANGULATE 12
+#define TH_VERTEX_AVERAGE 13
+#define TH_RAW_VERTEX_AVERAGE 14
+#define TH_RAWEST_VERTEX_AVERAGE 15
+#define TH_CALC_EDGES  16
 
 #ifdef PTHREAD_LOG
 struct thread_event { /* for tracking thread events */
@@ -2078,6 +2269,8 @@ struct thread_data {  /* per thread data, pointed to by thread_data_key */
          REAL *stack_top;      /* occupied stack top */
          int frame_spot; /* start of topmost frame */
 
+         struct qinfo q_info;  /* quantity calculation data */
+
 #ifdef _MSC_VER
      __int64 stagestart[MAXTHREADSTAGES];
      __int64 stageend[MAXTHREADSTAGES];
@@ -2088,6 +2281,7 @@ struct thread_data {  /* per thread data, pointed to by thread_data_key */
 #endif
    };
 extern struct thread_data **thread_data_ptrs;  /* one per thread to be allocated */
+extern struct thread_data glutgraph_thread_data; /* for show eval() */
 
 /* Note: all system-specific thread stuff is in tmain.c */
 
@@ -2099,7 +2293,7 @@ extern struct thread_data **thread_data_ptrs;  /* one per thread to be allocated
 #include <pthread.h>
 extern void * element_mutex_ptr;
 extern void * web_mutex_ptr;
-#define GET_THREAD_DATA (struct thread_data *)pthread_getspecific(thread_data_key)
+#define GET_THREAD_DATA ((struct thread_data *)pthread_getspecific(thread_data_key))
 #define LOCK_ELEMENT(id)  (threadflag ? mylock_element(id) : 0)
 #define UNLOCK_ELEMENT(id)  (threadflag ?  (elptr(id)->lock = 0) : 0)
 #define LOCK_WEB  (threadflag ? ((pthread_mutex_trylock(web_mutex_ptr)==EBUSY)?\
@@ -2149,7 +2343,7 @@ extern int m_mode;
 extern REAL *m_rhs;
 
 extern  double   cpu_speed;
-#if defined(_MSC_VER) && !defined(__BORLANDC__) && !(_IA64_==1) && !defined(_WIN64)
+#if defined(_MSC_VER) && !defined(__BORLANDC__) && !(_IA64_==1)
 /***************************************************************************
   Some macros for cycle-counting profiling.
   Usage: Put PROF_START(f) at start of function f, PROF_FINISH(f) at end,
@@ -2159,29 +2353,24 @@ __int32 f_elapsed_time[2];
   PROF_PRINT(f);
   Make sure all return paths go through end of function. 
 ***************************************************************************/
+#pragma intrinsic(__rdtsc)
 /* always do PROF_NOW, so can get CPU counter even if not profiling */
-#define PROF_NOW(fullname) {  __asm {rdtsc} __asm {mov fullname,eax}      \
-        __asm { mov fullname[4],edx}   }
-#define PROF_CYCLES(fullname) ((double)*(__int64*)fullname)
+#define PROF_NOW(fullname)  { fullname = __rdtsc(); }
+#define PROF_CYCLES(fullname) ( fullname)
 #ifdef PROF_EVALS
-#define PROF_EVAL_START(ex) { __asm {rdtsc} __asm {mov eval_elapsed_time,eax}   \
-    __asm {mov eval_elapsed_time[4],edx}                                  \
-    (ex)->elapsed_time -=  (((REAL)*(__int64*)eval_elapsed_time)); }
-#define PROF_EVAL_END(ex) { __asm {rdtsc} __asm {mov eval_elapsed_time,eax}   \
-    __asm {mov eval_elapsed_time[4],edx}                                  \
-    (ex)->elapsed_time +=  (((REAL)*(__int64*)eval_elapsed_time)); }
+#define PROF_EVAL_START(ex) { (ex)->elapsed_time -= (REAL)__rdtsc(); }
+#define PROF_COUNT_INCR(ex) { (ex)->call_count++; }
+#define PROF_EVAL_END(ex) { (ex)->elapsed_time += (REAL)__rdtsc(); }
 #endif
 
 #ifdef PROFILING
 #define PROFILING_ENABLED
-#define PROF_START(f) { __asm {rdtsc} __asm {sub f##_elapsed_time,eax}      \
-        __asm {sbb f##_elapsed_time[4],edx}   }
-#define PROF_FINISH(f)  { __asm {rdtsc} __asm {add f##_elapsed_time,eax}   \
-    __asm {adc f##_elapsed_time[4],edx} }
-#define PROF_ELAPSED(f) (((REAL)*(__int64*)f##_elapsed_time)/cpu_speed)
+#define PROF_START(f) { f -= __rdtsc();  }
+#define PROF_FINISH(f)  {  f += __rdtsc(); }
+#define PROF_ELAPSED(f) (((REAL)f##_elapsed_time)/cpu_speed)
 #define PROF_RESET(f) f##_elapsed_time[0]=f##_elapsed_time[1]=0;
 #define PROF_PRINT(f) { fprintf(stderr,"%22s: %13.0f\n",#f,\
-    (double)*(__int64*)f##_elapsed_time); \
+    (double)f##_elapsed_time); \
    f##_elapsed_time[0]=f##_elapsed_time[1]=0;}
 #define METHOD_PROFILING_START(mi,mode) {PROF_RESET(mode);PROF_START(mode);}
 #define METHOD_PROFILING_END(mi,mode) {PROF_FINISH(mode);mi->mode##_elapsed_time += PROF_ELAPSED(mode);mi->mode##_call_count++;}
@@ -2195,7 +2384,7 @@ __int32 f_elapsed_time[2];
   asm("movl %%edx,%0" : "=m"(fullname[1]) : ); }
 #define PROF_CYCLES(fullname) ((double)*(unsigned long long*)fullname)
 #ifdef PROF_EVALS
-#define PROF_EVAL_END { \
+#define PROF_EVAL_START { \
   asm("push %%eax" : :); \
   asm("push %%edx" : :); \
   asm("rdtsc" : : ); \
@@ -2203,7 +2392,9 @@ __int32 f_elapsed_time[2];
   asm("adc %%edx,%0" : "=m"(eval_elapsed_time[1]) : ); \
   asm("pop %%edx" : :); \
   asm("pop %%eax" : :); \
-    (ex)->elapsed_time -=  (((REAL)*(unsigned long long*)eval_elapsed_time)); }
+    (ex)->elapsed_time -=  (((REAL)*(unsigned long long*)eval_elapsed_time));   \
+   }
+#define PROF_COUNT_INCR(ex) { (ex)->call_count++; }
 #define PROF_EVAL_END { \
   asm("push %%eax" : :); \
   asm("push %%edx" : :); \
@@ -2244,7 +2435,7 @@ __int32 f_elapsed_time[2];
 #endif
 
 #ifndef PROF_NOW
-#define PROF_NOW(f)  f[0] = f[1] = 0;
+#define PROF_NOW(f)  f = 0;
 #define PROF_CYCLES(f) 0.0
 #endif
 
@@ -2259,25 +2450,26 @@ __int32 f_elapsed_time[2];
 #endif
 
 #ifndef PROF_EVAL_START
-#define PROF_EVAL_START
-#define PROF_EVAL_END
+#define PROF_EVAL_START(ex)
+#define PROF_EVAL_END(ex)
+#define PROF_COUNT_INCR(f)
 #endif
 
-extern int element_setup_elapsed_time[2];
-extern int calc_quants_elapsed_time[2];
-extern int calc_quant_grads_elapsed_time[2];
-extern int calc_quant_hess_elapsed_time[2];
-extern int exparse_elapsed_time[2];
-extern int yyparse_elapsed_time[2];
-extern int yylex_elapsed_time[2];
-extern int kblex_elapsed_time[2];
-extern int hessian_solve_elapsed_time[2];
-extern int hessian_mul_elapsed_time[2];
-extern int hessian_AIJ_setup_elapsed_time[2];
-extern int hessian_constraint_setup_elapsed_time[2];
-extern int hessian_project_setup_elapsed_time[2];
-extern int hessian_factor_elapsed_time[2];
-extern int hessian_CHinvC_elapsed_time[2];
+extern long long int element_setup_elapsed_time;
+extern long long int calc_quants_elapsed_time;
+extern long long int calc_quant_grads_elapsed_time;
+extern long long int calc_quant_hess_elapsed_time;
+extern long long int exparse_elapsed_time;
+extern long long int yyparse_elapsed_time;
+extern long long int yylex_elapsed_time;
+extern long long int kblex_elapsed_time;
+extern long long int hessian_solve_elapsed_time;
+extern long long int hessian_mul_elapsed_time;
+extern long long int hessian_AIJ_setup_elapsed_time;
+extern long long int hessian_constraint_elapsed_time;
+extern long long int hessian_project_setup_elapsed_time;
+extern long long int hessian_factor_elapsed_time;
+extern long long int hessian_CHinvC_elapsed_time;
 
 
 #ifdef _MSC_VER
@@ -2298,7 +2490,7 @@ extern int hessian_CHinvC_elapsed_time[2];
   struct thread_data *data;                                          \
   int maxstage;                                                      \
   int elnum,maxelnum;                                                \
-  __int32 now[2];                                                    \
+  __int64 now;                                                       \
                                                                      \
   data = GET_THREAD_DATA;                                            \
   proc = data->worker_id;                                            \
@@ -2311,7 +2503,7 @@ extern int hessian_CHinvC_elapsed_time[2];
     while ( thread_stages[nextproc].stage < th->stage ) ;            \
                                                                      \
     PROF_NOW(now);                                                   \
-    data->stagestart[th->stage] = *(__int64*)now;                    \
+    data->stagestart[th->stage] = now;                    \
                                                                      \
     /* do all elements in this stage */                              \
     idptr = th->blocks[elementtype][th->stage];                      \
@@ -2320,7 +2512,7 @@ extern int hessian_CHinvC_elapsed_time[2];
      action;                                                         \
                                                                      \
     PROF_NOW(now);                                                   \
-    data->stageend[th->stage] = *(__int64*)now;                      \
+    data->stageend[th->stage] = now;                      \
   }                                                                  \
 }           
 
@@ -2337,7 +2529,6 @@ extern __int64 thread_launch_end;
   struct thread_data *data;                                          \
   int maxstage;                                                      \
   int elnum,maxelnum;                                                \
-  int now[2];                                                    \
                                                                      \
   data = GET_THREAD_DATA;                                            \
   proc = data->worker_id;                                            \
@@ -2362,9 +2553,18 @@ extern __int64 thread_launch_end;
 #endif
 
 /* profiling storage */
-extern int q_facet_setup_elapsed_time[2];
+#ifdef MSC
+extern __int64 q_facet_setup_elapsed_time;
+#else
+extern long long int q_facet_setup_elapsed_time;
+#endif
 
 #ifdef  __cplusplus
 }
+#endif
+
+#ifdef _MSC_VER
+// Microsoft, of course, has to screw with standard names.
+#define snprintf  sprintf_s
 #endif
 

@@ -31,3 +31,8 @@ showequi := {
    printf "Found %g edges.\n",ecount;
    show_expr edges where 1 
 }
+
+// End equi.cmd
+
+// Usage: showequi
+

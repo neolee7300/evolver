@@ -8,7 +8,7 @@
 #include "include.h"
 
 /* callable null functions of the right types */
-void null_start ARGS((void)) {}
+void null_start (void) {}
 void null_edge(struct graphdata * g,edge_id id) {}
 void null_facet(struct graphdata * g,facet_id id) {}
 void display_null(struct tsort * t) {}

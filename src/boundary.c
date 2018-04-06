@@ -43,18 +43,19 @@
 */
 
 
-void b_proj(bdry,param,a,type,v_id)
-struct boundary *bdry;  /* boundary involved */
-REAL *param;            /* parameter values to use */
-REAL **a;               /* returned matrix */
-int type;               /* PARAMPROJ or TANGPROJ */
-vertex_id v_id;  /* so can use extra attributes */
+void b_proj(
+  struct boundary *bdry,  /* boundary involved */
+  REAL *param,            /* parameter values to use */
+  REAL **a,               /* returned matrix */
+  int type,               /* PARAMPROJ or TANGPROJ */
+  vertex_id v_id  /* so can use extra attributes */
+)
 {
   int pcount = bdry->pcount;
   int i,j,k,m;
   REAL dummy;  /* for eval_all function value */
   REAL temp[MAXCOORD];
-  MAT2D(B,3,3); /* both A and B above */
+  MAT2D(B,MAXCOORD,MAXCOORD); /* both A and B above */
   MAT2D(T,MAXCOORD,MAXCOORD);
 
   for ( j = 0 ; j < SDIM ; j++ )
@@ -103,14 +104,15 @@ vertex_id v_id;  /* so can use extra attributes */
 *                times on tangent.
 */
 
-void b_extrapolate(bdry,base_x,point_x,new_x,base_param,new_param,v_id)
-struct boundary *bdry;    /* boundary involved (in) */
-REAL *base_x;      /* coordinates of base point (in) */
-REAL *point_x;     /* coordinates of point to project (in) */
-REAL *new_x;       /* projected coordinates (out) */
-REAL *base_param;  /* base point parameters (in) */
-REAL *new_param;   /* projected parameters (out) */
-vertex_id v_id;    /* so can use vertex attributes */
+void b_extrapolate(
+  struct boundary *bdry,    /* boundary involved (in) */
+  REAL *base_x,      /* coordinates of base point (in) */
+  REAL *point_x,     /* coordinates of point to project (in) */
+  REAL *new_x,       /* projected coordinates (out) */
+  REAL *base_param,  /* base point parameters (in) */
+  REAL *new_param,   /* projected parameters (out) */
+  vertex_id v_id    /* so can use vertex attributes */
+)
 {
   int pcount;
   REAL co[MAXCOORD];
@@ -170,7 +172,8 @@ vertex_id v_id;    /* so can use vertex attributes */
       }
       if(iter== 10 )
       {
-         kb_error(9000,"Extrapolate does not converge in 10 steps: boundary is not smooth enough.\n",RECOVERABLE);
+         sprintf(errmsg,"Extrapolate does not converge in 10 steps:  \n  boundary %s is not smooth enough at vertex %s. \n", bdry->name, ELNAME(v_id));
+         kb_error(9000, errmsg, RECOVERABLE);
       }
       for(k=0;k<SDIM;k++) x[k]=s[k];
       for(k=0;k<pcount;k++) new_param[k]=pp[k];
@@ -179,6 +182,7 @@ vertex_id v_id;    /* so can use vertex attributes */
 #endif
 
   for ( i = 0 ; i < SDIM ; i++ ) new_x[i] = x[i];
+
 } /* end b_extrapolate() */
 
 /****************************************************************
@@ -202,8 +206,7 @@ vertex_id v_id;    /* so can use vertex attributes */
 *            Recall force will later be projected to tangent.
 */
 
-void bdry_force(e_id)
-edge_id e_id;
+void bdry_force(edge_id e_id)
 {
   REAL s[MAXCOORD],q[MAXCOORD],*f;
   struct boundary *bdry;
@@ -304,8 +307,7 @@ edge_id e_id;
 *  Purpose:  Calculate energy of kludge boundary force.
 */
 
-void bdry_spring_energy(e_id)
-edge_id e_id;
+void bdry_spring_energy(edge_id e_id)
 {
   REAL s[MAXCOORD],q[MAXCOORD];
   struct boundary *bdry;
@@ -356,9 +358,10 @@ edge_id e_id;
 *  Purpose: calculate basis of boundary tangent plane.
 */
 
-int bdry_basis(v_id,basis)
-vertex_id v_id;
-REAL **basis;  /* for return */
+int bdry_basis(
+  vertex_id v_id,
+  REAL **basis  /* for return */
+)
 {
   struct boundary *b = get_boundary(v_id);
   int j,i;
@@ -375,6 +378,7 @@ REAL **basis;  /* for return */
    }
 
   return b->pcount;
+
 } /* end bdry_basis() */
 
 /*****************************************************************************
@@ -393,7 +397,7 @@ REAL **basis;  /* for return */
 *          collide and setting positions to average thereof.
 */
 
-void detect_bdry_hits()
+void detect_bdry_hits(void)
 { vertex_id v_id,vv_id;
   struct boundary *bdry;
   int i,exnum,partner;
@@ -435,7 +439,7 @@ void detect_bdry_hits()
       set_attr(vv_id,HIT_PARTNER);
     }
   }
-}
+} // end detect_bdry_hits()
 
 
 /******************************************************************************
@@ -446,7 +450,7 @@ void detect_bdry_hits()
 *          set force on each to average.
 */
 
-void partner_hit_velocity_fix()
+void partner_hit_velocity_fix(void)
 { vertex_id v_id,vv_id;
   struct boundary *bdry;
   int i,exnum,partner,eltype;
@@ -470,7 +474,7 @@ void partner_hit_velocity_fix()
       v[i] = vv[i] = avev;
     }
   }
-}
+} // end partner_hit_velocity_fix()
 
 /******************************************************************************
 *
@@ -508,7 +512,7 @@ void partner_hit_volgrad_fix()
           }
         }
   }
-}
+} // end partner_hit_volgrad_fix()
 
 /***************************************************************************
 *
@@ -518,8 +522,9 @@ void partner_hit_volgrad_fix()
 *          lower id.
 */
 
-void partner_shift_grads(mode)
-int mode; /* bits for CALC_FORCE and CALC_VOLGRADS */
+void partner_shift_grads(
+  int mode /* bits for CALC_FORCE and CALC_VOLGRADS */
+  )
 { vertex_id v_id,vv_id;
   struct boundary *bdry;
   int i,exnum,partner,eltype;
@@ -584,7 +589,7 @@ int mode; /* bits for CALC_FORCE and CALC_VOLGRADS */
     }
   }
 
-}
+} // end partner_shift_grads()
 
 /***************************************************************************
 *
@@ -630,4 +635,4 @@ void partner_move()
       p[i] = pp[i];
     
   }
-}
+} // partner_move()

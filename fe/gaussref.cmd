@@ -6,13 +6,11 @@
 
 // Programmer: Ken Brakke, brakke@susqu.edu, http://www.susqu.edu/brakke
 
-// Usage: set the variable gaussref_tolerance, and do gaussref.
-
-// Set by user; difference in normals in radians
-gaussref_tolerance := 0.3
+// Usage: gaussref(real maxarc)
+// where maxarc is the cutoff length for refinement,  in radians.
 
 
-gaussref := {
+procedure gaussref(real maxarc) {
    local ax,ay,az,bx,by,bz,diff,maga,magb,alen,maxdiff,triples,blen;
    local gaussref_count;
 
@@ -27,7 +25,7 @@ gaussref := {
        by := eee.vertex[2].vertexnormal[2];
        bz := eee.vertex[2].vertexnormal[3];
        diff := pi/2 - abs(pi/2 - acos(ax*bx+ay*by+az*bz)) ;
-       if ( diff > gaussref_tolerance )
+       if ( diff > maxarc )
          then { 
            refine eee; gaussref_count += 1; 
          }
@@ -42,7 +40,7 @@ gaussref := {
        maga := sqrt(ax^2+ay^2+az^2);
        magb := sqrt(bx^2+by^2+bz^2);
        diff := pi/2 - abs(pi/2 - acos((ax*bx+ay*by+az*bz)/maga/magb)) ;
-       if ( diff > gaussref_tolerance )
+       if ( diff > maxarc )
          then { 
            refine eee; gaussref_count += 1; 
          }
@@ -63,13 +61,13 @@ gaussref := {
            bz := eeee.z;
            blen := eeee.length;
            diff := pi/2 - abs(pi/2 - acos((ax*bx+ay*by+az*bz)/alen/blen)) ;
-           if ( diff > gaussref_tolerance )
+           if ( diff > maxarc )
            then { 
              if ( diff > maxdiff ) then maxdiff := diff;
            }
          }
        };
-       if ( (triples <= 1) and (maxdiff > gaussref_tolerance) )
+       if ( (triples <= 1) and (maxdiff > maxarc) )
            then { 
              refine eee; gaussref_count += 1; 
            }
@@ -77,4 +75,11 @@ gaussref := {
    };
   printf "Edges refined by gaussref: %d\n",gaussref_count;
 }
+
+// End gaussref
+
+/* Usage:  gaussref(real maxarc)   // maxarc in radians
+
+*/
+
 

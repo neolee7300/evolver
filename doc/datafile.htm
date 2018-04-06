@@ -1,13 +1,17 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
-<html><head><TITLE>Surface Evolver Documentation - Datafile format</title></head>
+<!DOCTYPE HTML>
+<html><head><TITLE>Surface Evolver Documentation - Datafile format</title>
+<link rel="stylesheet" type="text/css" href="evdoc-style.css" />
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+</head>
 
 <BODY>
 <!--NewPage-->
-<center>
-<h1><a href="http://www.susqu.edu/facstaff/b/brakke/evolver/evolver.htm">
+<h1 class="center">
+<a href="http://www.susqu.edu/brakke/evolver/evolver.htm" class="comic">
 Surface Evolver</a> Documentation</h1>
-</center>
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
+
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 
 <h1> Evolver datafile format </h1>
@@ -17,17 +21,17 @@ Surface Evolver</a> Documentation</h1>
          or <a href="mound.htm">mound</a> examples for samples.
          The datafile is organized into six parts:
 <ul>
-         <li> <a href="#datafile header">Definitions and options</a>
-         <li> <a href="#vertices section">Vertices</a>
-         <li> <a href="#edges section">Edges</a>
-         <li> <a href="#faces section">Faces</a>
-         <li> <a href="#bodies section">Bodies</a>
-         <li> <a href="#read section">Initial commands</a>
+         <li> <a href="#datafile-header">Definitions and options</a>
+         <li> <a href="#vertices-section">Vertices</a>
+         <li> <a href="#edges-section">Edges</a>
+         <li> <a href="#faces-section">Faces</a>
+         <li> <a href="#bodies-section">Bodies</a>
+         <li> <a href="#read-section">Initial commands</a>
 </ul>
 General datafile topics:
 <ul>
 <li><a href="syntax.htm">General syntax </a> (for datafiles and commands)
-<li><a href="#include files">Include files</a>
+<li><a href="#include-files">Include files</a>
 <li><a href="#macros">Macros</a>
 </ul>
          In the syntax descriptions below, keywords will be in
@@ -44,13 +48,13 @@ element numbers, constraint numbers, etc).  Some formulas are stored as
 formulas and re-evaluated at each use; examples include constraint, 
 boundary, and quantity formulas.  Others, such as vertex coordinates,
 are evaluated when the datafile is read, and only the numeric value stored.  
-Thus if a user defines a vertex coordinate as <tt>3*width</tt>, then
-changing the value of the variable <tt>width</tt> at runtime will not
+Thus if a user defines a vertex coordinate as <code>3*width</code>, then
+changing the value of the variable <code>width</code> at runtime will not
 affect the vertex.  If you are not clear on which interpretation applies in
 a certain spot, <a href="commands.htm#dump">dump</a> the datafile and
 look at the spot to see if a formula or number was dumped.
 <hr>
-<a name="include files"></a><h2>Include files</h2>
+<a   id="include-files"></a><h2>Include files</h2>
 	The standard C language method of including other files is
 	available.  The file name must be in double quotes.  If the file is
 	not in the current directory, 
@@ -60,7 +64,7 @@ look at the spot to see if a formula or number was dumped.
 	#include  "common.stuff"
 </pre>
 <hr>
-<a name="macros"></a><h2>Macros</h2>
+<a   id="macros"></a><h2>Macros</h2>
 Macros are text substitutions done by replacing an identifier by
 a string of characters before parsing.  Macros are only defined
 in the datafile, and do not work from the command prompt.
@@ -77,8 +81,8 @@ in the datafile, and do not work from the command prompt.
          (currently 500 characters) on a macro definition. Note: macro
          identifiers are separate tokens, so if "-M" translates
          into "-2", this will be read as two tokens, not a signed number.
-<a name="keep_macros"></a>
-        The keyword <tt>keep_macros</tt> in the datafile will keep macro
+<a   id="keep_macros"></a>
+        The keyword <code>keep_macros</code> in the datafile will keep macro
          definitions active during runtime, until the next datafile is
          loaded.
 
@@ -86,13 +90,13 @@ in the datafile, and do not work from the command prompt.
 <hr>
 <hr>
 
-<a name="datafile header"></a> <h2>Datafile top section</h2>
+<a   id="datafile-header"></a> <h2>Datafile top section</h2>
 
 The datafile begins with optional definitions and specifications.
 These are definitions that need to be made before the geometric
 elements are defined, or for which command syntax is lacking or 
 awkward.  Other initializations can be made at the
-end of the datafile in the <a href="#read section">read</a> section
+end of the datafile in the <a href="#read-section">read</a> section
 using the command language.
          Each line starts with a keyword.  The order is immaterial,
          except for the usual rule that items must be defined before use.
@@ -101,58 +105,67 @@ defaults.  They are listed here in rough order of frequency of use; those
 in the first column you should know, those in the second column you might never
 use in a lifetime.
 <table> 
-<tr valign=top><td>
+<tr ><td style="vertical-align:text-top">
 <ul>
-<li><a href="#datafile variables">Variables</a>
-<li><a href="#constraint decl">Level set constraints</a>
-<li><a href="#boundary decl">Parametric boundaries</a>
-<li><a href="#named quantity decl">Named quantities</a>
-<li><a href="#method instance decl">Named method instances</a>
-<li><a href="#surface dimension decl">Surface dimension</a>
-<li><a href="#space dimension decl">Space dimension</a>
-<li><a href="#extra decl">Extra attributes </a>
-<li><a href="#quadratic decl">Quadratic model</a>
-<li><a href="#gravity_constant decl">Gravity constant </a> 
-<li><a href="#torus declaration">Torus model</a>
-<li><a href="#torus_filled decl">Torus_filled</a>
-<li><a href="#torus periods">Torus periods</a>
-<li><a href="#viewing matrix">Viewing matrix</a> 
-<li><a href="#view transforms">View transforms</a>
-<li><a href="#view generators">View transform generators</a>
+<li><a href="#datafile-variables">Variables</a>
+<li><a href="#constraint-decl">Level set constraints</a>
+<li><a href="#boundary-decl">Parametric boundaries</a>
+<li><a href="#named-quantity-decl">Named quantities</a>
+<li><a href="#method-instance-decl">Named method instances</a>
+<li><a href="#surface-dimension-decl">Surface dimension</a>
+<li><a href="#space-dimension-decl">Space dimension</a>
+<li><a href="#extra-decl">Extra attributes </a>
+<li><a href="#quadratic-decl">Quadratic model</a>
+<li><a href="#gravity_constant-decl">Gravity constant </a> 
+<li><a href="#torus-declaration">Torus model</a>
+<li><a href="#torus_filled-decl">Torus_filled</a>
+<li><a href="#torus-periods">Torus periods</a>
+<li><a href="#viewing-matrix">Viewing matrix</a> 
+<li><a href="#view-transforms">View transforms</a>
+<li><a href="#view-generators">View transform generators</a>
 <li><a href="#scale_limit">Scale_limit</a>
 <li><a href="#functions">Functions and procedures</a>
 <li><a href="#optimizing_parameter">Optimizing Parameters</a>
-<li><a href="#gap constant decl">Gap constant </a>
+<li><a href="#gap-constant-decl">Gap constant </a>
 <li><a href="#symmetric_content">Symmetric content</a>
 <li><a href="#keep_originals">Keep original ids</a>
 
 </ul></td> <td><ul>
 <li><a href="#squared_curvature">Squared mean curvature</a>
-<li><a href="#constraint_tolerance decl">Constraint tolerance</a>
+<li><a href="#constraint_tolerance-decl">Constraint tolerance</a>
 <li><a href="#version">Version</a>
-<li><a href="#metric decl">Metric </a> 
-<li><a href="#simplex decl">Simplex model </a>
-<li><a href="#symmetry decl">Symmetry group</a>
+<li><a href="#metric-decl">Metric </a> 
+<li><a href="#simplex-decl">Simplex model </a>
+<li><a href="#symmetry-decl">Symmetry group</a>
 <li><a href="#length_method_name">Length method</a>
 <li><a href="#area_method_name">Area method</a>
 <li><a href="#volume_method_name">Volume method</a>
 <li><a href="#hessian_special_normal_vector">Hessian special normal vector</a>
-<li><a href="#wulff decl">Crystalline integrands</a>
-<li><a href="#phase decl">Phase file </a>
-<li><a href="#ideal gas decl">Ideal gas model</a>
-<li><a href="#interp_bdry decl">Interpolation of boundary parameters</a>
-<li><a href="#mobility decl">Mobility </a>
+<li><a href="#wulff-decl">Crystalline integrands</a>
+<li><a href="#diffusion-decl">Diffusion</a>
+<li><a href="#phase-decl">Phase file </a>
+<li><a href="#ideal-gas-decl">Ideal gas model</a>
+<li><a href="#interp_bdry-decl">Interpolation of boundary parameters</a>
+<li><a href="#mobility-decl">Mobility </a>
 <li><a href="#merit_factor">Merit factor</a>
 <li><a href="#sqgauss">Squared Gaussian curvature</a>
 <li><a href="#zoom_vertex">Zoom_vertex</a>
 <li><a href="#zoom_radius">Zoom_radius</a>
 <li><a href="#load_library">Dynamic load library </a>
 <li><a href="#suppress_warning">Suppressing warnings </a>
+<li><a href="#vertices_predicted">vertices_predicted</a>
+<li><a href="#edges_predicted">edges_predicted</a>
+<li><a href="#facets_predicted">facets_predicted</a>
+<li><a href="#facetedges_predicted">facetedges_predicted</a>
+<li><a href="#bodies_predicted">bodies_predicted</a>
+<li><a href="#quantities_predicted">quantities_predicted</a>
+<li><a href="#method_instances_predicted">method_instances_predicted</a>
 </ul></td> </tr></table>
 
 <hr>
 
-<a name="datafile variables"></a><h2>Definitions of variables</h2>
+<a   id="datafile-variables"></a><h2>Definitions of variables</h2>
+<a   id="on_assign_call"> </a>
 Variables may be defined in the datafile top section with this syntax:
 <pre>
       PARAMETER <em>identifier</em> = <em>constexpr</em>
@@ -170,16 +183,37 @@ Variables may be defined in the datafile top section with this syntax:
 	     Hence only variables needed in other top section declarations
 	     should be defined here.
 
+<p>
+A procedure may be designated to be called whenever the value of the 
+variable is changed.  The syntax in the top of the datafile is
+<pre>
+      PARAMETER <em>identifier</em> = <em>constexpr</em> ON_ASSIGN_CALL <em>procedure_name</em>
+</pre>
+The purpose of this feature is to permit side-effects of changing
+a variable value.  The value is a procedure without arguments, and can only
+be assigned in the top of the datafile.  However, the procedure itself may
+be redefined at will.  Example (in the top of the datafile):
+<pre>
+  procedure tester();
+  parameter aaa = 4
+  parameter bbb = 5 on_assign_call tester
+  procedure tester() { aaa := bbb; }
+</pre>
+Note that there is a declaration of "tester" first, so Evolver recognizes
+"tester" as a procedure name during the declaration of "bbb".  But the full
+declaration of "tester" may be in the top of the datafile or in the "read"
+section of the datafile.
+
 <hr>
-<a name="nonpositive"></a>
-<a name="nonnegative"></a>
-<a name="nonwall"></a>
-<a name="constraint decl"></a><h2>Level set constraint declarations</h2>
+<a   id="nonpositive"></a>
+<a   id="nonnegative"></a>
+<a   id="nonwall"></a>
+<a   id="constraint-decl"></a><h2>Level set constraint declarations</h2>
 The format for declaring a 
-<a href="constrnt.htm#level set constraints">level set constraint</a>
+<a href="constrnt.htm#level-set-constraints">level set constraint</a>
  in the top section of the datafile is
 <pre>
-CONSTRAINT <em>n</em> [GLOBAL] [CONVEX] [NONNEGATIVE] [NONPOSITIVE] [NONWALL]
+CONSTRAINT <em>n</em> [GLOBAL] [CONVEX] [NONNEGATIVE] [NONPOSITIVE] [NONWALL] [CONTENT_RANK <em>n</em>]
 FORMULA FUNCTION  <em>expr</em>
 [ENERGY:
  E1: <em>expr</em>
@@ -190,21 +224,22 @@ FORMULA FUNCTION  <em>expr</em>
  C2: <em>expr</em>
  C3: <em>expr</em>]
 </pre>
-You may use <tt>EQUATION</tt> or <tt>FUNCTION</tt> as synonyms for <tt>FORMULA</tt>.
+You may use <code>EQUATION</code> or <code>FUNCTION</code> as synonyms for <code>FORMULA</code>.
    This defines constraint number <em>n</em>, where <em>n</em> is a
    positive integer.  The optional
-   keyword <tt>GLOBAL</tt> means the constraint automatically applies to all
-   vertices (but not automatically to edges or faces).  <tt>GLOBAL</tt>
-   constraints count in the number limit.  If <tt>CONVEX</tt> is given,
-   then an additional <a href="energies.htm#gap energy">gap energy</a>
+   keyword <code>GLOBAL</code> means the constraint automatically applies to all
+   vertices (but not automatically to edges or faces).  <code>GLOBAL</code>
+   constraints count in the number limit.  If <code>CONVEX</code> is given,
+   then an additional <a href="energies.htm#gap-energy">gap energy</a>
    is attributed to edges on the
    constraint to prevent them from trying to short-circuit a convex
-   boundary.  <tt>NONWALL</tt> indicates this constraint is to be ignored
-    in vertex and edge popping.
-  If <tt>NONNEGATIVE</tt> or <tt>NONPOSITIVE</tt> is given, then this is
-   a <a href="constrnt.htm#one-sided constraints">one-sided constraint</a>, and
+   boundary.  <code>NONWALL</code> indicates this constraint is to be ignored
+    in vertex and edge popping, and the various ``star'' squared mean
+   curvature methods will not regard this constraint as a mirror plane.
+  If <code>NONNEGATIVE</code> or <code>NONPOSITIVE</code> is given, then this is
+   a <a href="constrnt.htm#one-sided-constraints">one-sided constraint</a>, and
   all vertices will be forced to conform appropriately to the
-   constraint at each iteration.  The <tt>FORMULA</tt> expression defines
+   constraint at each iteration.  The <code>FORMULA</code> expression defines
    the zero level set which is the actual constraint.  It may be
    written as an equation, since '=' is parsed as a low-precedence
    minus sign.  
@@ -221,7 +256,7 @@ You may use <tt>EQUATION</tt> or <tt>FUNCTION</tt> as synonyms for <tt>FORMULA</
                 proper values to zfix for each vertex (be sure to
 fix up zfix after refining or otherwise creating vertices). 
     Do not use '&gt;' or '&lt;' to indicate inequalities; use
-   <tt>NONNEGATIVE</tt> or <tt>NONPOSITIVE</tt>. 
+   <code>NONNEGATIVE</code> or <code>NONPOSITIVE</code>. 
    Conditional expressions, as in C
    language, are useful for defining constraints composed of several
    surfaces joined smoothly, such as a cylinder with hemispherical
@@ -234,14 +269,14 @@ fix up zfix after refining or otherwise creating vertices).
    The value of the expression is the value of the second expression.
 
 <p>               
-   The optional <tt>ENERGY</tt> section signifies that vertices or edges on the
+   The optional <code>ENERGY</code> section signifies that vertices or edges on the
                 constraint are deemed to have an energy.  
                 In the 
-<a href="model.htm#soapfilm model">soapfilm model</a>,
+<a href="model.htm#soapfilm-model">soapfilm model</a>,
  the next lines give
                 components of a vectorfield that will be integrated
                 along each edge on the constraint.  In the 
-<a href="model.htm#string model">string model</a>, 
+<a href="model.htm#string-model">string model</a>, 
 just one component is needed, which is  
                 evaluated at each vertex on the constraint.
                 The main purpose of this is to permit facets
@@ -249,14 +284,14 @@ just one component is needed, which is
                 energy they would have had should be included here.
                 One use is to get prescribed contact angles at
                 a constraint.  This energy should also include
-     <a href="energies.htm#gravity energy">gravitational potential energy</a>
+     <a href="energies.htm#gravity-energy">gravitational potential energy</a>
  due to omitted facets.
-		Integrals are now also evaluated on <tt>fixed</tt> edges, which
+		Integrals are now also evaluated on <code>fixed</code> edges, which
 is a change from earlier versions of Evolver.
 <p>
-The optional <tt>CONTENT</tt> section signifies that vertices 
-(<a href="model.htm#string model">string model</a> ) or
-      edges (<a href="model.htm#soapfilm model">soapfilm model</a>) on the
+The optional <code>CONTENT</code> section signifies that vertices 
+(<a href="model.htm#string-model">string model</a> ) or
+      edges (<a href="model.htm#soapfilm-model">soapfilm model</a>) on the
                 constraint contribute to the area or volume of bodies.
                 If the part of a body boundary that is on a constraint
                 is not defined by facets, then the body volume must
@@ -269,9 +304,17 @@ The optional <tt>CONTENT</tt> section signifies that vertices
 	  the opposite sign to the integrand from what you think may be natural.
 	  Always check a new datafile when you load it to be sure the integrals
 	  come out right.
+
+The constraint attribute content_rank is used in conjunction with content integrals.
+If a vertex (string model) or an edge (soapfilm model) is on multiple
+constraints with content integrals (say where walls meet) then if content
+ranks are present, the content integral with the least rank will contribute
+to the content on the negative side body and the highest rank content
+will contribute to the content of the positive side body.
+ 
 <p>
 <hr>
-<a name="boundary decl"></a><h2>Parameterized boundary declaration</h2>
+<a   id="boundary-decl"></a><h2>Parameterized boundary declaration</h2>
 A parameterized boundary may be declared in the top section of the
 datafile with the syntax
 <pre>
@@ -283,25 +326,25 @@ X3: <em>expr</em>
 
    This defines boundary number <em>n</em>, where <em>n</em> is a positive
    integer and <em>k</em> is the 
-                number of parameters.  If <tt>CONVEX</tt> is
+                number of parameters.  If <code>CONVEX</code> is
                 given, then an additional 
-<a href="energies.htm#gap energy">gap energy</a> is attributed to 
+<a href="energies.htm#gap-energy">gap energy</a> is attributed to 
                 edges on the boundary to prevent them from trying
                 to short-circuit a convex boundary. 
 The following lines have
                 the functions for the coordinates in terms
-                of the parameters <tt>P1</tt> and maybe <tt>P2</tt>, <tt>P3</tt>,....
+                of the parameters <code>P1</code> and maybe <code>P2</code>, <code>P3</code>,....
 See the <a href="catenoid.htm">catenoid example</a>.
   Energy and
                 content integrals for boundaries are implemented, with 
-		the same syntax as for <a href="#constraint decl">
+		the same syntax as for <a href="#constraint-decl">
 		level set constraints</a>.
 
 
-<hr><h2><a name="named quantity decl">Named quantities</a></h2>
-<a name="lagrange_multiplier"></a>
-The syntax for defining a  <a name="info_only"></a>
-<a href="quants.htm#named quantities">named quantity</a> in the data file is:
+<hr><h2><a   id="named-quantity-decl">Named quantities</a></h2>
+<a   id="lagrange_multiplier"></a>
+The syntax for defining a  <a   id="info_only"></a>
+<a href="quants.htm#named-quantities">named quantity</a> in the data file is:
 <p><pre> QUANTITY <i>name</i>   ENERGY|FIXED=<i>value</i>|CONSERVED|INFO_ONLY [LAGRANGE_MULTIPLIER <i>constexpr</i>]
 [TOLERANCE <i>constexpr</i>]  [MODULUS <i>constexpr</i>] <i>methodlist</i> | FUNCTION <i>methodexpr</i>
 </pre>
@@ -310,14 +353,14 @@ Here <i>name</i> is an identifier assigned by the user in order
 to refer to the quantity. 
 Any quantities must be declared to be one of three types:
 <ul>
-<li><tt>ENERGY</tt> quantities are added to the overall
+<li><code>ENERGY</code> quantities are added to the overall
 energy of the surface; 
-<li><tt>FIXED</tt> quantities that are constrained to a
+<li><code>FIXED</code> quantities that are constrained to a
 fixed target <i>value</i>;
-<li><tt>CONSERVED</tt> quantities are like FIXED in that the motion is
+<li><code>CONSERVED</code> quantities are like FIXED in that the motion is
 projected to conserve the quantity, but the actual value is not projected
 to a given value.
-<li><tt>INFO_ONLY</tt> quantities whose values are merely reported to the user.
+<li><code>INFO_ONLY</code> quantities whose values are merely reported to the user.
 </ul>
 For fixed quantities, the optional Lagrange multiplier value supplies
 the initial value of the Lagrange multiplier (the "pressure" attribute
@@ -336,17 +379,17 @@ Each quantity has a modulus, which is just a scalar multiplier of
 the whole quantity. A modulus of 0 will turn off an energy quantity.
 The default modulus is 1.
 
-<a name="global_method"></a>
+<a   id="global_method"></a>
 The <i>methodlist</i> version of the quantity definition may  
-contain one or more <a href="quants.htm#method instances">method instances</a>. 
+contain one or more <a href="quants.htm#method-instances">method instances</a>. 
 To incorporate a previously explicitly defined instance, include
-<tt>METHOD</tt> <i>instancename</i>.  <tt>GLOBAL_METHOD</tt> may be used
-instead of <tt>METHOD</tt> to indicate the method applies to all elements
-of the appropriate type; it is equivalent to using <tt>GLOBAL</tt> in
+<code>METHOD</code> <i>instancename</i>.  <code>GLOBAL_METHOD</code> may be used
+instead of <code>METHOD</code> to indicate the method applies to all elements
+of the appropriate type; it is equivalent to using <code>GLOBAL</code> in
 the method definition.
 To instantiate a method in the quantity definition, 
 you essentially
-incorporate the <a href="#method instance decl">instance definition</a>, 
+incorporate the <a href="#method-instance-decl">instance definition</a>, 
 but without an instance name.  Example of a quantity with one predefined
 method instance and one implicitly defined instance:
 <pre>   method_instance qwerty method facet_scalar_integral
@@ -359,7 +402,7 @@ Usually the second, implicit definition will be more convenient.
 Several method instances may be included in one <i>methodlist</i>
 (up to a current limit of 50), and their values are added together
 and multiplied by the quantity modulus to get the quantity value.
-The <tt>FUNCTION</tt> <i>methodexpr</i> variant
+The <code>FUNCTION</code> <i>methodexpr</i> variant
  defines the quantity as a function of 
 previously defined method instances.  Example:
 <pre>   method_instance qwerty method facet_scalar_integral
@@ -374,7 +417,7 @@ may also be applied or unapplied at runtime with the
 <a href="commands.htm#set">set</a> and 
 <a href="commands.htm#unset">unset</a> commands.
 Orientable methods can be applied with negative orientation in the datafile by
-following the name with a dash.  The orientation in a set command
+following the method name with a dash.  The orientation in a "set" command
 follows the orientation the element is generated with.
 
 <p>
@@ -387,19 +430,19 @@ soIf an edge method is applied to a facet, then edges created from
 refining that facet will inherit the edge method.
 
 <hr>
-<a name="scalar_integrand"></a>
-<a name="vector_integrand"></a>
-<a name="form_integrand"></a>
-<a name="k_form_order"></a>
-<a name="parameter_1"></a>
-<a name="global"></a>
+<a   id="scalar_integrand"></a>
+<a   id="vector_integrand"></a>
+<a   id="form_integrand"></a>
+<a   id="k_form_order"></a>
+<a   id="parameter_1"></a>
+<a   id="global"></a>
 <h2>
-<a name="method_instance"></a>
-<a name="method instance decl">Named method instances declaration</a></h2>
-<a href="quants.htm#method instances">Method instances</a>
+<a   id="method_instance"></a>
+<a   id="method-instance-decl">Named method instances declaration</a></h2>
+<a href="quants.htm#method-instances">Method instances</a>
  are usually defined as part of the 
-<a href="#named quantity decl">definition</a>
-of a <a href="quants.htm#named quantities">named quantity</a>, 
+<a href="#named-quantity-decl">definition</a>
+of a <a href="quants.htm#named-quantities">named quantity</a>, 
 but there are circumstances where a quantity
 is composed of several method instances and the method instances
 need to be referred to individually; perhaps the user wants to
@@ -415,10 +458,10 @@ particular instance. <i>methodname</i> is one of the
 The modulus value multiplies the method value to give the 
  instance value.  The default modulus is 1.
 Individual elements may be given multipliers by specifying an
-<a href="elements.htm#extra attributes">extra attribute</a>
+<a href="elements.htm#extra-attributes">extra attribute</a>
 <i>attrname</i> for the type of element; the attribute must have been
 defined earlier.
- <tt>GLOBAL</tt> makes the method apply to all 
+ <code>GLOBAL</code> makes the method apply to all 
  elements of the appropriate type.  
 Non-global instances may
  be applied to elements individually by adding the instance
@@ -427,57 +470,59 @@ may also be applied or unapplied at runtime with the
 <a href="commands.htm#set">set</a> and 
 <a href="commands.htm#unset">unset</a> commands.
 Orientable methods can be applied with negative orientation in the datafile by 
-following the name with a dash.  The orientation in a set command
-follows the orientation the element is generated with.
+following the name with a dash.  The orientation of individual elements
+may be set at runtime with the "set" command, for example
+<pre> set facet[123] orientation -1 </pre>
+
 <p>
  Each method may have various parameters to specialize
  it to an instance.  Currently the only parameters  specified are:
-<dl><dt> <tt>SCALAR_INTEGRAND: <i>expr</i> </tt></dt>
+<dl><dt> <code>SCALAR_INTEGRAND: <i>expr</i> </code></dt>
 <dd> where <i>expr</i> is a scalar function of coordinates
 (and of tangent or normal vector components in 
 <a href="quants.htm#edge_general_integral">edge_general_integral</a>
 or <a href="quants.htm#facet_general_integral">facet_general_integral</a>).
  Element attributes of the appropriate type
 element may also be used.<p></dd>
-<dt><tt>
+<dt><code>
 VECTOR_INTEGRAND:  <br>
 Q1: <i>expr</i> <br>
 Q2: <i>expr</i> <br>
-Q3: <i>expr</i> <br> </tt></dt>
+Q3: <i>expr</i> <br> </code></dt>
 <dd> where the expressions are functions of the coordinates.
  Element attributes of the appropriate type
 element may also be used.<p></dd>
-<dt><tt>
+<dt><code>
 FORM_INTEGRAND: <br>
 Q1: <i>expr</i> <br>
 Q2: <i>expr</i> <br>
 Q3: <i>expr</i> <br>
-...<br></tt></dt>
+...<br></code></dt>
 <dd> where the expressions are functions of the coordinates.
  Element attributes of the appropriate type
 element may also be used. When used in the 
 <a href="quants.htm#facet_2form_integral">facet_2form_integral</a> method.
 The form components are listed in lexicographic order,
 i.e. in 4D the six components 12,13,14,23,24,34 would be listed
-as <tt>Q1</tt> through <tt>Q6</tt>.<p></dd>
-<dt><tt>PARAMETER_1 <i>constexpr</i></tt></dt>
+as <code>Q1</code> through <code>Q6</code>.<p></dd>
+<dt><code>PARAMETER_1 <i>constexpr</i></code></dt>
 <dd> For specifying miscellaneous numeric parameters to 
 certain methods.<p></dd>
-<dt><tt>K_FORM_ORDER <i>constexpr</i></tt></dt>
+<dt><code>K_FORM_ORDER <i>constexpr</i></code></dt>
 <dd>For methods that use differential k-forms, this specifies the value of k.
-Should occur before <tt>FORM_INTEGRAND</tt> when needed.</dd>
+Should occur before <code>FORM_INTEGRAND</code> when needed.</dd>
 </dl>
 <hr>
 
-<a name="string"></a>
-<a name="soapfilm"></a>
-<a name="surface dimension decl"></a><h2>Surface dimension</h2>
+<a   id="string"></a>
+<a   id="soapfilm"></a>
+<a   id="surface-dimension-decl"></a><h2>Surface dimension</h2>
 The default dimension of the surface is 2.  If not, it must be declared in the 
 top section of the datafile. For a 1-dimensional surface (the
-<a href="model.htm#string model">string model</a>), simply include the line
+<a href="model.htm#string-model">string model</a>), simply include the line
 <pre> STRING
 </pre>
-The default dimension 2 <a href="model.htm#soapfilm model">soapfilm model</a>
+The default dimension 2 <a href="model.htm#soapfilm-model">soapfilm model</a>
 is equivalent to using
 <pre> SOAPFILM
 </pre>
@@ -486,12 +531,12 @@ In general, the line
 </pre>
 defines the surface to have dimension <i>n</i>.
  Dimension over 2 is valid only in the 
-<a href="model.htm#simplex model">simplex model</a>.
+<a href="model.htm#simplex-model">simplex model</a>.
 The surface dimension may be accessed at runtime through the read-only variable 
 <a href="syntax.htm#surface_dimension">surface_dimension</a>.
 
 <hr>
-<a name="space dimension decl"></a><h2>Space dimension</h2>
+<a   id="space-dimension-decl"></a><h2>Space dimension</h2>
 The default dimension of space is 3. Otherwise it must be declared
 in the top section of the datafile, with syntax
 <pre>SPACE_DIMENSION <em>n</em>
@@ -502,13 +547,13 @@ The space dimension may be accessed at runtime through the read-only variable
 <a href="syntax.htm#space_dimension">space_dimension</a>.
 
 <hr>
-<a name="extra decl"></a><h2>Extra attribute declarations</h2>
-<a name="integer"></a>
-<a name="real"></a>
-<a name="ulong"></a>
-<a name="self"></a>
+<a   id="extra-decl"></a><h2>Extra attribute declarations</h2>
+<a   id="integer"></a>
+<a   id="real"></a>
+<a   id="ulong"></a>
+<a   id="self"></a>
 It is possible for the user to define 
-<a href="elements.htm#extra attributes">extra attributes</a> for elements,
+<a href="elements.htm#extra-attributes">extra attributes</a> for elements,
 which may be single values or up to eight-dimensional arrays.
   If these attributes are to
 be included in the datafile, then the top section of the datafile
@@ -517,10 +562,10 @@ the same as used by the <a href="commands.htm#define">define</a> runtime
 command:
 <pre> DEFINE <em>elementtype</em> ATTRIBUTE <em>name</em> <em>type</em> [<em>dim</em>]...
 </pre>
-where <em>elementtype</em> is  <tt>vertex</tt>, <tt>edge</tt>, <tt>facet</tt>,
- or <tt>body</tt>, <em>name</em>
-is an identifier of your choice, <em>type</em> is <tt>REAL</tt> or
-<tt>INTEGER</tt>  (internally, there is also a <tt>ULONG</tt> unsigned
+where <em>elementtype</em> is  <code>vertex</code>, <code>edge</code>, <code>facet</code>,
+ or <code>body</code>, <em>name</em>
+is an identifier of your choice, <em>type</em> is <code>REAL</code> or
+<code>INTEGER</code>  (internally, there is also a <code>ULONG</code> unsigned
 long type also),
 and <em>dim</em> is an optional expression
 for the vector dimension.  There is no practical distinction between real
@@ -528,16 +573,16 @@ and integer types at the moment, since everything is stored internally
 as reals.  But there may be more datatypes added in the future.
 Extra attributes are inherited by elements of the same type generated
 by subdivision.
-The <em>type</em> may be followed by <tt>FUNCTION</tt>
+The <em>type</em> may be followed by <code>FUNCTION</code>
  followed by a procedure in brackets to be
 evaluated whenever the value of the attribute is read; in the formula,
-<tt>self</tt> may be used to refer to the element in question to use its
+<code>self</code> may be used to refer to the element in question to use its
 attributes, in particular to at some point assign a value to the attribute.
 The <a href="commands.htm#print">print</a> command may be used to print
 attribute arrays or array slices in bracketed form.
  Examples:
 <pre>  define edge attribute charlie real 
-  define vertex attribute oldx real[3] 
+  define vertex attribute newx real[3] 
   define facet attribute knots real[5][5][5] 
   define edge attribute bbb real function { self.bbb := self.x+self.y }
 </pre>
@@ -547,36 +592,36 @@ declaration.  You should define stand-alone functions before attributes,
 or separate them with some other kind of declaration.
 
 <hr>
-<a name="quadratic decl"></a><h2>Quadratic declaration</h2>
+<a   id="quadratic-decl"></a><h2>Quadratic declaration</h2>
 To declare that the datafile lists a surface in the 
-<a href="model.htm#quadratic model">quadratic model</a>,
+<a href="model.htm#quadratic-model">quadratic model</a>,
 the top section of the datafile should contain the line
 <pre>
 QUADRATIC
 </pre>
 The only effect on datafile syntax is that the 
-<a href="#edges section">edge section</a> may
+<a href="#edges-section">edge section</a> may
 list edge midpoint vertices. 
 
 <hr>
-<a name="gravity_constant decl"></a><h2>Gravity constant declaration</h2>
+<a   id="gravity_constant-decl"></a><h2>Gravity constant declaration</h2>
 The initial value of the 
-<a href="energies.htm#gravity energy">gravitational constant</a>
+<a href="energies.htm#gravity-energy">gravitational constant</a>
 may be set in the datafile with the syntax
 <pre>  GRAVITY_CONSTANT <i>value</i> </pre>
 The default value is 1.
 
 <hr>
-<a name="torus declaration"></a><h2>Torus model declaration</h2>
-<a name="torus_filled decl"></a>
+<a   id="torus-declaration"></a><h2>Torus model declaration</h2>
+<a   id="torus_filled-decl"></a>
 To declare periodic boundary conditions (i.e. make the domain a flat
-<a href="model.htm#torus model">torus</a>), 
+<a href="model.htm#torus-model">torus</a>), 
 include in the top section of the datafile the line
 <pre>
 TORUS
 </pre>
 All space dimensions will be periodic, with the period vectors given
-in the <a href="#torus periods">periods</a> declaration.  
+in the <a href="#torus-periods">periods</a> declaration.  
 If the domain is completely filled by bodies with prescribed volumes,
 then the line
 <pre>
@@ -584,14 +629,14 @@ TORUS_FILLED
 </pre>
 should be used instead to prevent degenerate volume constraints.
 <hr>
-<a name="periods"></a>
-<a name="torus periods"></a><h2>Torus periods</h2>
+<a   id="periods"></a>
+<a   id="torus-periods"></a><h2>Torus periods</h2>
 If periodic boundary conditions are used
-(the <a href="model.htm#torus model">torus model</a>) ,
+(the <a href="model.htm#torus-model">torus model</a>) ,
 the period vectors of the fundamental unit cell parallelpiped
 may be defined in the top section of the datafile. Default is the unit cube. 
 The syntax
-is the keyword <tt>PERIODS</tt> followed by expressions for the components
+is the keyword <code>PERIODS</code> followed by expressions for the components
 of each period vector:
 <pre>PERIODS 
 <em>expr expr expr</em>
@@ -609,10 +654,10 @@ The size of this matrix depends on the space dimension.
 <hr>
 
 
-<a name="view_matrix"></a>
-<a name="viewing matrix"></a><h2>Viewing matrix</h2>
+<a   id="view_matrix"></a>
+<a   id="viewing-matrix"></a><h2>Viewing matrix</h2>
 The top section of the datafile may contain an initial 
-<a href="graphics.htm#view matrix">viewing matrix</a>:
+<a href="graphics.htm#view-matrix">viewing matrix</a>:
 <pre>
 VIEW_MATRIX
 <em>  constexpr constexpr constexpr constexpr</em>
@@ -628,15 +673,15 @@ The matrix is in homogeneous
  by native screen graphics ('s' command) and only applies
  to internal graphics (Postscript, Xwindows, etc.) but
  not external graphics (geomview).  The elements may be
- read or set at runtime by <tt>view_matrix[i][j]</tt>, where
+ read or set at runtime by <code>view_matrix[i][j]</code>, where
  the indices start at 1.  In particular, one can write
  command scripts to save and reload particular view matrices;
- see <tt>saveview.cmd</tt> in the distribution package.
+ see <code>saveview.cmd</code> in the distribution package.
 <hr>
 
-<a name="swap_colors"></a>
-<a name="view_transforms"></a>
-<a name="view transforms"></a> <h2>View transforms</h2>
+<a   id="swap_colors"></a>
+<a   id="view_transforms"></a>
+<a   id="view-transforms"></a> <h2>View transforms</h2>
   For the display of several transformations of the surface
    simultaneously, a number of viewing transformation matrices
    may be given in the top section of the datafile:
@@ -652,11 +697,11 @@ SWAP_COLORS
 </pre>
      The transforms apply to all graphics, internal
    and external, and are prior to the  
-<a href="graphics.htm#view matrix">viewing matrix</a> for internal graphics. 
+<a href="graphics.htm#view-matrix">viewing matrix</a> for internal graphics. 
    The identity transform is always done, so
    it does not need to be specified. 
  The number of matrices
-   follows the keyword <tt>VIEW_TRANSFORMS</tt>.  Each matrix is
+   follows the keyword <code>VIEW_TRANSFORMS</code>.  Each matrix is
    in homogeneous coordinates, with translation in the last column. 
    The size of each matrix is one more than the space dimension.
    Individual matrices need no
@@ -671,22 +716,22 @@ SWAP_COLORS
    be activated or deactivated interactively 
    with the 
 <a href="toggle.htm#transforms">transforms</a> toggle.
-    The internal variable <tt>transform_count</tt> records the number
+    The internal variable <code>transform_count</code> records the number
     of transforms, and
    the transform matrices are accessible at runtime as a three-dimensional
    matrix view_transforms[][][].
-   <a href="#view generators">View transform generators</a> are
+   <a href="#view-generators">View transform generators</a> are
     a more sophisticated way to control
    view transforms.
 <hr>
-<a name="view_transform_generators"></a>
-<a name="view generators"></a><h2>View transform generators</h2>
-  Listing all the <a href="#view transforms">view transforms</a> is tedious
+<a   id="view_transform_generators"></a>
+<a   id="view-generators"></a><h2>View transform generators</h2>
+  Listing all the <a href="#view-transforms">view transforms</a> is tedious
   and inflexible.  An alternative is to list just a few matrices that
   can generate transforms.  See the 
 <a href="commands.htm#transform_expr">transform_expr</a> command for 
   instructions on entering the expression that generates the actual
-  transforms. Special Note: in the <a href="model.htm#torus model">torus model</a>,
+  transforms. Special Note: in the <a href="model.htm#torus-model">torus model</a>,
  the period translations
   are automatically added to the end of the list. So in the torus model,
   these are always available, even if you don't have 
@@ -702,7 +747,7 @@ SWAP_COLORS
     ...
 </pre>
  The number of matrices
-   follows the keyword <tt>VIEW_TRANSFORM_GENERATORS</tt>.  Each matrix is
+   follows the keyword <code>VIEW_TRANSFORM_GENERATORS</code>.  Each matrix is
    in homogeneous coordinates, with translation in the last column. 
    The size of each matrix is one more than the space dimension.
    Individual matrices need no
@@ -710,33 +755,33 @@ SWAP_COLORS
   frenzy until it has all the numbers it wants.
 If SWAP_COLORS is present, facet frontcolor and backcolor will be
    swapped when this matrix is applied.
-    The internal variable <tt>transform_count</tt> records the number
+    The internal variable <code>transform_count</code> records the number
     of transforms, and
    the transform matrices are accessible at runtime as a three-dimensional
    matrix view_transforms[][][].
 
 <hr>
-<a name="scale_limit"></a><h2>Scale limit</h2>
+<a   id="scale_limit"></a><h2>Scale limit</h2>
 To set an upper bound of <i>value</i>on the gradient descent
-<a href="iterate.htm#scale factor">scale factor</a>,
+<a href="iterate.htm#scale-factor">scale factor</a>,
 include the line
 <pre>
    SCALE_LIMIT <i>value</i>
 </pre>
 in the top section of the datafile.  The upper bound can be changed
 at runtime with the <a href="single.htm#m">m</a> command, or by
-setting the <tt>scale_limit</tt> variable.  If surface tension is
+setting the <code>scale_limit</code> variable.  If surface tension is
 the main energy, the scale_limit should be set to the inverse of
 the surface tension.
 
 <hr> 
-<a name="functions"></a><h2>Functions and procedures</h2>
+<a   id="functions"></a><h2>Functions and procedures</h2>
 Usually stand-alone user-defined 
-<a href="commands.htm#function definition">functions</a> 
+<a href="commands.htm#function-definition">functions</a> 
 and 
-<a href="commands.htm#procedure definition">procedures</a> 
+<a href="commands.htm#procedure-definition">procedures</a> 
 are defined
-in the <a href="datafile.htm#read section">read section</a> of the
+in the <a href="datafile.htm#read-section">read section</a> of the
 datafile, but sometimes it is necessary to define them in the top section
 of the datafile so they may be used in other top section declarations.
 It is possible to define them in the top section with the same syntax
@@ -749,15 +794,14 @@ declaration.  You should define stand-alone functions before attributes,
 or separate them with some other kind of declaration.
 
 <hr>
-
-<a name="optimizing_parameter"></a><h2>Optimizing parameter</h2>
-<a name="optimising_parameter"></a>
-<a name="pdelta"></a>
-<a name="pscale"></a>
-<a name="parameter scale"></a>
+<a   id="optimizing_parameter"></a> <a   id="optimising_parameter"></a> 
+  <a id="pdelta"></a> <a   id="pscale"></a> 
+<a id="p_force"></a> <a id="p_velocity"> </a>
+<a   id="parameter-scale"></a>
+<h2>Optimizing parameter</h2>
 A variable may be made subject to optimization during 
-<a href="iterate.htm#iteration step">iteration</a>
-or <a href="commands.htm#hessian command">hessian</a> commands
+<a href="iterate.htm#iteration-step">iteration</a>
+or <a href="commands.htm#hessian-command">hessian</a> commands
 with the datafile declaration
 <pre>
       OPTIMIZING_PARAMETER <em>identifier</em> = <em>constexpr</em> PDELTA = <em>constexpr</em> PSCALE = <em>constexpr</em>
@@ -774,34 +818,44 @@ to do "impedance matching" of the parameter to the surface energy.
 These attributes may be set on any parameter, for potential use
 as an optimizing parameter.
 At runtime, a parameter may be toggled to be optimizing or
-         not with the FIX and UNFIX commands.  That is, <tt>fix radius</tt>
+         not with the FIX and UNFIX commands.  That is, <code>fix radius</code>
          would make the radius variable non-optimizing (fixed value).
 Also, the pdelta and pscale attributes may be accessed at runtime, as in
 <pre>
 height.pscale := 2*height.pscale
 </pre>
+At runtime, one may use the p_force attribute of the variable
+to find the rate of change of energy with respect to the variable before
+constraint corrections, and the p_velocity attribute to find the rate
+of change of the variable with respect to the scale factor of the 'g' command.
+Example:
+<pre>
+    g
+    print height.p_velocity
+</pre>
+<p>
  "Optimising_parameter" is a synonym.
 
 <hr>
-<a name="gap_constant"></a>
-<a name="spring_constant"></a>
-<a name="gap constant decl"></a><h2>Gap constant declaration</h2>
+<a   id="gap_constant"></a>
+<a   id="spring_constant"></a>
+<a   id="gap-constant-decl"></a><h2>Gap constant declaration</h2>
 The initial value of the gap constant for 
-<a href="energies.htm#gap energy">gap energy</a> may be set
+<a href="energies.htm#gap-energy">gap energy</a> may be set
 in the datafile with the syntax
 <pre>  GAP_CONSTANT <i>value</i> </pre>
 The default value is 1. Synonym: spring_constant.
 
 <hr>
-<a name="symmetric_content"></a><h2>Symmetric content</h2>
-The datafile keyword <tt>SYMMETRIC_CONTENT</tt> triggers the use of
+<a   id="symmetric_content"></a><h2>Symmetric content</h2>
+The datafile keyword <code>SYMMETRIC_CONTENT</code> triggers the use of
 an alternate surface integral for calculating body volumes,
 namely the vectorfield (x,y,z)/3.  It is useful if unmodelled sides of a body are radial from the origin, or if constraint content
    integrals (which is evaluated by an approximation) lead
    to asymmetric results on what should be a symmetric surface.
 
 <hr>
-<a name="keep_originals"></a><h2>Keep original ids</h2>
+<a   id="keep_originals"></a><h2>Keep original ids</h2>
 The presence of the keyword
 <pre>
 keep_originals
@@ -811,12 +865,12 @@ option, which is to keep the id numbers internally the same as in the
 datafile, instead of renumbering them in the order they are read in.
 
 <hr>
-<a name="evolver_version"></a>
-<a name="version"></a><h2>Version</h2>
+<a   id="evolver_version"></a>
+<a   id="version"></a><h2>Version</h2>
 
 If a datafile contains features present only after a certain version of
 the Evolver, the datafile can contain a line of the form <br>
-<tt> evolver_version "2.10"</tt><br>
+<code> evolver_version "2.10"</code><br>
 This will generate a version error message if the current version is earlier,
 or just a syntax error if run on an Evolver version earlier than 2.10.
 
@@ -830,29 +884,29 @@ or just a syntax error if run on an Evolver version earlier than 2.10.
 
 
 
-<a name="constraint_tolerance decl"></a><h2>Constraint tolerance</h2>
+<a   id="constraint_tolerance-decl"></a><h2>Constraint tolerance</h2>
 This is datafile declaration of the tolerance within which a vertex is deemed to satisfy a
-<a href="constrnt.htm#level set constraints">level-set constraint</a>. 
+<a href="constrnt.htm#level-set-constraints">level-set constraint</a>. 
  Default is 1e-12.  Syntax:
 <pre>  CONSTRAINT_TOLERANCE <i>const_expr</i> </pre>
 Sets the value of the internal variable 
 <a href="syntax.htm#constraint_tolerance">constraint_tolerance</a>.
 
 <hr>
-<a name="symmetry decl"></a><h2>Symmetry group declaration</h2>
+<a   id="symmetry-decl"></a><h2>Symmetry group declaration</h2>
 To declare that the domain is the quotient space of a 
-<a href="model.htm#symmetry groups">symmetry group</a>, the
+<a href="model.htm#symmetry-groups">symmetry group</a>, the
 top section of the datafile must contain a line of the form
 <pre>
 SYMMETRY_GROUP "<em>name</em>" 
 </pre>  "<em>name</em>" is a double-quoted name that is matched 
 against the list of 
-<a href="model.htm#implemented symmetries">defined symmetry groups</a>.
+<a href="model.htm#implemented-symmetries">defined symmetry groups</a>.
 
 
 <hr>
-<a name="length_method_name"></a><h2>Length method</h2>
- This item, <tt>length_method_name</tt>, specifies
+<a   id="length_method_name"></a><h2>Length method</h2>
+ This item, <code>length_method_name</code>, specifies
 the name of the pre-defined method to use as the
 method to compute edge length in place of the default 
 <a href="quants.htm#edge_length">edge_length</a> method.
@@ -874,8 +928,8 @@ length_method_name "circular_arc_length"
 </pre>
 
 <hr>
-<a name="area_method_name"></a><h2>Area method</h2>
- This item, <tt>area_method_name</tt>, specifies
+<a   id="area_method_name"></a><h2>Area method</h2>
+ This item, <code>area_method_name</code>, specifies
 the name of the pre-defined method to use as the
 method to compute facet areas in place of the default 
 <a href="quants.htm#edge_area">edge_area</a> method in the string model
@@ -900,8 +954,8 @@ area_method_name "circular_arc_area"
 </pre>
 
 <hr>
-<a name="volume_method_name"></a><h2>Volume method</h2>
- This item, <tt>volume_method_name</tt>, specifies
+<a   id="volume_method_name"></a><h2>Volume method</h2>
+ This item, <code>volume_method_name</code>, specifies
 the name of the pre-defined method to use as the
 method to compute body volumes in place of the default 
 <a href="quants.htm#edge_area">edge_area</a> method in the string model
@@ -923,7 +977,7 @@ volume_method_name "circular_arc_area"
 </pre>
 
 <hr>
-<a name="hessian_special_normal_vector"></a><h2>Hessian special normal vector</h2>
+<a   id="hessian_special_normal_vector"></a><h2>Hessian special normal vector</h2>
 
 When <a href="toggle.htm#hessian_special_normal">hessian_special_normal</a>
 is on, hessian commands use  
@@ -938,35 +992,60 @@ c3: <em>expr</em>
 </pre>
 One can use vertex attributes in the expressions.  Beware that
 hessian_special_normal also applies to the normal calculated by
-the  <a href="elements.htm#vertexnormal">vertexnormal</a> attribute and the normal
+the  <a href="elements.htm#vertex_normal">vertex_normal</a> attribute and the normal
  used by regular <a href="commands.htm#vertex_average">vertex averaging</a>. 
 <hr>
-<a name="simplex decl"></a><h2>Simplex model declaration</h2>
+<a   id="simplex-decl"></a><h2>Simplex model declaration</h2>
 To declare that the datafile lists a surface in the 
-<a href="model.htm#simplex model">simplex model</a>,
+<a href="model.htm#simplex-model">simplex model</a>,
 the top section ot the datafile should contain the line
 <pre>
 SIMPLEX_REPRESENTATION
 </pre>
 The main effect on the datafile is that 
-<a href="#faces section">faces</a> are defined by oriented
+<a href="#faces-section">faces</a> are defined by oriented
 vertex lists rather than edge lists.
 
+<hr>
+<a   id="diffusion-decl"></a><h2>Diffusion</h2>
+
+The Evolver can simulate the real-life phenomenon of gas diffusion between
+neighboring bubbles. This diffusion is driven by the pressure difference
+across a surface. This is invoked by the keyword DIFFUSION in the first
+part of the datafile, followed by the value of the diffusion constant,
+which is the internal variable diffusion_coeff. 
+<pre>
+    DIFFUSION 0.1
+</pre>
+The amount diffused across a facet during an iteration is calculated as
+scale*diffusion_coeff*facet_area*pressure_difference. The scale factor
+is included as the time step of an iteration. The amount is added to or
+subtracted from the prescribed volumes of the bodies on either side of the
+facet.
+<p>
+If you want finer control over the rate of diffusion across various
+surfaces, you can define the edge_diffusion edge attribute in the string
+model or the facet_diffusion facet attribute in the soapfilm model and give
+individual values for edges or facets as you desire. If the attribute is
+defined, then its value is used instead of the global diffusion constant.
+<p>
+Diffusion can be toggled at runtime with the "diffusion" toggle command.
+<p>
 
 <hr>
-<a name="load_library"></a><h2>Dynamic load library</h2>
-To load a <a href="misc.htm#dynamic load library">dynamic library</a>
- of compiled
-functions, the syntax is 
+<a   id="load_library"></a><h2>Dynamic load library</h2>
+To load a <a href="misc.htm#dynamic-load-library">dynamic library</a>
+ of compiled functions, the syntax is 
 <pre>
  LOAD_LIBRARY "<em>filename</em>"
 </pre>
 where the double-quoted filename is the library.  The current
 directory and the <a href="install.htm#EVOLVERPATH">EVOLVERPATH</a>
 will be searched for the library.
+
 <hr>
-<a name="wulff"></a>
-<a name="wulff decl"></a><h2>Crystalline integrands</h2>
+<a   id="wulff"></a> <a   id="hemisphere"></a> <a   id="lens"></a>
+<a   id="wulff-decl"></a><h2>Crystalline integrands</h2>
 To declare that surface area energy should be calculated with
 a crystalline integrand, the top section of the datafile should
 contain a line of the form
@@ -988,15 +1067,15 @@ The double-quoted filename (with path) refers to a file
                           thickness 1/2 glued together on a horizontal
                           plane.  These two don't need separate files.
 <hr>
-<a name="phasefile"></a>
-<a name="phase"></a>
-<a name="phase decl"></a><h2>Phase file declaration</h2>
+<a   id="phasefile"></a>
+<a   id="phase"></a>
+<a   id="phase-decl"></a><h2>Phase file declaration</h2>
 To declare that the 
-<a href="energies.htm#surface tension">surface tension</a>
+<a href="energies.htm#surface-tension">surface tension</a>
  of an edge or facet depends on
 the phases of its adjacent 
-<a href="elements.htm#facet phase">facets</a> or 
-<a href="elements.htm#body phase">bodies</a>, the top section of the datafile
+<a href="elements.htm#phase,-facet">facets</a> or 
+<a href="elements.htm#phase,-body">bodies</a>, the top section of the datafile
 should contain a line of the form
 <pre>
  PHASEFILE "<em>filename</em>" 
@@ -1011,10 +1090,10 @@ a double-quoted string.
                      phases is not mentioned, the surface tension between
                      them is taken to be 1.0.  Facets in the string model
                      or bodies in the soapfilm model can be labelled with
-                     phases with the <tt>PHASE</tt> <i>n</i> phrase
+                     phases with the <code>PHASE</code> <i>n</i> phrase
 in the datafile.
 <hr>
-<a name="ideal gas decl"></a><h2>Ideal gas model</h2>
+<a   id="ideal-gas-decl"></a><h2>Ideal gas model</h2>
 A line in the top section of the datafile of the form
 <pre>
 PRESSURE <em>constexpr</em>
@@ -1025,24 +1104,24 @@ specifies that bodies are compressible
        The default is that bodies with given volume
               are not compressible.
 <hr>
-<a name="interp_bdry decl"></a><h2>Interpolation of parameters</h2>
+<a   id="interp_bdry-decl"></a><h2>Interpolation of parameters</h2>
 To use interpolation instead of extrapolation in calculating the 
-<a href="constrnt.htm#parametric boundaries">parameters</a>
+<a href="constrnt.htm#parametric-boundaries">parameters</a>
  of edge midpoints during refining, use the keyword
 <pre>   INTERP_BDRY_PARAM
 </pre>
 This should be done only if there are no periodic parameters.
 
 <hr>
-<a name="everything_quantities"></a><h2>Everything_quantities</h2>
+<a   id="everything_quantities"></a><h2>Everything_quantities</h2>
 Keyword in top section of the datafile.  Causes all areas, volumes,
 etc. to be converted to named quantities and methods. Equivalent
 to the command line <a href="general.htm#options">option -q</a>,
-or the <a href="toggle.htm#convert_to_quantities">
+or the <a href="commands.htm#convert_to_quantities">
 convert_to_quantities</a> command.
 <hr>
-<a name="mobility_tensor"></a>
-<a name="mobility decl"></a><h2>Mobility declaration</h2>
+<a   id="mobility_tensor"></a>
+<a   id="mobility-decl"></a><h2>Mobility declaration</h2>
 A <a href="model.htm#mobility">mobility</a>
  matrix may be defined in the top section of the datafile
 by the syntax
@@ -1061,10 +1140,10 @@ gives the matrix as a scalar multiple of the identity matrix.
 The formulas are evaluated at each vertex at each iteration, and 
 so formulas may depend on vertex position and any vertex attributes.
 <hr>
-<a name="conformal_metric"></a>
-<a name="klein_metric"></a>
-<a name="metric decl"></a><h2>Metric declaration</h2>
-A <a href="model.htm#Riemannian metric">Riemannian metric</a>
+<a   id="conformal_metric"></a>
+<a   id="klein_metric"></a>
+<a   id="metric-decl"></a><h2>Metric declaration</h2>
+A <a href="model.htm#Riemannian-metric">Riemannian metric</a>
  on the ambient space may be declared in the
 top section of the datafile with the syntax
 <pre>METRIC
@@ -1080,22 +1159,22 @@ or
 <pre>
 KLEIN_METRIC
 </pre>
-The keyword <tt>METRIC</tt> is followed by the N^2
+The keyword <code>METRIC</code> is followed by the N^2
               components of the metric tensor, where N is the dimension
               of space.  The components do not have to obey any particular
               line layout; they may be all on one line, or each on its
               own line, or any combination.  It is up to the user to
               maintain symmetry.  A 
-<a href="model.htm#conformal metric">conformal metric</a> is a scalar multiple
+<a href="model.htm#conformal-metric">conformal metric</a> is a scalar multiple
               of the identity matrix, and only the multiple need be given.
               A conformal metric will run about twice as fast.
-	      The <a href="model.htm#Klein hyperbolic metric">Klein metric</a>
+	      The <a href="model.htm#Klein-hyperbolic-metric">Klein metric</a>
  is a built-in metric for hyperbolic
 	      n-space modelled on the unit disk or ball.
 
 <hr>
-<a name="merit_factor"></a> <h2>Merit factor</h2>
-If the keyword <tt>MERIT_FACTOR</tt> is present, then the
+<a   id="merit_factor"></a> <h2>Merit factor</h2>
+If the keyword <code>MERIT_FACTOR</code> is present, then the
 <a href="single.htm#i">i</a> command will print the ratio
 total_area^3/total_volume^2, which measures the efficiency of 
 area enclosing volume.  A holdover from the early days of trying
@@ -1103,8 +1182,9 @@ to beat Kelvin's partition of space.
 <hr>
 
 
-<a name="square_curvature"></a> <a name="curvature_power"></a>
-<a name="squared_curvature"></a><h2>Squared mean curvature</h2>
+<a   id="square_curvature"></a> <a   id="curvature_power"></a>
+<a   id="square_gauss_modulus"></a>
+<a   id="squared_curvature"></a><h2>Squared mean curvature</h2>
 
 To add an energy of squared mean curvature, include a line in the
 top of the datafile
@@ -1118,31 +1198,32 @@ curvature named methods.
 In the string model, the power of the curvature is controlled by
 the internal read-write variable curvature_power.
 <hr>
-<a name="sqgauss"></a>
-<a name="square_gaussian_curvature"></a>
-<a name="squared_gaussian_curvature"></a><h2>Squared Gaussian curvature</h2>
+<a   id="sqgauss"></a>
+<a   id="square_gaussian_curvature"></a>
+<a   id="squared_gaussian_curvature"></a><h2>Squared Gaussian curvature</h2>
 
 To add an energy of squared Gaussian curvature, include a line in the
 top of the datafile
 <pre>  SQUARED_GAUSSIAN_CURVATURE modulus
 </pre>
-The modulus is a multiplier for the energy.  
-Synonyms: <tt>square_gaussian_curvature</tt>, <tt>sqgauss</tt>
+The modulus is a multiplier for the energy, and is available at runtime
+in the read-write variable square_gauss_modulus. Synonyms:
+Synonyms: <code>square_gaussian_curvature</code>, <code>sqgauss</code>
 
 <hr>
-<a name="zoom_vertex"></a><h2>Zoom_vertex</h2>
+<a   id="zoom_vertex"></a><h2>Zoom_vertex</h2>
 Datafile keyword setting the current <a href="commands.htm#zoom">zoom</a>
 vertex.  Used in dump files after a zoom command has been given.
 
 <hr>
-<a name="zoom_radius"></a><h2>Zoom_radius</h2>
+<a   id="zoom_radius"></a><h2>Zoom_radius</h2>
 Datafile keyword setting the current <a href="commands.htm#zoom">zoom</a>
 radius.  Used in dump files after a zoom command has been given.
 
 
 <hr>
-<a name="unsuppress_warning"></a>
-<a name="suppress_warning"></a><h2>Suppress_warning</h2>
+<a   id="unsuppress_warning"></a>
+<a   id="suppress_warning"></a><h2>Suppress_warning</h2>
 Datafile keyword instructing Evolver not to print a certain warning.
 Syntax:
 <pre>
@@ -1155,12 +1236,147 @@ can be restored with the syntax
   UNSUPPRESS_WARNING <em>number</em>
 </pre>
 
+<hr>
+<a   id="vertices_predicted"></a><h2>Vertices_predicted</h2>
+Datafile keyword in the top section of the datafile that specifies the
+initial allocation of vertex structures.  Optional.  The purpose is to
+prevent repeated reallocation of memory as the vertex list grows or as
+the surface evolves.  Should be faster, and prevents memory fragmentation.
+Automatically put in dump files by the <a href="single.htm">d</a> or
+ <a href="commands.htm">dump</a> commands, based on
+the current number of vertices.
+Example:
+<pre>
+    vertices_predicted 3074
+    edges_predicted    9216
+    facets_predicted   6144
+    bodies_predicted      1
+    facetedges_predicted  18432
+</pre>
 
+
+<hr>
+<a   id="edges_predicted"></a><h2>Edges_predicted</h2>
+Datafile keyword in the top section of the datafile that specifies the
+initial allocation of edge structures.  Optional.  The purpose is to
+prevent repeated reallocation of memory as the edge list grows or as
+the surface evolves.  Should be faster, and prevents memory fragmentation.
+Automatically put in dump files by the <a href="single.htm">d</a> or
+ <a href="commands.htm">dump</a> commands, based on
+the current number of edges.
+Example:
+<pre>
+    vertices_predicted 3074
+    edges_predicted    9216
+    facets_predicted   6144
+    bodies_predicted      1
+    facetedges_predicted  18432
+</pre>
+
+<hr>
+<a   id="facets_predicted"></a><h2>Facets_predicted</h2>
+Datafile keyword in the top section of the datafile that specifies the
+initial allocation of facet structures.  Optional.  The purpose is to
+prevent repeated reallocation of memory as the facet list grows or as
+the surface evolves.  Should be faster, and prevents memory fragmentation.
+Automatically put in dump files by the <a href="single.htm">d</a> or
+ <a href="commands.htm">dump</a> commands, based on
+the current number of facets.
+Example:
+<pre>
+    vertices_predicted 3074
+    edges_predicted    9216
+    facets_predicted   6144
+    bodies_predicted      1
+    facetedges_predicted  18432
+</pre>
+
+<hr>
+<a   id="bodies_predicted"></a><h2>Bodies_predicted</h2>
+Datafile keyword in the top section of the datafile that specifies the
+initial allocation of body structures.  Optional.  The purpose is to
+prevent repeated reallocation of memory as the facet list grows or as
+the surface evolves.  Should be faster, and prevents memory fragmentation.
+Automatically put in dump files by the <a href="single.htm">d</a> or
+ <a href="commands.htm">dump</a> commands, based on
+the current number of bodies.
+Example:
+<pre>
+    vertices_predicted 3074
+    edges_predicted    9216
+    facets_predicted   6144
+    bodies_predicted      1
+    facetedges_predicted  18432
+</pre>
+
+
+<hr>
+<a   id="facetedges_predicted"></a><h2>Facetedges_predicted</h2>
+Datafile keyword in the top section of the datafile that specifies the
+initial allocation of facetedge structures.  Optional.  The purpose is to
+prevent repeated reallocation of memory as the facetedge list grows or as
+the surface evolves.  Should be faster, and prevents memory fragmentation.
+Automatically put in dump files by the <a href="single.htm">d</a> or
+ <a href="commands.htm">dump</a> commands, based on
+the current number of facetedges.
+Example:
+<pre>
+    vertices_predicted 3074
+    edges_predicted    9216
+    facets_predicted   6144
+    bodies_predicted      1
+    facetedges_predicted  18432
+</pre>
+
+<hr>
+<a   id="quantities_predicted"></a><h2>Quantities_predicted</h2>
+Datafile keyword in the top section of the datafile that specifies the
+initial allocation of named quantity structures.  Optional.  The purpose is
+to prevent repeated reallocation of memory as the quantity list grows.
+Not significant if there are only a few quantities,  but there are
+times when there can be thousands of quantities, such as when
+"everything_quantities" is used with a large foam. Automatically put in
+dump files by the "d" or "dump" commands, based on the current number of
+quantities.  This declaration obviously should come before any quantities
+are defined.
+Example:
+<pre>
+    vertices_predicted 30748
+    edges_predicted    92166
+    facets_predicted   61446
+    bodies_predicted    2048
+    facetedges_predicted  184320
+    method_instances_predicted   4098
+    quantities_predicted   2050
+</pre>
+
+<hr>
+<a   id="method_instances_predicted"></a><h2>Method_instances_predicted</h2>
+
+Datafile keyword in the top section of the datafile that specifies the
+initial allocation of method instance structures.  Optional.  The purpose is
+to prevent repeated reallocation of memory as the instance list grows.
+Not significant if there are only a few method instances,  but there are
+times when there can be thousands of instances, such as when
+"everything_quantities" is used with a large foam. Automatically put in
+dump files by the "d" or "dump" commands, based on the current number of
+method instances. This declaration obviously should come before any quantities
+are defined.
+Example:
+<pre>
+    vertices_predicted 30748
+    edges_predicted    92166
+    facets_predicted   61446
+    bodies_predicted    2048
+    facetedges_predicted  184320
+    method_instances_predicted   4098
+    quantities_predicted   2050
+</pre>
 
 
 <hr>
 <hr>
-<a name="element lists"></a><h2>Element lists</h2>
+<a   id="element-lists"></a><h2>Element lists</h2>
 
 The lists of geometric elements follow a general format.  Each element
 is defined on one line.  The first entry on a line is the element number.
@@ -1171,29 +1387,29 @@ in the datafile is accessible as the
 After the element number comes the basic defining data, followed by
 optional attributes in arbitrary order.  Besides the particular attributes
 for each element type listed below, one may specify values for any
-<a href="elements.htm#extra attributes">extra attributes</a>
+<a href="elements.htm#extra-attributes">extra attributes</a>
  defined earlier.  The syntax is attribute name followed
 by the appropriate number of values. 
 Also an arbitrary number of 
-<a href="quants.htm#named quantities">named quantities</a> or
-<a href="quants.htm#method instances">method instances</a> may
+<a href="quants.htm#named-quantities">named quantities</a> or
+<a href="quants.htm#method-instances">method instances</a> may
 	      be listed.  These add method values for this element to the
 	      named quantity.  The named quantity or instance
 	      must have been declared in the top section of the datafile. 
 <hr>
-<a name="vertices section"></a><h2>Vertex list</h2>
+<a   id="vertices-section"></a><h2>Vertex list</h2>
 
-    The datafile vertex list is started by the keyword <tt>VERTICES</tt> at
+    The datafile vertex list is started by the keyword <code>VERTICES</code> at
               the start of a line. It is followed by lines with
               one vertex specification per line. If the vertex is
               not on a 
-<a href="constrnt.htm#parametric boundaries">parametric boundary</a>, the syntax is
+<a href="constrnt.htm#parametric-boundaries">parametric boundary</a>, the syntax is
 <pre>
 <em>k   x y ...</em> [FIXED] [CONSTRAINT <em>c1 c2 ...</em>]  [BARE]
             [<em>quantityname ...</em>] [<em>methodname ...</em>]
 </pre>
 The syntax for a vertex on a 
-<a href="constrnt.htm#parametric boundaries">parametric boundary</a> is
+<a href="constrnt.htm#parametric-boundaries">parametric boundary</a> is
 <pre>
 <em>k p1 [p2 ...] </em> BOUNDARY <em>b</em> [FIXED] [BARE] [<em>quantityname ...</em>] 
    [<em>methodname ...</em>] 
@@ -1206,11 +1422,11 @@ The syntax for a vertex on a
               for coordinates.
               In the parametric boundary format, the boundary parameter
               values are given instead of the coordinates. 
-           If <a href="elements.htm#fixed vertex"><tt>FIXED</tt></a> is given,
+           If <a href="elements.htm#fixed,-vertex"><code>FIXED</code></a> is given,
               then the vertex never moves, except possibly for an
-              initial projection to constraints. If <tt>CONSTRAINT</tt> is 
+              initial projection to constraints. If <code>CONSTRAINT</code> is 
               given, then one or more 
-<a href="constrnt.htm#level set constraints">constraint</a> numbers must follow.
+<a href="constrnt.htm#level-set-constraints">constraint</a> numbers must follow.
               You can list as many constraints as you
               want, as long as those that apply exactly at any time
 	      are consistent and independent.
@@ -1218,28 +1434,28 @@ The syntax for a vertex on a
               constraints; they will be projected onto them.  A vertex
               on a parametric boundary cannot also be on a constraint.
 <p>
-	      The  <a href="elements.htm#bare vertex"><tt>BARE</tt></a>
+	      The  <a href="elements.htm#bare,-vertex"><code>BARE</code></a>
  attribute is just an instruction to the
 	      checking routines that this vertex is not supposed to have
 	      an adjacent facet in the soapfilm model, so spurious
 	      warnings will not be generated.  This is useful when you
 	      want to show bare wires or outline fundamental domains.
 <p>An arbitrary number of 
-<a href="quants.htm#named quantities">named quantities</a>
- or <a href="quants.htm#method instances">method instances</a> may
+<a href="quants.htm#named-quantities">named quantities</a>
+ or <a href="quants.htm#method-instances">method instances</a> may
 	      be listed.  These add method values for this element to the
 	      named quantity.  The named quantity or instance
 	      must have been
-<a href="#named quantity decl">declared</a> in the top section of the datafile. 
+<a href="#named-quantity-decl">declared</a> in the top section of the datafile. 
 <p>
 The <a href="commands.htm#list">list</a>
-<a href="commands.htm#list">vertices</a> command
+<a href="commands.htm#list"> vertices</a> command
 prints the datafile format listing of vertices.
 <hr>
 
-<a name="edges section"></a><h2>Edge list</h2>
+<a   id="edges-section"></a><h2>Edge list</h2>
               The datafile edge list follows the vertex list,
-              and is started by the keyword <tt>EDGES</tt> at the 
+              and is started by the keyword <code>EDGES</code> at the 
               start of a line.  It is followed by lines with one
               edge specification per line in this format (linespliced here):
 <pre>
@@ -1251,38 +1467,38 @@ prints the datafile format listing of vertices.
 Here <em>k</em> is the edge number, with numbering following the same
 rules as for vertices.  <em>v1</em> and <em>v2</em> are the numbers of
 the tail and head vertices of the edge.  In the 
-<a href="model.htm#quadratic model">quadratic model</a>, the
+<a href="model.htm#quadratic-model">quadratic model</a>, the
 edge midpoint may be listed as a third vertex <em>midv</em> (otherwise a
 midpoint vertex will be created).  In the 
-<a href="model.htm#torus model">torus model</a>, there must
+<a href="model.htm#torus-model">torus model</a>, there must
 follow signs <em>s1 s2 s3</em> indicating how the edge
 wraps around each unit cell direction: + for once
 positive, * for none, and - for once negative.  In non-torus
-<a href="model.htm#symmetry groups">symmetry groups</a>, each edge 
-should have a <tt>WRAP</tt> symmetry group element encoded as an integer.
-<a href="elements.htm#fixed edge"><tt>FIXED</tt></a> means that
+<a href="model.htm#symmetry-groups">symmetry groups</a>, each edge 
+should have a <code>WRAP</code> symmetry group element encoded as an integer.
+<a href="elements.htm#fixed,-edge"><code>FIXED</code></a> means that
 all vertices and edges resulting from subdividing this edge will have
-the <tt>FIXED</tt> attribute; it does not mean that the
+the <code>FIXED</code> attribute; it does not mean that the
 endpoints will be automatically fixed.  Likewise the  
-<a href="constrnt.htm#parametric boundaries"><tt>BOUNDARY</tt></a> and 
-<a href="constrnt.htm#level set constraints"><tt>CONSTRAINT</tt></a>
+<a href="constrnt.htm#parametric-boundaries"><code>BOUNDARY</code></a> and 
+<a href="constrnt.htm#level-set-constraints"><code>CONSTRAINT</code></a>
  attributes will be inherited by all edges and vertices
 derived from this edge.  If a constraint has energy or content
 integrands, these will be done for this edge.  IMPORTANT: If a
 constraint number is given as negative, the edge energy and content
 integrals will be done in the opposite orientation.  In the 
-<a href="model.htm#string model">string model</a>, 
+<a href="model.htm#string-model">string model</a>, 
 the default tension is 1, and in the 
-<a href="model.htm#soapfilm model">soapfilm model</a>, the default
+<a href="model.htm#soapfilm-model">soapfilm model</a>, the default
 tension is 0.  However, edges may be given nonzero tension in the
 soapfilm model, and they will contribute to the energy.
 <p>
- If the <a href="model.htm#simplex model">simplex model</a>
+ If the <a href="model.htm#simplex-model">simplex model</a>
  is in effect, edges are one less dimension
 	      than facets and given by an ordered list of vertices. 
 	      Only edges on constraints with integrals need be listed.
 <p>
-     The <a href="elements.htm#bare edge"><tt>BARE</tt></a>
+     The <a href="elements.htm#bare,-edge"><code>BARE</code></a>
  attribute is just an instruction to the
 	      checking routines that this ede is not supposed to have
 	      an adjacent facet in the soapfilm model, so spurious
@@ -1290,11 +1506,11 @@ soapfilm model, and they will contribute to the energy.
 	      want to show bare wires or outline fundamental domains.
 
 <p>An arbitrary number of 
-<a href="quants.htm#named quantities">named quantities</a>
- or <a href="quants.htm#method instances">method instances</a> may
+<a href="quants.htm#named-quantities">named quantities</a>
+ or <a href="quants.htm#method-instances">method instances</a> may
 	      be listed.  These add method values for this element to the
 	      must have been
-<a href="#named quantity decl">declared</a> in the top section of the datafile. 
+<a href="#named-quantity-decl">declared</a> in the top section of the datafile. 
 If the quantity or instance has orientation-dependent methods, the name
 may be followed by a dash to reverse the applied orientation.
 <p>
@@ -1303,11 +1519,11 @@ The <a href="commands.htm#list">list</a>
 prints the datafile format listing of edges.
 <hr>
 
-<a name="faces section"></a><a name="face"></a><a name="faces"></a>  
+<a   id="faces-section"></a><a   id="face"></a><a   id="faces"></a>  
 <h2>   Face list</h2>
 
        The datafile face list follows the edge list, 
-       and is started by the keyword <tt>FACES</tt> at the 
+       and is started by the keyword <code>FACES</code> at the 
        start of a line.  It is followed by lines with one
          facets specification per line in this format:
 <pre>
@@ -1318,55 +1534,55 @@ prints the datafile format listing of edges.
 </pre>
               Here <em>k</em> is the face number, with numbering following the 
               same rules as for 
-<a href="#vertices section">vertices</a>. There follows a list of 
+<a href="#vertices-section">vertices</a>. There follows a list of 
               oriented edge numbers in counterclockwise order around
               the face.  A negative edge number means the opposite
               orientation of the edge from that defined in the edge list.
               The head of the last edge must be the tail of the first
               edge (except if you're being tricky in the 
-<a href="model.htm#string model">string model</a>).
+<a href="model.htm#string-model">string model</a>).
               There is no limit on the number of edges.  The face
               will be automatically subdivided into triangles if it has 
               more than three edges in the 
-<a href="model.htm#soapfilm model">soapfilm model</a>.
+<a href="model.htm#soapfilm-model">soapfilm model</a>.
               The 
-<a href="elements.htm#facet density"><tt>TENSION</tt></a>
- (synonym: <tt>DENSITY</tt>) 
+<a href="elements.htm#density,-facet"><code>TENSION</code></a>
+ (synonym: <code>DENSITY</code>) 
 value is the energy per unit area
-              (the <a href="energies.htm#surface tension">surface tension</a>)
+              (the <a href="energies.htm#surface-tension">surface tension</a>)
  of the facet; the default is 1.  Density 0 facets exert no
               force, and can be useful to define volumes or in
               displays.  Fractional density is useful for prescribed
               contact angles.
-              <a href="elements.htm#nodisplay"><tt>NODISPLAY</tt></a>
+              <a href="elements.htm#nodisplay"><code>NODISPLAY</code></a>
 prevents the facet from being displayed.
-	      The  <a href="elements.htm#facet color"><tt>COLOR</tt></a>
+	      The  <a href="elements.htm#color,-facet"><code>COLOR</code></a>
  attribute applies to both sides of a facet;
-	      <a href="elements.htm#frontcolor"><tt>FRONTCOLOR</tt></a>
+	      <a href="elements.htm#frontcolor"><code>FRONTCOLOR</code></a>
  applies to the positive side (edges
 	      going counterclockwise) and 
-<a href="elements.htm#backcolor"><tt>BACKCOLOR</tt></a> to the 
+<a href="elements.htm#backcolor"><code>BACKCOLOR</code></a> to the 
 	      negative side.
-              The <a href="elements.htm#facet phase"><tt>PHASE</tt></a> 
-number is used in the <a href="model.htm#string model">string model</a>
+              The <a href="elements.htm#phase,-facet"><code>PHASE</code></a> 
+number is used in the <a href="model.htm#string-model">string model</a>
               to determine the surface tension of edges between facets
               of different phases, if phases are used.
 <p>
-              If the <a href="model.htm#simplex model">simplex model</a>
+              If the <a href="model.htm#simplex-model">simplex model</a>
  is in effect, the edge list should
               be replaced by an oriented list of vertex numbers.
 
 <p>An arbitrary number of 
-<a href="quants.htm#named quantities">named quantities</a>
- or <a href="quants.htm#method instances">method instances</a> may
+<a href="quants.htm#named-quantities">named quantities</a>
+ or <a href="quants.htm#method-instances">method instances</a> may
 	      be listed.  These add method values for this element to the
 	      must have been
-<a href="#named quantity decl">declared</a> in the top section of the datafile. 
+<a href="#named-quantity-decl">declared</a> in the top section of the datafile. 
 If the quantity or instance has orientation-dependent methods, the name
 may be followed by a dash to reverse the applied orientation.
 <p>
               The faces section is optional in the 
-<a href="model.htm#string model">string model</a>.
+<a href="model.htm#string-model">string model</a>.
 
 <p>
 The <a href="commands.htm#list">list</a>
@@ -1375,10 +1591,10 @@ prints the datafile format listing of facets.
 <hr>
 
 
-<a name="bodies section"></a><h2> Body list</h2>
+<a   id="bodies-section"></a><h2> Body list</h2>
 
               The datafile body list follows the face list, and 
-              is started by the keyword <tt>BODIES</tt> at the
+              is started by the keyword <code>BODIES</code> at the
               start of a line.  It is followed by lines with one
               body specification per line in this format:
 <pre>
@@ -1393,59 +1609,59 @@ prints the datafile format listing of facets.
               the right-hand rule from the edge order in the
               facet list) is outward from the body and negative means
               the normal is inward. Giving a 
-              <tt>VOLUME</tt> value <em>constexpr</em> means the body has a 
-<a href="elements.htm#target volume">volume constraint</a>,
+              <code>VOLUME</code> value <em>constexpr</em> means the body has a 
+<a href="elements.htm#target-volume">volume constraint</a>,
               unless the
-<a href="datafile.htm#ideal gas decl">ideal gas model</a>
+<a href="datafile.htm#ideal-gas-decl">ideal gas model</a>
  is in effect, in which case <em>constexpr</em>
               is the volume at the ambient pressure. 
-              <a href="elements.htm#body volconst"><tt>VOLCONST</tt></a>
+              <a href="elements.htm#body-volconst"><code>VOLCONST</code></a>
  is a value added to the volume; it is useful
               when the volume calculation from facet and edge integrals
               differs from the true volume by a constant amount, as may
-	      happen in the <a href="model.htm#torus model">torus model</a>.
-<tt>ACTUAL_VOLUME</tt> is a number that can be specified
+	      happen in the <a href="model.htm#torus-model">torus model</a>.
+<code>ACTUAL_VOLUME</code> is a number that can be specified
 	       in the rare circumstances where the torus volume
 	      volconst calculation gives the wrong answer; volconst
 					     will be adjusted to give this volume of the body.
-              Giving a <tt>PRESSURE</tt> value means
+              Giving a <code>PRESSURE</code> value means
               that the body is deemed to have a constant internal
-              <a href="elements.htm#body pressure">pressure</a>;
+              <a href="elements.htm#pressure,-body">pressure</a>;
  this is useful for prescribed mean
               curvature problems.  It is incompatible with
               prescribed volume.  Giving a 
-<a href="elements.htm#body density"><tt>DENSITY</tt></a> value means
+<a href="elements.htm#density,-body"><code>DENSITY</code></a> value means
               that 
-<a href="energies.htm#gravity energy">gravitational potential energy</a>
+<a href="energies.htm#gravity-energy">gravitational potential energy</a>
   will be included. 
 <p>
-              To endow a facet with <tt>VOLUME</tt>, <tt>PRESSURE</tt>, 
-or <tt>DENSITY</tt>
-         attributes in the <a href="model.htm#string model">string model</a>,
+              To endow a facet with <code>VOLUME</code>, <code>PRESSURE</code>, 
+or <code>DENSITY</code>
+         attributes in the <a href="model.htm#string-model">string model</a>,
  define a body with just the one facet.
 <p>
               The 
-<a href="elements.htm#body phase"><tt>PHASE</tt></a>
- number is used in the <a href="model.htm#soapfilm model">soapfilm model</a>
-    to determine the <a href="energies.htm#surface tension">surface tension</a>
+<a href="elements.htm#phase,-body"><code>PHASE</code></a>
+ number is used in the <a href="model.htm#soapfilm-model">soapfilm model</a>
+    to determine the <a href="energies.htm#surface-tension">surface tension</a>
  of facets between bodies of different phases, if phases are used.
 <p>
-              The <tt>BODIES</tt> section is optional.
+              The <code>BODIES</code> section is optional.
 <p>
 The <a href="commands.htm#list">list</a>
 <a href="commands.htm#list">bodies</a> command
 prints the datafile format listing of bodies.
 <hr>
-<a name="read section"></a><h2> READ section</h2>
+<a   id="read-section"></a><h2> READ section</h2>
   The final section of the datafile may contain commands.
   These commands are read and executed immediately, just as
   if they had been entered at the command prompt.
-       Encountering the keyword  <tt>READ</tt> in the datafile causes
+       Encountering the keyword  <code>READ</code> in the datafile causes
        the Evolver to switch from datafile mode to command mode and
        read the rest of the datafile as command input.  This feature
        is useful for automatic initialization of the surface with
        refining, iteration, defining your own commands, etc.
-        The <tt>READ</tt> section is optional.
+        The <code>READ</code> section is optional.
 Example:
 <pre>  bodies
   1   1 2 3 4 5 6 volume 1
@@ -1459,11 +1675,11 @@ Example:
   gogo := { g 5; r; g 10; r; g 20 }
 
 </pre>
-The <a href="commands.htm#bottominfo">list</a>
-<a href="commands.htm#bottominfo">bottominfo</a> command
-prints the <tt>READ</tt> section that would be printed in a dump file.
+The <a href="commands.htm#bottominfo">list bottominfo</a> command
+prints the <code>READ</code> section that would be printed in a dump file.
 <hr>
-<a href="evolver.htm#doc top">Back to top of Surface Evolver documentation.</a>
+<a href="evolver.htm#doc-top">Back to top of Surface Evolver documentation.</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="index.htm">Index.</a>
 </body>
 </html>

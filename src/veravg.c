@@ -6,8 +6,8 @@
 
 #include "include.h"
 
-int find_vertex_average ARGS(( vertex_id , REAL *, int));
-void old_vertex_average ARGS((int));
+int find_vertex_average ( vertex_id , REAL *, int);
+void old_vertex_average (int);
 
 /**************************************************************
 *
@@ -26,10 +26,11 @@ static  struct averages { REAL x[MAXCOORD];
                           edge_id trip_e[2]; /* id's of triple edges */
                         } *average;
 
-void vertex_average(mode)
-int mode;    /* VOLKEEP to keep volumes on both sides same */
+void vertex_average(
+int mode     /* VOLKEEP to keep volumes on both sides same */
              /* NOVOLKEEP to obey just constraints */
              /* RAWEST to ignore all restrictions */
+)
 { 
   REAL *x;
   vertex_id v_id;
@@ -57,7 +58,7 @@ int mode;    /* VOLKEEP to keep volumes on both sides same */
 
   FOR_ALL_VERTICES(v_id)
   {
-     int attr = get_vattr(v_id);
+     ATTR attr = get_vattr(v_id);
      REAL *newx = average[loc_ordinal(v_id)].x;
      x = get_coord(v_id);
      if (attr & BOUNDARY )
@@ -73,7 +74,7 @@ int mode;    /* VOLKEEP to keep volumes on both sides same */
   }
 
   temp_free((char*)average);
-}
+} // end vertex_average()
 
 /***********************************************************************
 *
@@ -82,10 +83,11 @@ int mode;    /* VOLKEEP to keep volumes on both sides same */
 * Purpose: Mass vertex averaging, invoked by V, rawv, rawestv.
 */
 
-void old_vertex_average(mode)
-int mode;    /* VOLKEEP to keep volumes on both sides same */
+void old_vertex_average(
+int mode     /* VOLKEEP to keep volumes on both sides same */
              /* NOVOLKEEP to obey just constraints */
              /* RAWEST to ignore all restrictions */
+)
 {
   facet_id f_id;
   edge_id e_id;
@@ -216,9 +218,10 @@ int mode;    /* VOLKEEP to keep volumes on both sides same */
 *
 */      
 
-void facet_average(f_id,mode)
-facet_id f_id;
-int mode; /* averaging mode */
+void facet_average(
+  facet_id f_id,
+  int mode  /* averaging mode */
+)
 {
   int i,j,k,ii;
   REAL side[FACET_EDGES][2][MAXCOORD];
@@ -258,7 +261,7 @@ int mode; /* averaging mode */
 
       if ( mode != RAWEST )
       { /* check constraint compatibility */
-         int attr = get_vattr(tailv);
+         ATTR attr = get_vattr(tailv);
          int found,kk,bad;
 
          if ( (attr & CONSTRAINT) )
@@ -375,8 +378,8 @@ int mode; /* averaging mode */
          }
 
 afterlost: ;
-    }
-}
+    } 
+} // end facet_average()
  
 
 /***********************************************************************
@@ -384,19 +387,19 @@ afterlost: ;
 * function: edge_average()
 *
 * purpose: find one edge's contributions to averaging of its vertices.
-*
 */      
 
-void edge_average(e_id,mode)
-edge_id e_id;
-int mode; /* averaging mode */
+void edge_average(
+  edge_id e_id,
+  int mode /* averaging mode */
+)
 {
   int i,j,k;
   struct averages *head,*tail;
   vertex_id headv = get_edge_headv(e_id);
   vertex_id tailv = get_edge_tailv(e_id);
   REAL side[MAXCOORD];
-  int attr;
+  ATTR attr;
 
   get_edge_side(e_id,side);  /* in case of wraps */
 
@@ -476,19 +479,19 @@ dotail:
   tail->status++;  /* mark one more edge done */
      
   
-}
+} // end edge_average()
 
 /***********************************************************************
 *
 *  function: simplex_facet_average()
 *
 *  purpose:  add neighboring vertex coordinates for one facet
-*
 */
 
-void simplex_facet_average(f_id,mode)
-facet_id f_id;
-int mode;
+void simplex_facet_average(
+  facet_id f_id,
+  int mode
+)
 {
   struct averages *head;
   vertex_id *v = get_facet_vertices(f_id);
@@ -512,7 +515,7 @@ int mode;
       head->status++;
     }
   }
-}
+} // end simplex_facet_average()
 
 /***********************************************************************
 *
@@ -525,15 +528,16 @@ int mode;
 *            1 if vertex moved.
 */
 
-int new_vertex_average(v_id,mode)
-vertex_id v_id;
-int mode;    /* VOLKEEP to keep volumes on both sides same */
+int new_vertex_average(
+  vertex_id v_id,
+  int mode   /* VOLKEEP to keep volumes on both sides same */
              /* NOVOLKEEP to obey just constraints */
              /* RAWEST to ignore all restrictions */
+)
 { REAL newx[MAXCOORD];
   REAL *x;
   int i;
-  int attr = get_vattr(v_id);
+  ATTR attr = get_vattr(v_id);
   int retval;
 
   retval = find_vertex_average(v_id,newx,mode);
@@ -550,7 +554,7 @@ int mode;    /* VOLKEEP to keep volumes on both sides same */
         project_v_constr(v_id,ACTUAL_MOVE,RESET_ONESIDEDNESS);
   }
   return 1;
-}
+} // end new_vertex_average()
 
 /***********************************************************************
 *
@@ -562,13 +566,14 @@ int mode;    /* VOLKEEP to keep volumes on both sides same */
 *            1 if vertex moved, position is new position.
 */
 
-int find_vertex_average(v_id,vx,mode)
-vertex_id v_id;
-REAL *vx;
-int mode;    /* VOLKEEP to keep volumes on both sides same */
-             /* NOVOLKEEP to obey just constraints */
-             /* RAWEST to ignore all restrictions */
-{ int attr = get_vattr(v_id);
+int find_vertex_average(
+  vertex_id v_id,
+  REAL *vx,
+  int mode     /* VOLKEEP to keep volumes on both sides same */
+               /* NOVOLKEEP to obey just constraints */
+               /* RAWEST to ignore all restrictions */
+)
+{ ATTR attr = get_vattr(v_id);
   REAL xsum[MAXCOORD];  
   REAL *oldx;
   REAL x[MAXCOORD];
@@ -636,24 +641,24 @@ int mode;    /* VOLKEEP to keep volumes on both sides same */
 
       if ( mode != RAWEST )
       { /* check constraint compatibility */
-         int m;
+        int m;
 
-         if ( (attr & CONSTRAINT) )
-          { conmap_t * vconmap = get_v_constraint_map(v_id);
-             conmap_t * econmap = get_e_constraint_map(e_id);
+        if ( (attr & CONSTRAINT) )
+        { conmap_t * vconmap = get_v_constraint_map(v_id);
+          conmap_t * econmap = get_e_constraint_map(e_id);
 
-             for ( j = 1 ; j <= (int)vconmap[0] ; j++ )
-             { int found;
-                for ( m = 1, found = 0 ; m <= (int)econmap[0] ; m++ )
-                  if ( econmap[m] == (vconmap[j] & ~CON_HIT_BIT) )
-                  { found = 1; break; }
-                if ( !found ) goto loopend;
-             }
+          for ( j = 1 ; j <= (int)vconmap[0] ; j++ )
+          { int found;
+            for ( m = 1, found = 0 ; m <= (int)econmap[0] ; m++ )
+              if ( econmap[m] == (vconmap[j] & ~CON_HIT_BIT) )
+              { found = 1; break; }
+            if ( !found ) goto loopend;
           }
-         else if ( attr & BOUNDARY )
-         { 
-            if ( get_edge_boundary(e_id) != get_boundary(v_id) ) goto loopend;
-         } 
+        }
+        else if ( attr & BOUNDARY )
+        { 
+          if ( get_edge_boundary(e_id) != get_boundary(v_id) ) goto loopend;
+        } 
       }
 
       /* check valence */
@@ -713,7 +718,7 @@ loopend:
 
     if ( k <= 1 ) return 0;  /* only found at most one edge */
 
-    if ( mode == VOLKEEP )
+    if ( mode == VOLKEEP && !(attr & CONSTRAINT) )
      { /* project motion tangentially */
         dm = new_calc_vertex_normal(v_id,norm);
         if ( dm < SDIM )
@@ -731,24 +736,42 @@ loopend:
      { unsigned int jj;
        conmap_t * conmap = get_v_constraint_map(v_id);
        int oncount = 0;
-       struct constraint *con[MAXCONPER];
-       int conlist[MAXCONPER];
+       struct constraint *con[MAXCONHIT];
+       int conlist[MAXCONHIT];
        REAL perp[MAXCOORD];
 
        for ( jj = 1 ; jj <= conmap[0] ; jj++ )
-       { if ( conmap[jj] & CON_HIT_BIT )
+       { if ( (conmap[jj] & CON_HIT_BIT) && (oncount < web.sdim) )
          { conlist[oncount] = conmap[jj] & CONMASK;
            con[oncount] = get_constraint(conmap[jj]);
            if ( !(con[oncount]->attr & (NONNEGATIVE|NONPOSITIVE) ) )
-              oncount++;  /* will do one-sided later */
+              oncount++;  
          }
        }
-       if ( oncount )
-       { constr_proj(TANGPROJ,oncount,con,vx,
+       
+       constr_proj(TANGPROJ,oncount,con,vx,
+                        xsum,perp,conlist,NO_DETECT,v_id);
+       for ( j = 0 ; j < SDIM ; j++ )
+           xsum[j] -= perp[j];
+
+       if ( mode == VOLKEEP)
+       { /* project motion tangentially */
+         dm = new_calc_vertex_normal(v_id,norm);
+         if ( dm < SDIM )
+         { dm = gram_schmidt(norm,dm,SDIM);
+           for ( n = 0 ; n < dm ; n++ )
+           { REAL c = SDIM_dot(xsum,norm[n]);
+             for ( i = 0 ; i < SDIM ; i++ ) 
+                 xsum[i] -= c*norm[n][i];
+           }
+         }
+         else for ( i = 0 ; i < SDIM ; i++ ) xsum[i] = 0.0; /* triple pt fixed */
+                
+         constr_proj(TANGPROJ,oncount,con,vx,
                         xsum,perp,conlist,NO_DETECT,v_id);
          for ( j = 0 ; j < SDIM ; j++ )
            xsum[j] -= perp[j];
-       }
+       }  
      }
 
      for ( i = 0 ; i < SDIM ; i++ )
@@ -758,7 +781,7 @@ loopend:
 new_avg_exit:
 
   return 1;
-}
+} // end find_vertex_average()
 
 /******************************************************************************
  * 
@@ -767,10 +790,11 @@ new_avg_exit:
  * purpose: Do vertex averaging for a vertex in the Lagrange model.
  */
 
-int lagrange_vertex_average(v_id,newx)
-vertex_id v_id;
-REAL *newx;
-{ int attr = get_vattr(v_id);
+int lagrange_vertex_average(
+  vertex_id v_id,
+  REAL *newx
+)
+{ ATTR attr = get_vattr(v_id);
   int i,j,k;
   
   if ( attr & Q_MIDEDGE )
@@ -846,7 +870,7 @@ REAL *newx;
       for ( inx = 0 ; inx+jnx <= web.lagrange_order ; inx++,knx++ )
         if ( equal_id(v_id,v[knx]) )
           goto found_knx;
-    kb_error(3788,"Internal error:lagrange_vertex_average() couldn't find vertex index in facet.\n",
+    kb_error(2664,"Internal error:lagrange_vertex_average() couldn't find vertex index in facet.\n",
       RECOVERABLE);
          
  found_knx:
@@ -902,4 +926,4 @@ REAL *newx;
     return 0;
   }
 
-}
+} // end lagrange_vertex_average()

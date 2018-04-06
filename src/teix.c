@@ -27,9 +27,10 @@
 
 struct teix_gvert  *tgverts;
 
-void curvature_forces_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void curvature_forces_init(
+  int mode,
+  struct method_instance *mi
+)
 { 
   vertex_id v[3];
   edge_id e_id;
@@ -94,15 +95,25 @@ struct method_instance *mi;
        vc[2]->force[i] += (ss[0]*side[1][i]-st[1]*side[0][i])/4/area;
     }
   }
-}
+} // end curvature_forces_init()
  
-REAL curvature_forces_energy(v_info)
-struct qinfo *v_info;
+/*********************************************************************
+*
+* function: curvature_forces_energy()
+*
+* purpose: Dummy energy for curvature_forces method
+*/
+REAL curvature_forces_energy(struct qinfo *v_info)
 { return 0.0; /* fake it */
 }
 
-REAL curvature_forces(v_info)
-struct qinfo *v_info;
+/*********************************************************************
+*
+* function: curvature_forces()
+*
+* purpose: Force for curvature_forces method
+*/
+REAL curvature_forces(struct qinfo *v_info)
 { REAL K; /* gauss curvature of vertex */
   REAL H; /* mean curvature of vertex, average of sectional curvatures */
   struct teix_gvert *vg = tgverts + loc_ordinal(v_info->id);
@@ -130,7 +141,7 @@ struct qinfo *v_info;
      v_info->grad[0][i] = -f*vg->normal[i];
  
   return 0.0;  /* fake energy */
-}
+} // end curvature_forces()
 
 /****************************************************************************
 *
@@ -140,8 +151,7 @@ struct qinfo *v_info;
 *  area being volume gradient.  Actually, does dot product, etc.
 */
 
-REAL vertex_mean_curvature(v_id)
-vertex_id v_id;
+REAL vertex_mean_curvature(vertex_id v_id)
 { 
   REAL meanc = 0.0;
   REAL force[MAXCOORD],projf[MAXCOORD];
@@ -217,8 +227,7 @@ vertex_id v_id;
 *  account, and uses total-volume grad as vertex normal.
 */
 
-REAL sd_vertex_mean_curvature(v_id)
-vertex_id v_id;
+REAL sd_vertex_mean_curvature(vertex_id v_id)
 {
   REAL meanc = 0.0;
   REAL force[MAXCOORD],projf[MAXCOORD];
@@ -326,9 +335,10 @@ int lmc_mc_attr;
 #define LMC_MOBILITY_ATTR_NAME "lmc_mobility"
 int lmc_mobility_attr;
 
-void laplacian_mean_curvature_init(mode,mi)
-int mode;
-struct method_instance *mi;
+void laplacian_mean_curvature_init(
+  int mode,
+  struct method_instance *mi
+)
 { int one = 1;
   vertex_id v_id;
 
@@ -337,7 +347,7 @@ struct method_instance *mi;
          RECOVERABLE);
 
   if ( lmc_mc_attr < 0 )
-    lmc_mc_attr = add_attribute(VERTEX,LMC_MC_ATTR_NAME,REAL_TYPE,0,&one,0,NULL);
+    lmc_mc_attr = add_attribute(VERTEX,LMC_MC_ATTR_NAME,REAL_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
 
 
   /* create mobility attribute, if user didn't */
@@ -345,7 +355,7 @@ struct method_instance *mi;
   { edge_id e_id;
     lmc_mobility_attr = find_attribute(EDGE,LMC_MOBILITY_ATTR_NAME);
     if ( lmc_mobility_attr < 0 )
-    { lmc_mobility_attr = add_attribute(EDGE,LMC_MOBILITY_ATTR_NAME,REAL_TYPE,0,&one,0,NULL);
+    { lmc_mobility_attr = add_attribute(EDGE,LMC_MOBILITY_ATTR_NAME,REAL_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
       FOR_ALL_EDGES(e_id)
          *(REAL*)get_extra(e_id,lmc_mobility_attr) = 1.0;
     }
@@ -354,7 +364,7 @@ struct method_instance *mi;
    { facet_id f_id;
      lmc_mobility_attr = find_attribute(FACET,LMC_MOBILITY_ATTR_NAME);
     if ( lmc_mobility_attr < 0 )
-    { lmc_mobility_attr = add_attribute(FACET,LMC_MOBILITY_ATTR_NAME,REAL_TYPE,0,&one,0,NULL);
+    { lmc_mobility_attr = add_attribute(FACET,LMC_MOBILITY_ATTR_NAME,REAL_TYPE,0,&one,0,NULL,MPI_NO_PROPAGATE);
       FOR_ALL_FACETS(f_id)
          *(REAL*)get_extra(f_id,lmc_mobility_attr) = 1.0;
     }
@@ -364,10 +374,15 @@ struct method_instance *mi;
   /* mean curvatures at vertices */
   FOR_ALL_VERTICES(v_id)
     *(REAL*)get_extra(v_id,lmc_mc_attr) = sd_vertex_mean_curvature(v_id);
-}
+} // end laplacian_mean_curvature_init()
 
-REAL laplacian_mean_curvature_value(v_info)
-struct qinfo *v_info;
+/************************************************************************
+*
+* function: laplacian_mean_curvature_value();
+*
+* purpose: value of laplacian_mean_curvature method
+*/
+REAL laplacian_mean_curvature_value(struct qinfo *v_info)
 { REAL energy = 0.0;
  
   /* Try integral of square gradient of mean curvature as energy,
@@ -384,7 +399,7 @@ struct qinfo *v_info;
     { REAL len1;
       vertex_id v1;
 
-      len1 = get_edge_length(e_id);
+      len1 = eptr(e_id)->length; // since get_edge_length(e_id) causes recursion in calc_quants;
       v1 = get_edge_headv(e_id);
       h1 = *(REAL*)get_extra(v1,lmc_mc_attr);
       energy += (h-h1)*(h-h1)/len1/2;  /* /2 since double counting */
@@ -434,10 +449,15 @@ struct qinfo *v_info;
   } /* end soapfilm */
 
   return energy;
-}
+} // end laplacian_mean_curvature_value()
 
-REAL laplacian_mean_curvature_grad(v_info)
-struct qinfo *v_info;
+/************************************************************************
+*
+* function: laplacian_mean_curvature_grad();
+*
+* purpose: gradient of laplacian_mean_curvature method
+*/
+REAL laplacian_mean_curvature_grad(struct qinfo *v_info)
 {
   int i;
   REAL normal[MAXCOORD];
@@ -463,7 +483,7 @@ struct qinfo *v_info;
     flux = 0.0;
     do
     {
-      len1 = get_edge_length(e_id);
+      len1 = eptr(e_id)->length; // get_edge_length(e_id);
       v1 = get_edge_headv(e_id);
       h1 = *(REAL*)get_extra(v1,lmc_mc_attr);
       mobility = *(REAL*)get_e_extra(e_id,lmc_mobility_attr);
@@ -571,19 +591,18 @@ struct multigrid_s {
        REAL *wnbr_asums; /* sums of weak neighbor coefficients */
 };
 
-struct multigrid_s * init_multigrid ARGS(( struct linsys *));
-void multigrid_cleanup ARGS((struct multigrid_s **));
-void choose_coarse_points ARGS((struct multigrid_s*));
-void interpolation_weights ARGS((struct multigrid_s*));
-void interpolation_transpose ARGS((struct multigrid_s*));
-void coarse_matrix ARGS((struct multigrid_s*));
+struct multigrid_s * init_multigrid ( struct linsys *);
+void multigrid_cleanup (struct multigrid_s **);
+void choose_coarse_points (struct multigrid_s*);
+void interpolation_weights (struct multigrid_s*);
+void interpolation_transpose (struct multigrid_s*);
+void coarse_matrix (struct multigrid_s*);
  
-void do_multigrid(S)
-struct linsys *S;
+void do_multigrid(struct linsys *S)
 { struct multigrid_s *mg;
   mg = init_multigrid(S);
   multigrid_cleanup(&mg);
-}
+} // end do_multigrid()
  
  
 /* lambda count handling, for tracking largest lambda */
@@ -604,21 +623,21 @@ void print_lambda_lists()
     if ( lambda_heads[n] )
      { printf(" Lambda %d: ",n);
        for ( p = lambda_heads[n] ; p ; p = p->next )
-         printf(" %d",p-lambda_list);
+         printf(" %d",(int)(p-lambda_list));
        printf("\n");
     }
-}
+} // end print_lambda_lists()
 
 void lambda_init()
 { lambda_count = 0;
   lambdamax = -1;
-  memset(lambda_heads,0,sizeof(lambda_heads));
-  
+  memset(lambda_heads,0,sizeof(lambda_heads));  
 }
 
-void lambda_insert(n,value)
-int n;  /* spot in list */
-int value;
+void lambda_insert(
+  int n,  /* spot in list */
+  int value
+)
 { if ( value >= LAMBDAMAX )
    value = LAMBDAMAX-1;
   lambda_list[n].value = value;
@@ -633,8 +652,7 @@ int value;
   
 }
 
-void lambda_delete(spot)
-int spot; /* in list */
+void lambda_delete(int spot /* in list */)
 { int value = lambda_list[spot].value;
   if ( lambda_list[spot].prev )
     lambda_list[spot].prev->next = lambda_list[spot].next;
@@ -651,26 +669,24 @@ int spot; /* in list */
   
 }
 
-void increment_lambda(spot)
-int spot; /* in list */
+void increment_lambda(int spot /* in list */)
 { lambda_delete(spot);
   lambda_list[spot].value++;
   lambda_insert(spot,lambda_list[spot].value);
    
 }
 
-void decrement_lambda(spot)
-int spot; /* in list */
+void decrement_lambda(int spot /* in list */)
 { lambda_delete(spot);
   lambda_list[spot].value++;
-  lambda_insert(spot);
+  lambda_insert(spot,lambda_list[spot].value);
  
 }
 
 int get_highest_lambda()
 { 
 
-  int ret = lambda_heads[lambdamax] - lambda_list;
+  int ret = (int)(lambda_heads[lambdamax] - lambda_list);
 
   lambda_delete(ret);
   return ret;
@@ -690,8 +706,7 @@ static  int fine_mark = 2;
 * Assumes input system described in N, IA, JA, A.
 */
 
-struct multigrid_s * init_multigrid( fine )
-struct linsys *fine;
+struct multigrid_s * init_multigrid(struct linsys *fine)
 {
   /* Select coarse points by going through fine points in order,
      and taking point as coarse point unless it has been marked
@@ -733,8 +748,7 @@ struct linsys *fine;
 * output: 
 */
 
-void  choose_coarse_points(mg)
-struct multigrid_s *mg;
+void  choose_coarse_points(struct multigrid_s *mg)
 { REAL *amaxes; /* maximum matrix values on row */ 
   int *nbr_count;  /* number of neighbors of each fine variable */
   int n,i,j;
@@ -950,9 +964,11 @@ step4:
 *
 * purpose: pluck entry from fine matrix A.
 */
-REAL get_a(S,row,col)
-struct linsys *S;
-int row,col;
+REAL get_a(
+  struct linsys *S,
+  int row,
+  int col
+)
 { int kk;
 
   /* get into upper diagonal */
@@ -977,8 +993,7 @@ int row,col;
 *
 */
 
-void  interpolation_weights(mg)
-struct multigrid_s *mg;
+void  interpolation_weights(struct multigrid_s *mg)
 { struct linsys *fine = mg->fine;
   int c_spot; /* current place in interpolation long lists */
   int n; /* index of fine variables */
@@ -1071,8 +1086,7 @@ struct multigrid_s *mg;
 *
 */
 
-void interpolation_transpose(mg)
-struct multigrid_s *mg;
+void interpolation_transpose(struct multigrid_s *mg)
 { int k,j;
 
   /* transpose of interpolation matrix, i.e. store fine row adjacent,
@@ -1116,8 +1130,7 @@ struct multigrid_s *mg;
 *
 */
 
-void coarse_matrix(mg)
-struct multigrid_s *mg;
+void coarse_matrix(struct multigrid_s *mg)
 { int n,nk,kk,k,j;
   int temp_top;
   int *temp_IA,*temp_JA;
@@ -1348,8 +1361,7 @@ struct multigrid_s *mg;
 *
 */
 
-void multigrid_cleanup(mgp)
-struct multigrid_s **mgp;
+void multigrid_cleanup(struct multigrid_s **mgp)
 { struct multigrid_s *mg = *mgp;
 
    free_system(mg->coarse);
